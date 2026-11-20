@@ -194,7 +194,7 @@ try {
         [],
         `${engine} project accessibility`,
       );
-      await page.getByRole("button", { name: "Open auracode", exact: true }).click();
+      await page.getByRole("button", { name: "Open o7", exact: true }).click();
       await page.getByRole("heading", { name: "Workspace ready" }).waitFor();
       await page.reload();
       await page.getByRole("heading", { name: "Workspace ready" }).waitFor();

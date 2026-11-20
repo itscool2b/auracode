@@ -1,19 +1,19 @@
-; auracode's hooks for Tauri's NSIS uninstaller (tauri.conf.json: bundle > windows > nsis).
+; o7's hooks for Tauri's NSIS uninstaller (tauri.conf.json: bundle > windows > nsis).
 ;
 ; What to delete is decided in Rust, by `auracode.exe --uninstall-cleanup`
 ; (apps/desktop/src-tauri/src/uninstall.rs, over aura-core's uninstall module). This file only
 ; decides whether that runs, and stops Tauri's own "delete app data" step, which would remove the
 ; data folder whole, worktrees the person chose to keep included.
 ;
-; - The confirm page's checkbox reads "Keep my auracode data" (windows/English.nsh). Unticked,
-;   which is the default, auracode deletes its data. A quiet uninstall (/S or /P) deletes it too,
+; - The confirm page's checkbox reads "Keep my o7 data" (windows/English.nsh). Unticked,
+;   which is the default, o7 deletes its data. A quiet uninstall (/S or /P) deletes it too,
 ;   without dialogs, and keeps worktrees with unsaved work; /KEEPDATA keeps everything.
 ; - An update (/UPDATE) keeps everything, and so does the uninstall a newer installer runs before
 ;   installing: it runs this uninstaller in place (`_?=`), so $EXEDIR is the install folder, while
 ;   an uninstall started from Settings runs from a temporary copy.
 ; - The person's agents, their settings and their repositories are never touched.
 ;
-; Exit codes of the cleanup: 0 done, 3 auracode is still running (nothing deleted), 4 something
+; Exit codes of the cleanup: 0 done, 3 o7 is still running (nothing deleted), 4 something
 ; could not be deleted (the cleanup listed it).
 
 Var AuracodeDeleteData
@@ -31,11 +31,11 @@ Var AuracodeCleanupLater
 
 !macro AURACODE_CLEANUP_RESULT
   ${If} $R9 == "0"
-    DetailPrint "auracode's data is deleted"
+    DetailPrint "o7's data is deleted"
   ${ElseIf} $R9 == "4"
-    DetailPrint "Some of auracode's data could not be deleted"
+    DetailPrint "Some of o7's data could not be deleted"
   ${Else}
-    DetailPrint "auracode's data was not deleted (cleanup result $R9)"
+    DetailPrint "o7's data was not deleted (cleanup result $R9)"
   ${EndIf}
 !macroend
 
@@ -59,7 +59,7 @@ Var AuracodeCleanupLater
     StrCpy $AuracodeDeleteData 0
   ${EndIf}
   ${If} $AuracodeDeleteData = 1
-    DetailPrint "Deleting auracode's data"
+    DetailPrint "Deleting o7's data"
     StrCpy $AuracodeCleanupFlags "--interactive"
     ${If} $PassiveMode = 1
     ${OrIf} ${Silent}
@@ -67,7 +67,7 @@ Var AuracodeCleanupLater
     ${EndIf}
     !insertmacro AURACODE_CLEANUP "$INSTDIR\${MAINBINARYNAME}.exe"
     ${If} $R9 == "3"
-      ; auracode did not quit when asked. Tauri's own check, next, offers to close it; the cleanup
+      ; o7 did not quit when asked. Tauri's own check, next, offers to close it; the cleanup
       ; then runs after the files are removed, from a copy of the program.
       InitPluginsDir
       CopyFiles /SILENT "$INSTDIR\${MAINBINARYNAME}.exe" "$PLUGINSDIR\auracode-cleanup.exe"
@@ -99,7 +99,7 @@ Var AuracodeCleanupLater
     DeleteRegValue HKCU "${MANUPRODUCTKEY}" "Installer Language"
     DeleteRegKey /ifempty HKCU "${MANUPRODUCTKEY}"
     DeleteRegKey /ifempty HKCU "${MANUKEY}"
-    ; Windows' notification settings for auracode.
+    ; Windows' notification settings for o7.
     DeleteRegKey HKCU "Software\Microsoft\Windows\CurrentVersion\Notifications\Settings\${BUNDLEID}"
   ${EndIf}
 !macroend

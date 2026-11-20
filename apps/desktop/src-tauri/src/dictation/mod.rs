@@ -88,7 +88,7 @@ impl Failure {
     pub fn unsupported() -> Self {
         Self::new(
             DictationFailure::Unsupported,
-            "Dictation needs a processor with AVX2 (Intel from 2013 or AMD from 2015 onward). The rest of auracode works as usual.",
+            "Dictation needs a processor with AVX2 (Intel from 2013 or AMD from 2015 onward). The rest of o7 works as usual.",
         )
     }
     pub fn cancelled() -> Self {

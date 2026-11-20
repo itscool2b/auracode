@@ -45,7 +45,7 @@ pub const FULL_TOOLS: [&str; 13] = [
 ];
 
 /// What a link without full control is told when it asks for more.
-pub const NOT_ALLOWED: &str = "This link has the chat tools only. Its owner can create a full control link in auracode: Settings, Remote access.";
+pub const NOT_ALLOWED: &str = "This link has the chat tools only. Its owner can create a full control link in o7: Settings, Remote access.";
 
 /// Whether `tool` is one the relay offers at all. A name outside is refused before anything runs.
 pub fn known(tool: &str) -> bool {
@@ -721,7 +721,7 @@ fn chats(overview: &Overview) -> String {
 fn projects(overview: &Overview) -> String {
     let mut out = String::new();
     if overview.projects.is_empty() {
-        out.push_str("There are no projects yet. Its owner adds one in auracode.\n");
+        out.push_str("There are no projects yet. Its owner adds one in o7.\n");
     }
     for project in &overview.projects {
         out.push_str(&format!("Project \"{}\"", project.name));

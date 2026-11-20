@@ -267,7 +267,7 @@ async function inspect(engine, launcher) {
     await page.locator('[data-testid="new-chat-create"]:not([disabled])').waitFor();
 
     // Worktrees kept from chats that are gone: one quiet line, closed, that opens to their names
-    // (each start of auracode used to list every worktree as a box of two full paths).
+    // (each start of o7 used to list every worktree as a box of two full paths).
     await open(page, "new-worktree&retained=6");
     await chipReady(page, "worktree");
     const retained = page.getByTestId("new-chat-retained");

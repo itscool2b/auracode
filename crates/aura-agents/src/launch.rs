@@ -23,7 +23,7 @@ pub enum LaunchError {
     InstallFailed { reason: String },
 }
 
-/// The launch spec of a built-in agent: it runs inside auracode, so it names no program and is never
+/// The launch spec of a built-in agent: it runs inside o7, so it names no program and is never
 /// spawned.
 pub(crate) fn builtin(spec: &AgentSpec) -> LaunchSpec {
     LaunchSpec {

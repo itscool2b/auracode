@@ -136,7 +136,7 @@ pub(super) struct Command {
     pub program: PathBuf,
     pub args: Vec<OsString>,
     /// `/usr/bin/open` answers once Launch Services has the request, so its status is the
-    /// receipt. Anything else may be the editor itself, which auracode never waits for.
+    /// receipt. Anything else may be the editor itself, which o7 never waits for.
     pub wait: bool,
 }
 

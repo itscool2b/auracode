@@ -127,7 +127,7 @@ export function createProjectMemoryFixture(
   };
 }
 
-const ONE = [{ id: FIRST, name: "auracode fixture" }];
+const ONE = [{ id: FIRST, name: "o7 fixture" }];
 const TWO = [...ONE, { id: "second-project", name: "website fixture" }];
 const CHATS: MemoryChats = new Map([
   ["chat-fixture", { title: "Fix the login flow", agent: "Claude Code" }],
@@ -152,8 +152,8 @@ export default function ProjectMemoryPreview() {
         storage={null}
         memoryEdits={edits.notices.map((notice) => ({
           key: `${notice.projectId}:${notice.revision}`,
-          ...agentEditToast(notice, CHATS, "auracode fixture"),
-          text: agentEditText(notice, CHATS, "auracode fixture"),
+          ...agentEditToast(notice, CHATS, "o7 fixture"),
+          text: agentEditText(notice, CHATS, "o7 fixture"),
           state: notice.state,
           onReview: () => {
             edits.dismiss(notice);

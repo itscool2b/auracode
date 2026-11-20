@@ -66,7 +66,7 @@ export type CloneRecord = {
 	progress: CloneProgress | null,
 	/**  Git's last lines that are not progress, kept for a failed clone. Never logged. */
 	output: string[],
-	/**  auracode removed the unfinished folder it created. */
+	/**  o7 removed the unfinished folder it created. */
 	removed: boolean,
 };
 

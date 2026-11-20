@@ -1,4 +1,4 @@
-//! Setup commands touch only auracode's profile preferences. Discovery and explicit vendor
+//! Setup commands touch only o7's profile preferences. Discovery and explicit vendor
 //! maintenance keep their existing, separately reviewed command paths.
 
 use std::path::PathBuf;

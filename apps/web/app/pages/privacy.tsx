@@ -1,11 +1,11 @@
 import { Arrow, Page } from "../ui";
-export const meta = () => [{ title: "Privacy · auracode" }];
+export const meta = () => [{ title: "Privacy · o7" }];
 export default function Privacy() {
   return (
     <Page
       title="Privacy."
       tone="Your work stays yours."
-      lead="auracode runs on your computer. There is no account and nothing to sign in to."
+      lead="o7 runs on your computer. There is no account and nothing to sign in to."
     >
       <article className="prose">
         <p>
@@ -16,18 +16,18 @@ export default function Privacy() {
         <h2>On your computer</h2>
         <p>
           Projects, chats, settings and local agent sessions are stored on your machine. There is no
-          auracode account, no sign-in and no sync, so nothing is uploaded by one.
+          o7 account, no sign-in and no sync, so nothing is uploaded by one.
         </p>
         <p>
-          auracode looks for a newer version of itself a few times a day by reading one public file
-          from the project's releases on GitHub. The request carries nothing about you or your work;
+          o7 looks for a newer version of itself a few times a day by reading one public file from
+          the project's releases on GitHub. The request carries nothing about you or your work;
           GitHub sees it as any download, with your network address. You can turn this off in
           Settings, and nothing is downloaded or installed until you choose Update.
         </p>
         <p>
           Your chosen agents run through their own harnesses and authentication. Their providers
-          receive information according to their own services and policies. auracode does not read,
-          store or proxy your agent credentials.
+          receive information according to their own services and policies. o7 does not read, store
+          or proxy your agent credentials.
         </p>
         <h2>Remote access</h2>
         <p>

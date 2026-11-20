@@ -11,16 +11,16 @@ left this surface for the separate Instructions surface. aura-config keeps their
 code for its other callers, but the Plugin library does not list them. The complete customization behavior is described in [desktop-customization.md](desktop-customization.md).
 
 Plugins stay with their agent. Shared MCP applies to every compatible agent, or the ones a server is for, in the selected scope.
-Everything here is this device's: nothing syncs between devices (auracode's accounts and their sync
+Everything here is this device's: nothing syncs between devices (o7's accounts and their sync
 were removed on 16 November 2026; Claude Code and Codex sync plugins natively).
 
 ## Universal plugins
 
-Universal plugins are auracode's own, built in for every agent (owner, 9 November 2026: "a universal
+Universal plugins are o7's own, built in for every agent (owner, 9 November 2026: "a universal
 plugin" that people cannot add or remove, on by default). Each has a switch and nothing else to
 install: off turns it off for every agent and takes it out of the app. The first is Browser use,
 the browser beside the chat ([plan](superpowers/plans/2026-11-09-browser.md)): the panel, Annotate,
-and the `aura_browser` MCP tools a native Chat session's agent gets, served by auracode's own
+and the `aura_browser` MCP tools a native Chat session's agent gets, served by o7's own
 executable (`--aura-browser-helper --mcp`) over a per-session loopback grant, with its skill in the
 server's instructions. Turned off, chats show no browser, sessions that start get no browser
 tools, and a running session's tools answer that it is off. Its card also holds the browser's own
@@ -29,16 +29,16 @@ browsing data (history, cookies and site data, cached files and saved passwords;
 person's own browser). The switches are profile preferences (`browser`, `browser_passwords`).
 Agents never see a password: the page outline never shows a password field's value, and
 `browser_evaluate` answers have the page's password values replaced (best effort: a value a
-script changed past recognising, or sent off the page itself, is beyond what auracode can check).
+script changed past recognising, or sent off the page itself, is beyond what o7 can check).
 
 ## Shared MCP
 
-Aura owns stable server IDs and immutable definition revisions. New definitions default to the selected
+o7 owns stable server IDs and immutable definition revisions. New definitions default to the selected
 project, covering its folders and worktrees. All-projects definitions are optional. A project definition
 with the same ID replaces the all-projects definition, including when the override is disabled.
 Native server names are inspected before session launch. Conflicting names or an unreadable native
 configuration require review; native files and homes are never rewritten by shared MCP. Agents whose
-own MCP configuration auracode cannot read (Antigravity, oh-my-pi), restricted fallback connections and
+own MCP configuration o7 cannot read (Antigravity, oh-my-pi), restricted fallback connections and
 agents on another host start without shared servers, and their chat says which were left out.
 
 Each definition is for every agent or only the agents chosen for it (owner, 6 November 2026). The
@@ -78,7 +78,7 @@ and Pi support stdio and streamable HTTP; Claude additionally supports legacy SS
 depends on its initialization capabilities. Restricted text fallbacks and remote hosts do not load
 shared definitions. Unsupported management operations are reported explicitly.
 
-Optional Aura memory tools cannot turn missing transport support into a failed chat. Their omission
+Optional o7 memory tools cannot turn missing transport support into a failed chat. Their omission
 leaves visible reference context available. Reserved internal server names, including normalized aliases,
 cannot be saved as user definitions. A native collision omits the optional helper with a notice.
 
@@ -180,7 +180,7 @@ provider independently, with at most two providers working at once. Commands wit
 in sequence, and overlapping requests share that provider's listing work.
 
 Listings are cached per agent with the installed version they were read from. A different installed
-version (an update through auracode or any other channel, seen by
+version (an update through o7 or any other channel, seen by
 detection) reads the listings again and the section says "changed from A to B, so its plugins were
 read again". Refresh keeps the current rows visible while it reprobes the supported providers and
 reruns their listings. A slow provider's detection or listings do not hold up another provider's

@@ -734,7 +734,7 @@ impl<'a> Model<'a> {
             AgentStatus::Copy => {
                 if main.and_then(|index| self.managed(index)).is_some() {
                     format!(
-                        "Reads {}, a copy of {} that auracode keeps in sync.",
+                        "Reads {}, a copy of {} that o7 keeps in sync.",
                         name(main),
                         name(via)
                     )
@@ -948,7 +948,7 @@ impl<'a> Model<'a> {
                 file.display
             )),
             FileKind::Outside => Some(format!(
-                "{} links outside this folder, so auracode doesn't follow or change it.",
+                "{} links outside this folder, so o7 doesn't follow or change it.",
                 file.display
             )),
             FileKind::Dangling => Some(format!(

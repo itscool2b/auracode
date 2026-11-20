@@ -16,10 +16,10 @@ pub struct ProfileTokens {
 }
 
 impl ProfileTokens {
-    /// The reason instead, when this computer has no secure storage auracode can use.
+    /// The reason instead, when this computer has no secure storage o7 can use.
     pub fn open() -> Result<Self, String> {
         let store = NativeTokens::new().map_err(|_| {
-            "This computer has no secure storage auracode can keep account tokens in.".to_owned()
+            "This computer has no secure storage o7 can keep account tokens in.".to_owned()
         })?;
         Ok(Self { store })
     }

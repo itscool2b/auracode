@@ -55,7 +55,7 @@ pub struct ProjectFolder {
     pub kind: FolderKind,
     pub git_remote_url: Option<String>,
     pub git_default_branch: Option<String>,
-    /// When this folder is a worktree auracode made: the folder it was made from (this device's
+    /// When this folder is a worktree o7 made: the folder it was made from (this device's
     /// path). A new chat never starts in one by itself; it starts from that source.
     #[serde(default)]
     pub worktree_of: Option<String>,
@@ -105,12 +105,12 @@ pub struct ChatCreatePreview {
 /// letter case where the file system ignores it): Rust compares canonical folders.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct FolderMatches {
-    /// The folder as auracode stores it: canonical, in its plain spelling.
+    /// The folder as o7 stores it: canonical, in its plain spelling.
     pub path: String,
     /// The project folders it already is: the one whose chat was active most recently first, then
     /// the oldest. A folder is in several projects only when it was added to each on purpose.
     pub matches: Vec<FolderMatch>,
-    /// When it is a worktree auracode manages: a new chat starts from its source instead.
+    /// When it is a worktree o7 manages: a new chat starts from its source instead.
     pub worktree: Option<WorktreeOrigin>,
 }
 
@@ -124,7 +124,7 @@ pub struct FolderMatch {
     pub last_chat_at: Option<Millis>,
 }
 
-/// The branch and source folder of a worktree auracode manages.
+/// The branch and source folder of a worktree o7 manages.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct WorktreeOrigin {
     pub branch: String,

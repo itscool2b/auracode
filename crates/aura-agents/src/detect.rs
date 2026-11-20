@@ -95,7 +95,7 @@ struct LiveState {
     listing_generation: u64,
     maintenance: HashSet<String>,
     /// What each provider's last update printed, cleaned for reading. Memory only: it is shown to
-    /// the person who ran the update and is gone when auracode quits.
+    /// the person who ran the update and is gone when o7 quits.
     update_output: HashMap<String, String>,
     minimum_generation: HashMap<String, u64>,
     /// Each agent's latest detection, with the generation of the probe that made it.
@@ -373,10 +373,12 @@ impl Live {
                             "Downloading the {short} adapter ({package} {version}). This happens once and can take a few minutes."
                         ));
                         let env = self.env.get().await;
-                        let npm = find_program("npm", &env.vars).ok_or_else(|| LaunchError::Missing {
-                            reason: "npm was not found; auracode needs it once to download the adapter."
-                                .into(),
-                        })?;
+                        let npm =
+                            find_program("npm", &env.vars).ok_or_else(|| LaunchError::Missing {
+                                reason:
+                                    "npm was not found; o7 needs it once to download the adapter."
+                                        .into(),
+                            })?;
                         let job = InstallJob {
                             package,
                             version,
@@ -780,7 +782,7 @@ impl Detector {
         }
     }
 
-    /// Reload auracode's choices and environment without waiting for catalog-wide detection.
+    /// Reload o7's choices and environment without waiting for catalog-wide detection.
     pub async fn prepare_plugin_refresh(&self) {
         self.reload_connections().await;
         if let Mode::Live(live) = &self.mode {
@@ -1046,7 +1048,7 @@ impl Detector {
         };
         let spec = self
             .connection_for(id)
-            .ok_or_else(|| format!("auracode doesn't know an agent called \"{id}\"."))?;
+            .ok_or_else(|| format!("o7 doesn't know an agent called \"{id}\"."))?;
         // Two updaters replacing one binary at once can leave it broken, and a sign-in started
         // mid-update runs a binary that is being replaced.
         if lock(&live.state)
@@ -1068,7 +1070,7 @@ impl Detector {
             Availability::Ready { .. } => detection
                 .installation
                 .map(|installation| (spec.name.to_owned(), installation))
-                .ok_or_else(|| format!("auracode can't run {}'s own commands.", spec.name)),
+                .ok_or_else(|| format!("o7 can't run {}'s own commands.", spec.name)),
             Availability::Missing { reason } | Availability::Broken { reason } => Err(reason),
             Availability::Checking => Err(interrupted()),
         }
@@ -1089,7 +1091,7 @@ impl Detector {
         result
     }
 
-    /// What the last update of `id`'s provider printed in this run of auracode, when it printed
+    /// What the last update of `id`'s provider printed in this run of o7, when it printed
     /// anything. For the person who asked for the update; never stored or sent on.
     pub fn update_output(&self, id: &str) -> Option<String> {
         let Mode::Live(live) = &self.mode else {
@@ -1365,7 +1367,7 @@ fn find<'a>(agents: &'a [Fixed], id: &str) -> Option<&'a Fixed> {
 
 /// The reason an agent the detector does not know cannot start.
 fn unknown(spec: &AgentSpec) -> String {
-    format!("auracode doesn't know an agent called \"{}\".", spec.id)
+    format!("o7 doesn't know an agent called \"{}\".", spec.id)
 }
 
 /// The error for an agent that cannot start, from its availability.
@@ -1521,7 +1523,7 @@ mod tests {
                 .iter()
                 .all(|listing| matches!(&listing.state,
             aura_protocol::plugins::ListingState::Failed { reason }
-                if reason == "auracode lists plugins only for agents installed on this computer."))
+                if reason == "o7 lists plugins only for agents installed on this computer."))
         );
         assert_eq!(detector.cached_plugin_listings()["claude"], result);
     }
@@ -1788,7 +1790,7 @@ mod tests {
             FixedAgent::new(
                 broken.clone(),
                 Availability::Broken {
-                    reason: "auracode needs Codex 0.160.1 or newer (found 0.1.0).".into(),
+                    reason: "o7 needs Codex 0.160.1 or newer (found 0.1.0).".into(),
                 },
                 None,
             ),
@@ -1810,7 +1812,7 @@ mod tests {
         assert_eq!(
             detector.prepare_launch(&broken, progress()).await,
             Err(LaunchError::Broken {
-                reason: "auracode needs Codex 0.160.1 or newer (found 0.1.0).".into()
+                reason: "o7 needs Codex 0.160.1 or newer (found 0.1.0).".into()
             })
         );
         let mock = detector.spec("mock").expect("mock");

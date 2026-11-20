@@ -1,7 +1,7 @@
 //! Finding programs on an env's `PATH`.
 //!
 //! `PATH` is read in order and the first match wins (shadowed installs are M1e's). Empty and
-//! relative entries are skipped: they would resolve against whatever folder auracode runs in.
+//! relative entries are skipped: they would resolve against whatever folder o7 runs in.
 //! Symlinks are never resolved: agents launch through their stable symlink or shim.
 
 use std::ffi::OsStr;

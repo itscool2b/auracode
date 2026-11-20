@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "The auracode desktop app: React UI for the Tauri shell in src-tauri.",
+  "description": "The o7 desktop app: React UI for the Tauri shell in src-tauri.",
   "scripts": {
     "dev": "vite",
     "build": "tsc --noEmit -p . && vite build",

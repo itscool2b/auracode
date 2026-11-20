@@ -167,7 +167,7 @@ export function newChatFixture(scenario: NewChatScenario): {
             mode: "direct",
             starting_branch: null,
             branch: null,
-            label: "Direct in auracode",
+            label: "Direct in o7",
           },
         };
       if (scenario === "unavailable")

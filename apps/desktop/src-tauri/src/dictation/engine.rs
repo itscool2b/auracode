@@ -46,16 +46,14 @@ impl Engine {
         static QUIET: std::sync::Once = std::sync::Once::new();
         QUIET.call_once(transcribe_cpp::disable_logging);
         let unreadable = |_| {
-            Failure::model(
-                "The dictation model could not be loaded. Reinstall auracode to repair it.",
-            )
+            Failure::model("The dictation model could not be loaded. Reinstall o7 to repair it.")
         };
         let asr = Model::load(asr).map_err(unreadable)?;
         let vad = Model::load(vad).map_err(unreadable)?;
         let info = vad.vad_info().map_err(unreadable)?;
         if info.sample_rate != SAMPLE_RATE as i32 || info.frame_samples <= 0 {
             return Err(Failure::model(
-                "The voice detection model is not the one this build expects. Reinstall auracode.",
+                "The voice detection model is not the one this build expects. Reinstall o7.",
             ));
         }
         Ok(Self {

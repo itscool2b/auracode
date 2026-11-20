@@ -77,7 +77,7 @@ export function Header({
   readonly onShowLog: () => void;
   readonly onChanges?: () => void;
   /**
-   * Chat or Terminal: auracode's interface, or the agent's own in auracode's terminal. Absent for
+   * Chat or Terminal: o7's interface, or the agent's own in o7's terminal. Absent for
    * agents without a terminal; `unavailable` says why Terminal cannot be chosen now.
    */
   readonly view?: {
@@ -210,8 +210,8 @@ export function Header({
                     blocked && view.current !== choice
                       ? (view.unavailable ?? undefined)
                       : choice === "chat"
-                        ? "auracode's chat"
-                        : "The agent's own interface, in auracode's terminal"
+                        ? "o7's chat"
+                        : "The agent's own interface, in o7's terminal"
                   }
                   onClick={() => {
                     if (view.current === choice || (blocked && view.current !== choice)) return;

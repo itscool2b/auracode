@@ -1195,7 +1195,7 @@ impl Session {
         }
     }
     /// An MCP server's form or browser step. Claude cancels it itself if the reply is an error,
-    /// so one auracode cannot show is cancelled with a notice saying where to finish it.
+    /// so one o7 cannot show is cancelled with a notice saying where to finish it.
     fn elicitation(&mut self, id: String, request: &Value) {
         if self.elicitations.contains_key(&id) {
             return;
@@ -1231,7 +1231,7 @@ impl Session {
                         order.as_deref(),
                     )
                 }
-                Some(_) => Err("An MCP server asked for input auracode cannot show.".into()),
+                Some(_) => Err("An MCP server asked for input o7 cannot show.".into()),
             }
         };
         match parsed {
@@ -1273,7 +1273,7 @@ impl Session {
             // payload is opaque. Reject the control request explicitly so it cannot remain
             // pending forever, without claiming to have answered its contents.
             if !self.sink.is_closed() {
-                self.send(json!({"type":"control_response","response":{"subtype":"error","request_id":id,"error":"This native dialog is not supported by auracode."}}));
+                self.send(json!({"type":"control_response","response":{"subtype":"error","request_id":id,"error":"This native dialog is not supported by o7."}}));
             }
             self.notice("Claude requested an unsupported native dialog.");
             return;
@@ -1291,7 +1291,7 @@ impl Session {
             return;
         }
         if request["subtype"] != "can_use_tool" {
-            self.send(json!({"type":"control_response","response":{"subtype":"error","request_id":id,"error":"This control request is not supported by auracode."}}));
+            self.send(json!({"type":"control_response","response":{"subtype":"error","request_id":id,"error":"This control request is not supported by o7."}}));
             return;
         }
         if request["tool_name"] == "AskUserQuestion" {

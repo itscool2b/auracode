@@ -1,6 +1,6 @@
 //! The leftover registry and the startup sweep (Unix).
 //!
-//! Each running auracode process (the app or the CLI) keeps one file, `<data root>/run/<instance
+//! Each running o7 process (the app or the CLI) keeps one file, `<data root>/run/<instance
 //! pid>-<instance start key>.json`, listing its running agents: their group, their declared daemons
 //! and, after every turn, the descendants that left the group. The file is written atomically on
 //! every change and rewritten every [`REGISTRY_HEARTBEAT`](crate::REGISTRY_HEARTBEAT) while it has
@@ -34,7 +34,7 @@ mod sweep;
 #[cfg(any(unix, test))]
 const VERSION: u32 = 1;
 
-/// The auracode process a registry file belongs to.
+/// The o7 process a registry file belongs to.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
 pub struct InstanceRecord {
     pub pid: u32,
@@ -132,7 +132,7 @@ impl LeftoverRegistry {
         })
     }
 
-    /// This auracode process.
+    /// This o7 process.
     pub fn own(&self) -> &InstanceRecord {
         &self.own
     }

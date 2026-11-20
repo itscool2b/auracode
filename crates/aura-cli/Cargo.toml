@@ -1,6 +1,6 @@
 [package]
 name = "aura-cli"
-description = "auracode's headless dev tool: lists agents, probes and smoke-tests them through a headless session manager, curates protocol logs into replay fixtures, and replays them"
+description = "o7's headless dev tool: lists agents, probes and smoke-tests them through a headless session manager, curates protocol logs into replay fixtures, and replays them"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

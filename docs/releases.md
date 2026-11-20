@@ -296,7 +296,7 @@ capability-qualified extra folder forwarding are implemented and have focused lo
 Readable chat export and portable folder resolution are also implemented with focused
 verification; their final integrated Windows/macOS qualification remains pending. The account
 lifecycle that stood here (recovery, passphrase storage, reset sync, device removal, Keep as Local
-and Local import) was removed with auracode's accounts on 16 November 2026.
+and Local import) was removed with o7's accounts on 16 November 2026.
 Exact older-message native truncation/fork and Pi steering remain unsupported where the recorded
 protocol cannot safely identify the requested boundary; the visible reviewed handoff keeps the source
 conversation intact.

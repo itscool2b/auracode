@@ -67,7 +67,7 @@ pub fn dictation_start(
                 return Err(Failure::unsupported());
             }
             let folder = folder.ok_or_else(|| {
-                Failure::model("auracode could not find its dictation models. Reinstall auracode.")
+                Failure::model("o7 could not find its dictation models. Reinstall o7.")
             })?;
             if !operation.emit(DictationEvent::Preparing) {
                 return Err(Failure::cancelled());

@@ -1,6 +1,6 @@
 # Third-party notices
 
-These files preserve third-party terms. They do not select, grant or change a license for auracode,
+These files preserve third-party terms. They do not select, grant or change a license for o7,
 whose own license is the [MIT License](../LICENSE) at the repository root.
 
 `catalogue.json` contains the locked production dependency closure of the desktop and website,
@@ -24,7 +24,7 @@ in `upstream/`. The generator fails when the pinned models and that list disagre
 
 An npm package whose package.json names no license gets the license its own license file states,
 reviewed into `NPM_LICENSES` (khroma, MIT); any other stops the refresh. `NPM_EXCLUDED` lists packages
-a dependency names that auracode does not ship, with why and what keeps them out: elkjs (EPL-2.0 or
+a dependency names that o7 does not ship, with why and what keeps them out: elkjs (EPL-2.0 or
 GPL-3.0), which Mermaid imports only for its optional ELK layout, is replaced by a stub through the
 desktop's Vite alias, and the generator fails if that alias goes.
 

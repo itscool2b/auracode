@@ -1,5 +1,5 @@
 /**
- * Settings' "Delete all auracode data" in Chromium and WebKit on synthetic reviews
+ * Settings' "Delete all o7 data" in Chromium and WebKit on synthetic reviews
  * (dev/deleteDataPreview): the review, the worktree warning, the macOS Trash choice and a failed
  * start. No file, key, worktree or process is touched. Every state passes axe with no violations.
  *
@@ -99,7 +99,7 @@ try {
       const errors = [];
       page.on("pageerror", (error) => errors.push(error.message));
       const calls = () => page.evaluate(() => window.deleteDataFixture.calls());
-      const dialog = () => page.getByRole("dialog", { name: "Delete all auracode data" });
+      const dialog = () => page.getByRole("dialog", { name: "Delete all o7 data" });
       const audit = async (state) => {
         await settled(page);
         await page.screenshot({ path: resolve(out, `${engine}-${state}.png`) });
@@ -130,14 +130,14 @@ try {
       await review.getByText("Update downloads", { exact: true }).waitFor();
       await review
         .getByText(
-          "Sign-in tokens of agent accounts you added in auracode, kept in Windows Credential Manager.",
+          "Sign-in tokens of agent accounts you added in o7, kept in Windows Credential Manager.",
           { exact: true },
         )
         .waitFor();
       assert.equal(await review.getByRole("list", { name: "Secure-store entries" }).count(), 0);
       await review.getByText(/Stays: your agents and their folders/).waitFor();
       assert.equal(await review.getByTestId("delete-data-worktrees").count(), 0);
-      assert.equal(await review.getByText("Also move auracode to the Trash").count(), 0);
+      assert.equal(await review.getByText("Also move o7 to the Trash").count(), 0);
       assert.equal(await apply().isDisabled(), true);
       assert.equal(await apply().textContent(), "Delete data and quit");
       await audit("review");
@@ -156,7 +156,7 @@ try {
       await apply().click();
       await dialog()
         .getByRole("status")
-        .getByText(/auracode is quitting/)
+        .getByText(/o7 is quitting/)
         .waitFor();
       assert.equal(await apply().isDisabled(), true);
       assert.ok(
@@ -187,7 +187,7 @@ try {
       await page.keyboard.press("Enter");
       await dialog()
         .getByRole("status")
-        .getByText(/auracode is quitting/)
+        .getByText(/o7 is quitting/)
         .waitFor();
       const applied = (await calls()).find((call) => call.startsWith("apply"));
       assert.match(
@@ -200,11 +200,11 @@ try {
       await open("delete-data-macos");
       await dialog()
         .getByText(
-          "Sign-in tokens of agent accounts you added in auracode, kept in the macOS keychain.",
+          "Sign-in tokens of agent accounts you added in o7, kept in the macOS keychain.",
           { exact: true },
         )
         .waitFor();
-      const trash = dialog().getByLabel("Also move auracode to the Trash");
+      const trash = dialog().getByLabel("Also move o7 to the Trash");
       assert.equal(await trash.isChecked(), false);
       await trash.check();
       assert.equal(await apply().textContent(), "Delete data and move to Trash");
@@ -213,7 +213,7 @@ try {
       await apply().click();
       await dialog()
         .getByRole("status")
-        .getByText(/auracode is quitting/)
+        .getByText(/o7 is quitting/)
         .waitFor();
       assert.ok((await calls()).some((call) => call.includes('"move_app_to_trash":true')));
 

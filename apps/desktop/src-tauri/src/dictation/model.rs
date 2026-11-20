@@ -1,4 +1,4 @@
-//! The dictation models auracode bundles (docs/local-dictation.md): Parakeet TDT-CTC 110M for
+//! The dictation models o7 bundles (docs/local-dictation.md): Parakeet TDT-CTC 110M for
 //! English speech, with punctuation and capitals, and Silero VAD v6.2 for voice activity. They ship
 //! in the app's resources, so dictation needs no download. A release bundle refuses to build
 //! without the pinned files (apps/desktop/scripts/dictation-models.mjs verifies their SHA-256);
@@ -46,7 +46,7 @@ pub fn status(folder: Option<&Path>) -> DictationModel {
 pub fn engine(folder: &Path) -> Result<Arc<Engine>, Failure> {
     if !present(folder) {
         return Err(Failure::model(
-            "This build of auracode is missing its dictation models. Reinstall auracode to restore them.",
+            "This build of o7 is missing its dictation models. Reinstall o7 to restore them.",
         ));
     }
     Engine::shared(folder, ASR.file, VAD.file)

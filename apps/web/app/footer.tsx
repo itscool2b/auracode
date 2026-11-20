@@ -38,7 +38,7 @@ export function SiteFooter() {
       <div className="footer-frame">
         <div className="footer-grid">
           <div className="footer-home">
-            <a href="/" aria-label="auracode home">
+            <a href="/" aria-label="o7 home">
               <Wordmark size={17} />
             </a>
             <p className="footer-statement">Your agents. Your machine.</p>

@@ -967,7 +967,7 @@ impl Session {
                 },
             )
         } else {
-            self.reject(id, "This Codex request is not supported by auracode.");
+            self.reject(id, "This Codex request is not supported by o7.");
             return;
         };
         if self.stopping
@@ -989,7 +989,7 @@ impl Session {
         );
         self.outbox.push_back(event);
     }
-    /// An MCP server's form or browser step, which Codex asks its client to show. One auracode
+    /// An MCP server's form or browser step, which Codex asks its client to show. One o7
     /// cannot show is cancelled with a notice saying where to finish it.
     fn elicitation(&mut self, id: Value, params: &Value) {
         if self.thread.is_none() || self.thread.as_deref() != params["threadId"].as_str() {
@@ -1013,7 +1013,7 @@ impl Session {
                     source,
                     params["url"].as_str().unwrap_or_default(),
                 ),
-                _ => Err("An MCP server asked for input auracode cannot show.".into()),
+                _ => Err("An MCP server asked for input o7 cannot show.".into()),
             }
         };
         let (prompt, spec) = match parsed {

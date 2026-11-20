@@ -6,7 +6,7 @@ revision checked and acknowledged after an atomic write. Invalid data is preserv
 future formats are left unchanged. A failed save remains visible and can be retried or bypassed
 without claiming success. Re-running setup preserves the user's motion and project selection.
 
-The desktop loads cached detection while presenting the intro: the auracode logo and wordmark,
+The desktop loads cached detection while presenting the intro: the o7 logo and wordmark,
 1.8 seconds on a cold start and 240 ms on a warm boot. Escape, Enter or Skip intro ends it early;
 reduced motion shows the formed mark at once, and notification chat navigation bypasses it.
 Smoke/stress launches do not enter setup. No vendor login, install, update or model prompt is
@@ -21,12 +21,12 @@ skippable: Continue never requires anything, the progress bars visit any step an
 finishes from anywhere. The step is saved on every move, so quitting halfway resumes there. Motion is not a
 step: Full already follows the system's reduced motion and Settings changes it; a setup saved at
 the retired motion step resumes at First project. So does one saved at the sign-in step setup
-had while auracode had accounts (removed on 16 November 2026). Keyboard focus moves to each step's heading.
+had while o7 had accounts (removed on 16 November 2026). Keyboard focus moves to each step's heading.
 Enter advances except inside controls, editable content, menus and dialogs. Motion preferences
 also stop the shared frame clock, rather than merely hiding its animation with CSS.
 
-Welcome says it plainly: auracode itself needs no account or network, and each agent keeps its
-own sign-in. Setup offers no account and no sign-in of auracode's own.
+Welcome says it plainly: o7 itself needs no account or network, and each agent keeps its
+own sign-in. Setup offers no account and no sign-in of o7's own.
 
 First project offers a folder (chosen or dropped), an existing project, or Clone a repository,
 which replaces the step's content in place, X Money style: "Clone a repository." / "Git copies it
@@ -37,7 +37,7 @@ behind.", with Git's stage, the whole clone's percentage on a 2px bar, what has 
 clone (Escape). A finished clone becomes the first project at once. A failure says why in one
 sentence and keeps Git's own last lines, with Try again (Enter) and Edit (Escape). New project
 offers the same clone in a dialog beside Choose folder. The rules (addresses accepted and refused,
-the person's own Git and credential helpers, the one folder auracode owns and removes) are in
+the person's own Git and credential helpers, the one folder o7 owns and removes) are in
 docs/setup-actions.md.
 
 Reopening the clone form after a restart lists its saved prior attempts. It shows each retained

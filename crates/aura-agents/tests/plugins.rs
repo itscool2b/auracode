@@ -75,7 +75,7 @@ async fn claude_listings_use_the_given_home_cache_by_version_and_reread_after_an
             .count(),
         2
     );
-    // The harness was updated outside auracode: detection sees the new version and the listing
+    // The harness was updated outside o7: detection sees the new version and the listing
     // is read again, reporting the change.
     machine.version("claude", "2.1.312 (Claude Code)");
     std::fs::write(

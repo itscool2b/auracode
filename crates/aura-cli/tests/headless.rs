@@ -130,7 +130,7 @@ mod setup {
         assert!(
             refused
                 .to_string()
-                .starts_with("auracode is already running with the profile in "),
+                .starts_with("o7 is already running with the profile in "),
             "{refused}"
         );
         assert!(!data.join("run").exists(), "nothing registered");
@@ -301,7 +301,7 @@ mod setup {
         assert_eq!(
             error.to_string(),
             format!(
-                "auracode doesn't know an agent called \"gemini\"; the agents are {}",
+                "o7 doesn't know an agent called \"gemini\"; the agents are {}",
                 aura_agents::catalog()
                     .iter()
                     .map(|spec| spec.id)

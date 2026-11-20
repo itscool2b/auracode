@@ -1,6 +1,6 @@
 //! Reviewed commits and pushes of a chat's folder.
 //!
-//! Like every Git command auracode runs, neither runs the repository's hooks (an agent could have
+//! Like every Git command o7 runs, neither runs the repository's hooks (an agent could have
 //! written them) nor asks for credentials. A commit records exactly the reviewed files' contents:
 //! its tree is built in a private index, and the branch moves only from the reviewed commit, so
 //! nothing is staged unless it succeeds. A push only ever fast-forwards the remote branch.
@@ -228,7 +228,7 @@ pub(super) async fn refuse_repository_programs(
         return Ok(());
     }
     Err(invalid(format!(
-        "This repository's own Git settings choose a program Git would run to {what} ({}). auracode does not run programs an agent could have set; {what} from a terminal instead, or move the setting to your global Git configuration.",
+        "This repository's own Git settings choose a program Git would run to {what} ({}). o7 does not run programs an agent could have set; {what} from a terminal instead, or move the setting to your global Git configuration.",
         found.join(", ")
     )))
 }
@@ -390,7 +390,7 @@ async fn push_urls(git: &Git, root: &Path, remote: &str) -> Result<Vec<String>> 
     }
     if let Some(helper) = urls.iter().find_map(|url| remote_helper(url)) {
         return Err(invalid(format!(
-            "The {remote} remote is reached through a Git remote helper ({helper}::), a program auracode does not run. Push it with Git directly."
+            "The {remote} remote is reached through a Git remote helper ({helper}::), a program o7 does not run. Push it with Git directly."
         )));
     }
     Ok(urls)
@@ -479,7 +479,7 @@ impl GitWorkspaces {
             }
         }
         let token = crate::ids::new_id();
-        let mut warnings = vec!["Git hooks do not run: auracode commits exactly the reviewed files. Run your project's checks yourself if it relies on them.".to_owned()];
+        let mut warnings = vec!["Git hooks do not run: o7 commits exactly the reviewed files. Run your project's checks yourself if it relies on them.".to_owned()];
         if signed {
             warnings.push(
                 "Your Git signs commits, so its signing program may ask for your passphrase."

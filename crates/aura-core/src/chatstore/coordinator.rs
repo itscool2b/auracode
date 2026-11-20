@@ -86,7 +86,7 @@ pub(crate) enum Command {
     RoutineFired {
         id: String,
     },
-    /// auracode pauses the project by itself and says why.
+    /// o7 pauses the project by itself and says why.
     AutoPause {
         project_id: String,
         reason: String,
@@ -2605,7 +2605,7 @@ mod tests {
         .unwrap();
         assert!(due(400_000 + 299_999).is_empty());
         assert_eq!(due(400_000 + 300_000).len(), 1);
-        // Paused by the person, or by auracode with a reason: nothing is due.
+        // Paused by the person, or by o7 with a reason: nothing is due.
         act(
             conn,
             &project,

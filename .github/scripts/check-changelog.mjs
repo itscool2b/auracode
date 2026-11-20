@@ -3,7 +3,7 @@
 // was showing under tomorrow's date, because the days were UTC), each line
 // `- What changed. ([#N](https://github.com/itscool2b/auracode/pull/N))`.
 // Every pull request adds its own line, in simple English about what changed for the person using
-// auracode and short enough to read at a glance (docs/developing-in-aura.md, "Changelog").
+// o7 and short enough to read at a glance (docs/developing-in-aura.md, "Changelog").
 //
 //   node .github/scripts/check-changelog.mjs [folder]          the format, offline (pnpm lint)
 //   node .github/scripts/check-changelog.mjs [folder] --dates  also each day against GitHub's

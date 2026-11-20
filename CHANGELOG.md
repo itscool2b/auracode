@@ -2,7 +2,7 @@
 
 Every pull request merged into `main`, newest first, under the day it merged in US Eastern time.
 Each line is
-written in simple English about what changed for the person using auracode: short everyday words,
+written in simple English about what changed for the person using o7: short everyday words,
 short sentences, no internal names, and the headline first (owner, 16 November 2026). Each pull
 request adds its own line in the same pull request; see "Changelog" in
 [docs/developing-in-aura.md](docs/developing-in-aura.md). `node .github/scripts/check-changelog.mjs`
@@ -10,6 +10,7 @@ checks the format, and with `--dates` checks each day against the time GitHub sa
 
 ## 2026-11-19
 
+- auracode is now called o7. The website, the app's window and everything it says use the new name; your chats, settings and installed app carry on as they are, and the program on disk keeps its old name for now. On your phone, the message box now sits right on the keyboard, with no empty space under it and the header still in view. ([#153](https://github.com/itscool2b/auracode/pull/153))
 - The Update button looks right. Its word ran to the edge of the button with no space around it; it now sits inside with room on both sides. ([#152](https://github.com/itscool2b/auracode/pull/152))
 - auracode has a new address, o7.codes, and using your computer from your phone works properly now. The phone page looks like your app, in your theme, light or dark. It comes back by itself after your phone sleeps, a chat opens on the first tap, a message shows the moment you send it, and long answers no longer stutter. It also tells you when your computer is asleep. After this update, pair your phone and link your bot once more: both now use o7.codes, and the ones made at the old address stop working, so nothing is left tied to it. ([#151](https://github.com/itscool2b/auracode/pull/151))
 - Models by role. Settings > General now lets you name an agent and model for each kind of work: plan with one, build with another. Turn Plan on and the chat moves to your Planning model; when a plan is ready, Accept and build with hands it to your Building model, in the same chat or to another agent with the plan carried over. A coordinated project's coordinator and workers take their own. ([#150](https://github.com/itscool2b/auracode/pull/150))

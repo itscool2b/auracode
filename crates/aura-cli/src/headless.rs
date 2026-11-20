@@ -40,7 +40,7 @@ use tokio::runtime::Handle;
 
 use crate::CliError;
 
-/// `<machine root>/run`: one leftover registry file per running auracode process.
+/// `<machine root>/run`: one leftover registry file per running o7 process.
 pub const RUN_DIR: &str = "run";
 
 /// `<machine root>/adapters`: the npm adapters, one folder per package version.
@@ -281,17 +281,17 @@ impl Headless {
     }
 }
 
-/// The startup notice when the sweep stopped processes a crashed auracode left running, as the app
+/// The startup notice when the sweep stopped processes a crashed o7 left running, as the app
 /// words it.
 pub fn sweep_notice(report: &SweepReport) -> Option<String> {
     match report.killed.len() {
         0 => None,
         1 => Some(
-            "auracode stopped 1 agent process left running by an earlier session that ended unexpectedly."
+            "o7 stopped 1 agent process left running by an earlier session that ended unexpectedly."
                 .into(),
         ),
         n => Some(format!(
-            "auracode stopped {n} agent processes left running by an earlier session that ended unexpectedly."
+            "o7 stopped {n} agent processes left running by an earlier session that ended unexpectedly."
         )),
     }
 }

@@ -1,4 +1,4 @@
-//! What auracode sends an ACP agent, exactly (spec 5.3.1): no `_meta`, no `systemPrompt`, no
+//! What o7 sends an ACP agent, exactly (spec 5.3.1): no `_meta`, no `systemPrompt`, no
 //! `additionalDirectories`, `mcpServers` always empty, `fs` and `terminal` off, terminal sign-in
 //! advertised. The conformance tests compare every builder with the schema crate's own.
 
@@ -7,7 +7,7 @@ use serde_json::{Value, json};
 
 use crate::driver::PermissionOutcome;
 
-/// The only ACP protocol version auracode speaks.
+/// The only ACP protocol version o7 speaks.
 pub const PROTOCOL_VERSION: u64 = 1;
 
 /// ACP method names.

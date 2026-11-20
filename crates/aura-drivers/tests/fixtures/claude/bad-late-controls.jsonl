@@ -10,7 +10,7 @@
 {"d":"in","msg":{"type":"control_response","response":{"subtype":"future","request_id":"recorded-init"}}}
 {"d":"in","msg":{"type":"control_response","response":{"subtype":"success","request_id":"never-sent","response":{}}}}
 {"d":"in","msg":{"type":"control_request","request_id":"unsupported-1","request":{"subtype":"unsupported"}}}
-{"d":"out","msg":{"type":"control_response","response":{"subtype":"error","request_id":"unsupported-1","error":"This control request is not supported by auracode."}}}
+{"d":"out","msg":{"type":"control_response","response":{"subtype":"error","request_id":"unsupported-1","error":"This control request is not supported by o7."}}}
 {"d":"cmd","cmd":{"type":"set_option","option_id":"model","value":{"type":"choice","value":"haiku"}}}
 {"d":"out","msg":{"type":"control_request","request_id":"recorded-model","request":{"subtype":"set_model","model":"haiku"}}}
 {"d":"in","msg":{"type":"control_response","response":{"subtype":"success","request_id":"recorded-model","response":{"model":"haiku"}}}}

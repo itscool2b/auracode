@@ -91,7 +91,7 @@ impl MemoryGrant {
                     reader.read_until(b'\n',&mut input).await?;
                     if input.len()>=96*1024 || input.last()!=Some(&b'\n'){return Ok::<_,std::io::Error>(serde_json::json!({"error":"Invalid bounded memory request."}));}
                     let request:Request=match serde_json::from_slice(&input){Ok(v)=>v,Err(_)=>return Ok(serde_json::json!({"error":"Invalid memory request."}))};
-                    if !same_token(&credential,&request.token){return Ok(serde_json::json!({"error":"Memory access expired. Restart the Aura session."}));}
+                    if !same_token(&credential,&request.token){return Ok(serde_json::json!({"error":"Memory access expired. Restart the o7 session."}));}
                     let project=match store.memory(Command::ReadChat(chat_id.clone())).await {Ok(Reply::Memory(memory)) if memory.project_id == project_id =>Some(memory.project_id),_=>None};
                     let Some(project)=project else {revoked=true;return Ok(serde_json::json!({"error":"The project is unavailable."}));};
                     // Scope is derived from the app-owned chat, never a client supplied project ID.
@@ -108,7 +108,7 @@ impl MemoryGrant {
                     };
                     Ok(match store.memory(command).await {Ok(Reply::Memory(v))=>serde_json::json!({"result":v}),Ok(Reply::Proposal(v))=>serde_json::json!({"result":v}),Ok(_)=>serde_json::json!({"error":"Unexpected memory response."}),Err(error)=>serde_json::json!({"error":error.to_string()})})
                 }).await;
-                let response=match result{Ok(Ok(v))=>v,_=>serde_json::json!({"error":"The Aura memory service is unavailable."})};
+                let response=match result{Ok(Ok(v))=>v,_=>serde_json::json!({"error":"The o7 memory service is unavailable."})};
                 if let Ok(mut bytes)=serde_json::to_vec(&response){bytes.push(b'\n');let _=tokio::time::timeout(std::time::Duration::from_secs(1),stream.write_all(&bytes)).await;}
                 if revoked { return; }
             }

@@ -62,7 +62,7 @@ fn state_dir(state: &AppState) -> Result<PathBuf, AppError> {
         .ok_or_else(|| {
             AppError::new(
                 AppErrorCode::DataDirUnknown,
-                "auracode's data folder is unavailable, so instruction backups have nowhere to go.",
+                "o7's data folder is unavailable, so instruction backups have nowhere to go.",
             )
         })
 }

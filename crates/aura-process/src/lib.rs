@@ -1,4 +1,4 @@
-//! Agent processes: everything between auracode and an agent's operating-system process.
+//! Agent processes: everything between o7 and an agent's operating-system process.
 //!
 //! Drivers, the environment resolver, detection probes and sessions all spawn, so this crate sits
 //! below every one of them and knows no `AuraEvent`; it is tested against plain child processes.
@@ -12,7 +12,7 @@
 //! - [`control`] and [`shutdown`]: a [`ProcessControl`] closes stdin, waits, signals, and kills the
 //!   whole tree except the vendor daemons an agent declares; the last handle dropped kills the tree.
 //! - [`registry`] and [`ptable`]: a per-instance record of running agents, so the next start can stop
-//!   what a crashed auracode left behind (Unix; Windows jobs die with their owner).
+//!   what a crashed o7 left behind (Unix; Windows jobs die with their owner).
 //! - [`log`]: one JSON Lines protocol log per agent process, redacted before anything reaches disk.
 //! - `testing` (feature `testing`): in-memory processes for other crates' tests.
 //!

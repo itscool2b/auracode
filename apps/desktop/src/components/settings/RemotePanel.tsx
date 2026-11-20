@@ -93,7 +93,7 @@ export function RemotePanel({ api = remoteApi }: { readonly api?: RemoteApi }) {
   return (
     <>
       <p className="settings-lead">
-        See and steer this computer's chats from your phone, or let a bot work with them. auracode
+        See and steer this computer's chats from your phone, or let a bot work with them. o7
         connects out to its relay; nothing on this computer listens for connections.
       </p>
       {error ? (
@@ -226,7 +226,7 @@ export function RemotePanel({ api = remoteApi }: { readonly api?: RemoteApi }) {
         <p>
           A paired browser's session is encrypted end to end: the relay passes it along and cannot
           read it. A bot's calls are not: the relay and the bot's own service read them, and either
-          could act as that bot. Remote access works while auracode is open, including in the tray.
+          could act as that bot. Remote access works while o7 is open, including in the tray.
         </p>
       </details>
 
@@ -431,7 +431,7 @@ function BotDialog({
               In Grok, open Connectors (grok.com/connectors), choose New Connector, then Custom.
             </li>
             <li>Paste this address as the MCP server URL.</li>
-            <li>Ask your bot to list your auracode chats.</li>
+            <li>Ask your bot to list your o7 chats.</li>
           </ol>
           <p className="remote-note">
             Other assistants work the same way: add it wherever they take a remote MCP server.

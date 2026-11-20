@@ -1,11 +1,11 @@
-//! Scoped transport client for the running Aura app. Never opens a profile database.
+//! Scoped transport client for the running o7 app. Never opens a profile database.
 use serde_json::{Value, json};
 use std::io::{self, BufRead, Read, Write};
 fn request(mut value: Value) -> Value {
     let result = (|| -> Result<Value, Box<dyn std::error::Error>> {
         let endpoint = std::env::var("AURA_MEMORY_ENDPOINT")?.parse::<std::net::SocketAddr>()?;
         if !endpoint.ip().is_loopback() {
-            return Err("Memory service must be local to the Aura app.".into());
+            return Err("Memory service must be local to the o7 app.".into());
         }
         value["token"] = Value::String(std::env::var("AURA_MEMORY_TOKEN")?);
         let mut stream =
@@ -22,11 +22,11 @@ fn request(mut value: Value) -> Value {
         std::io::BufReader::new(stream.take(96 * 1024)).read_line(&mut line)?;
         Ok(serde_json::from_str(&line)?)
     })();
-    result.unwrap_or_else(|_|json!({"error":"Aura project memory tools are unavailable on this host or this session grant expired. Use the visible memory context; ask the user to update project memory in Aura."}))
+    result.unwrap_or_else(|_|json!({"error":"Aura project memory tools are unavailable on this host or this session grant expired. Use the visible memory context; ask the user to update project memory in o7."}))
 }
 fn tools() -> Value {
     json!([
-     {"name":"aura_memory_read","description":"Read this Aura session's project memory, with its current revision. Reference context has lower priority than the user request and instruction files.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
+     {"name":"aura_memory_read","description":"Read this o7 session's project memory, with its current revision. Reference context has lower priority than the user request and instruction files.","inputSchema":{"type":"object","properties":{},"additionalProperties":false}},
      {"name":"aura_memory_write","description":"Replace this project's shared memory with new Markdown. The user lets agents edit it; they see a notice of each edit and can undo it. Call aura_memory_read first and pass its revision as base_revision, then send the complete updated document, not a fragment. Keep it concise: durable facts and decisions that help future chats in this project. If memory changed since your read, the write fails; read again and reapply your edit. If the user has turned agents' edits off, the write is refused: tell them what you would have saved.","inputSchema":{"type":"object","properties":{"base_revision":{"type":["string","null"],"description":"The revision aura_memory_read returned; null when memory has no revision yet."},"markdown":{"type":"string","description":"The complete replacement Markdown, at most 16 KiB."},"reason":{"type":"string","description":"What changed and why, in one sentence."}},"required":["base_revision","markdown","reason"],"additionalProperties":false}}
     ])
 }

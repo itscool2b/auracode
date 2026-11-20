@@ -102,11 +102,11 @@ pub const UNTITLED_PERMISSION: &str = "The agent asks for permission";
 /// The answer to a `SetOption` that waited behind earlier changes for as long as an answer may
 /// take, so the session hears back inside its IPC budget.
 pub const OPTION_TOO_LATE: &str =
-    "The agent did not get to this change in time, so auracode did not send it.";
+    "The agent did not get to this change in time, so o7 did not send it.";
 
 /// The notice for an update over the line cap.
 pub const OVERSIZED_UPDATE_NOTICE: &str =
-    "auracode skipped an update from the agent that was larger than 64 MiB.";
+    "o7 skipped an update from the agent that was larger than 64 MiB.";
 
 /// The Agent Client Protocol driver.
 #[derive(Debug, Clone, Copy, Default)]
@@ -1160,7 +1160,7 @@ impl Session {
             Incoming::Notification { method, params } => self.on_notification(&method, &params),
             Incoming::Response { id, result } => {
                 let Some(request_id) = id.as_i64() else {
-                    tracing::debug!("a response with an id auracode never sent");
+                    tracing::debug!("a response with an id o7 never sent");
                     return;
                 };
                 match self.pending.remove(&request_id) {
@@ -1228,10 +1228,7 @@ impl Session {
             _ => {
                 let events = self.dialect.on_notification(method, params);
                 if events.is_empty() {
-                    tracing::debug!(
-                        method_bytes = method.len(),
-                        "a notification auracode ignores"
-                    );
+                    tracing::debug!(method_bytes = method.len(), "a notification o7 ignores");
                 }
                 for event in events {
                     self.push(event);
@@ -1245,12 +1242,11 @@ impl Session {
         match (keys.id, keys.method) {
             (Some(id), Some(_)) => {
                 let message =
-                    format!("auracode can't accept a request of {size} MB; the limit is 64 MiB.");
+                    format!("o7 can't accept a request of {size} MB; the limit is 64 MiB.");
                 let _ = self.rpc.respond_error(&id, codes::INTERNAL_ERROR, &message);
             }
             (Some(id), None) => {
-                let message =
-                    format!("auracode dropped a response of {size} MB; the limit is 64 MiB.");
+                let message = format!("o7 dropped a response of {size} MB; the limit is 64 MiB.");
                 match id
                     .as_i64()
                     .and_then(|request_id| Some((request_id, self.pending.remove(&request_id)?)))
@@ -1309,10 +1305,10 @@ impl Session {
                 if !reply.speaks_version_1() {
                     let message = match reply.protocol_version {
                         Some(_) => format!(
-                            "This agent speaks ACP protocol version {}; auracode supports version 1.",
+                            "This agent speaks ACP protocol version {}; o7 supports version 1.",
                             reply.version_text()
                         ),
-                        None => "This agent did not say which ACP protocol version it speaks; auracode supports version 1.".into(),
+                        None => "This agent did not say which ACP protocol version it speaks; o7 supports version 1.".into(),
                     };
                     let error = DriverError {
                         kind: ErrorKind::ProtocolMismatch,
@@ -1770,7 +1766,7 @@ impl Session {
         if let Update::Unknown(tag) = &update
             && self.unknown_tags.insert(tag.clone())
         {
-            tracing::info!(tag_bytes = tag.len(), "an update auracode does not know");
+            tracing::info!(tag_bytes = tag.len(), "an update o7 does not know");
         }
         match self.mapper.map(update, now) {
             Mapped::Events(events) => {
@@ -1963,7 +1959,7 @@ impl Session {
                 if let Some(reason) = &reply.unknown_reason {
                     tracing::info!(
                         reason_bytes = reason.len(),
-                        "a stop reason auracode does not know"
+                        "a stop reason o7 does not know"
                     );
                 }
                 if self.dialect.id() == "grok"
@@ -2073,7 +2069,7 @@ impl Session {
         let parsed = match PermissionParams::parse(params) {
             Ok(parsed) => parsed,
             Err(reason) => {
-                let message = format!("auracode could not read this permission request: {reason}.");
+                let message = format!("o7 could not read this permission request: {reason}.");
                 let _ = self.rpc.respond_error(&id, codes::INVALID_PARAMS, &message);
                 return;
             }
@@ -2366,7 +2362,7 @@ impl Session {
     }
 
     /// Hermes changes mode only while idle: a mode picked during a turn is parked until the turn
-    /// ends and shown as pending. The hand-picked rule applies at once: the policy is auracode's
+    /// ends and shown as pending. The hand-picked rule applies at once: the policy is o7's
     /// own and never waits for the agent.
     fn defer_mode_change(&mut self, op: SetOptionOp) {
         let ConfigValue::Choice { value } = op.value.clone() else {
@@ -2469,7 +2465,7 @@ impl Session {
                     ),
                     Origin::Desired => {
                         let notice = format!(
-                            "auracode could not restore the {name} you chose earlier ({message})."
+                            "o7 could not restore the {name} you chose earlier ({message})."
                         );
                         self.push_notice(NoticeLevel::Warning, notice);
                     }
@@ -2518,7 +2514,7 @@ impl Session {
             mode: None,
             auto_answer: AutoAnswer::Never,
             note: Some(format!(
-                "auracode could not switch {} to a matching mode ({reason}), so it asks before every action.",
+                "o7 could not switch {} to a matching mode ({reason}), so it asks before every action.",
                 self.agent_label()
             )),
         }
@@ -2758,7 +2754,7 @@ impl Session {
                 native_mode: Some(mode.to_owned()),
                 auto_answer: AutoAnswer::Never,
                 note: Some(format!(
-                    "You picked the {name} mode by hand, so auracode asks before every action. Choose an autonomy level to hand control back."
+                    "You picked the {name} mode by hand, so o7 asks before every action. Choose an autonomy level to hand control back."
                 )),
             };
             self.hand_picked = Some(mode.to_owned());

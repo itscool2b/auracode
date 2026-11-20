@@ -12,7 +12,7 @@ use tokio::sync::Mutex;
 const REFRESH_MS: i64 = 6 * 60 * 60 * 1000;
 const FAILURE_RETRY_MS: i64 = 15 * 60 * 1000;
 /// GitHub's answer for one release lists every asset: Codex's passed 256 KiB in November 2026,
-/// and from then on auracode never learned its latest version. Still bounded.
+/// and from then on o7 never learned its latest version. Still bounded.
 const MAX_RESPONSE: usize = 2 * 1024 * 1024;
 const MAX_CACHE: usize = 128 * 1024;
 
@@ -247,7 +247,7 @@ impl ReleaseCache {
         })
     }
 
-    /// Only auracode's own bounded cache file is read. Request targets always come from a newly
+    /// Only o7's own bounded cache file is read. Request targets always come from a newly
     /// constructed reviewed source; loading this file cannot introduce a network destination.
     pub async fn load(&self) {
         use tokio::io::AsyncReadExt;

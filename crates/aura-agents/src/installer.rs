@@ -106,7 +106,7 @@ fn plan(agent: &str, node: &Path, npm: &Path, folder: &Path) -> Result<InstallPl
         program: program_text, arguments: argument_text, working_directory: folder_text,
         revision: format!("{:x}", hash.finalize()), timeout_seconds: 600,
         notices: vec![
-            "Installs the integration's last verified version into npm's global prefix. npm uses its existing settings; auracode does not read them.".into(),
+            "Installs the integration's last verified version into npm's global prefix. npm uses its existing settings; o7 does not read them.".into(),
             "Requires Node.js 22.19 or newer. Permission or network failures remain visible in the terminal. No administrator elevation is requested.".into(),
             "Closing the terminal or reaching ten minutes stops this owned installation. A partial package may require another installation attempt.".into(),
             "Sign-in is a separate action. A successful command still needs a fresh agent version check.".into(),

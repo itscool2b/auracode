@@ -2,10 +2,10 @@
 
 A person sees and steers the chats on their computer from a phone's browser, and a bot (Grok Bot,
 or any assistant that connects to MCP servers) can do the same through tools. The computer opens
-no port: auracode keeps one outbound WebSocket to a relay, and everything else reaches it through
+no port: o7 keeps one outbound WebSocket to a relay, and everything else reaches it through
 that.
 
-It is off until turned on in Settings > Remote access, and it works while auracode is open,
+It is off until turned on in Settings > Remote access, and it works while o7 is open,
 including in the tray.
 
 ## What a person does
@@ -214,7 +214,7 @@ arbitrary folder or for project memory.
 A request the computer does not know ends the session, as anything outside the protocol does. So
 a computer says what it offers beyond the first version's requests when a session opens
 (`features` in its `ready` message, `pickers` so far), and the page shows a control only to a
-computer that names it: the page is always the newest, and an installed auracode can be older.
+computer that names it: the page is always the newest, and an installed o7 can be older.
 
 The computer pushes `chat` (a status changed), `frame` (live events of the followed chat), `lost`
 (open the chat again) and `reset` (another profile was opened: start over).
@@ -226,7 +226,7 @@ The computer pushes `chat` (a status changed), `frame` (live events of the follo
   `o7.codes/*`, so those requests reach the relay.
 - **Development:** a debug build reads `AURACODE_REMOTE_RELAY` (for example
   `ws://127.0.0.1:8799`) and `AURACODE_REMOTE_SITE` together; release builds reach only
-  auracode's own relay. A page served from `localhost` accepts `?relay=ws://127.0.0.1:<port>`.
+  o7's own relay. A page served from `localhost` accepts `?relay=ws://127.0.0.1:<port>`.
 - **Tests:**
   - `corepack pnpm --filter @auracode/relay worker:test`: the relay in the Workers runtime.
   - `cargo test -p aura-remote`: the service against a relay on this machine, with a simulated

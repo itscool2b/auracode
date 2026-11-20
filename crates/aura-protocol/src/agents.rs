@@ -159,7 +159,7 @@ pub struct LatestRelease {
     pub stale: bool,
 }
 
-/// A sign-in added in auracode, beside the agent's own. Device-local: its token stays in this
+/// A sign-in added in o7, beside the agent's own. Device-local: its token stays in this
 /// computer's secure storage and never becomes chat metadata.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct AgentAccount {

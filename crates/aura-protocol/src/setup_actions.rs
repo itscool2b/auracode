@@ -122,6 +122,6 @@ pub struct CloneRecord {
     pub progress: Option<CloneProgress>,
     /// Git's last lines that are not progress, kept for a failed clone. Never logged.
     pub output: Vec<String>,
-    /// auracode removed the unfinished folder it created.
+    /// o7 removed the unfinished folder it created.
     pub removed: bool,
 }

@@ -17,7 +17,7 @@ pub fn target(data_dir: Option<&Path>) -> Result<PathBuf, AppError> {
     let data_dir = data_dir.ok_or_else(|| {
         AppError::new(
             AppErrorCode::DataDirUnknown,
-            "auracode does not know where its data folder is.",
+            "o7 does not know where its data folder is.",
         )
     })?;
     data_dir

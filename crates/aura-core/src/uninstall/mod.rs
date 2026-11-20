@@ -1,14 +1,14 @@
-//! Deleting everything auracode keeps on this device, as if it had never been installed.
+//! Deleting everything o7 keeps on this device, as if it had never been installed.
 //!
-//! The Windows uninstaller and Settings' "Delete all auracode data" both run this through the app
+//! The Windows uninstaller and Settings' "Delete all o7 data" both run this through the app
 //! binary's `--uninstall-cleanup` mode (the desktop crate's `uninstall` module), so one tested
 //! piece of Rust decides what goes on every platform. [`plan`] looks without changing anything;
 //! [`execute`] deletes what the plan found, in this order:
 //!
-//! 1. auracode's worktrees ([`worktrees`]): clean ones, and those with unsaved work the person chose
+//! 1. o7's worktrees ([`worktrees`]): clean ones, and those with unsaved work the person chose
 //!    to delete, go with their Git registration; the rest stay where they are, unlocked;
-//! 2. the folders and files auracode names after itself ([`Targets`]), around kept worktrees;
-//! 3. in a data folder chosen with `AURACODE_DATA_DIR`, only the entries auracode made in it;
+//! 2. the folders and files o7 names after itself ([`Targets`]), around kept worktrees;
+//! 3. in a data folder chosen with `AURACODE_DATA_DIR`, only the entries o7 made in it;
 //! 4. the updater's leftovers in the temporary folder.
 //!
 //! The desktop removes the added agent accounts' tokens from secure storage beside this, from
@@ -16,7 +16,7 @@
 //!
 //! What stays, and why, is in `docs/uninstall.md`: the person's agents and every agent home
 //! (`~/.claude`, `~/.codex`, `~/.pi` and the rest are never read), their repositories, branches
-//! and commits, and files auracode wrote into agent folders at their request. Nothing here starts
+//! and commits, and files o7 wrote into agent folders at their request. Nothing here starts
 //! an agent, contacts the network or follows a link out of the folder it is deleting. A file that
 //! cannot be deleted is retried ([`Retry`]) and then reported, never skipped in silence, and a
 //! second run over a clean machine is a no-op.
@@ -37,9 +37,9 @@ pub use worktrees::{GitTool, Worktree};
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Scope {
     /// Everything for this user on this device: the default data folder, the platform's folders
-    /// for auracode and the updater's leftovers.
+    /// for o7 and the updater's leftovers.
     Machine,
-    /// One data folder chosen with `AURACODE_DATA_DIR`: only what auracode made in it.
+    /// One data folder chosen with `AURACODE_DATA_DIR`: only what o7 made in it.
     DataFolder,
 }
 
@@ -49,10 +49,10 @@ pub enum ItemKind {
     /// The data folder: chats, settings, worktrees, checkpoints, adapters and the webview profile
     /// on Windows.
     Data,
-    /// Another folder or file the platform keeps for auracode: window position, web caches,
+    /// Another folder or file the platform keeps for o7: window position, web caches,
     /// preferences.
     App,
-    /// An entry auracode made in a data folder it does not own by name.
+    /// An entry o7 made in a data folder it does not own by name.
     Entry,
     /// A leftover of the updater or the CLI in the temporary folder.
     Temporary,
@@ -72,7 +72,7 @@ pub struct Item {
 pub struct Plan {
     pub scope: Scope,
     pub items: Vec<Item>,
-    /// Every auracode worktree found in the data folders, clean or not.
+    /// Every o7 worktree found in the data folders, clean or not.
     pub worktrees: Vec<Worktree>,
     /// The data folders looked at.
     pub data_roots: Vec<PathBuf>,
@@ -84,7 +84,7 @@ impl Plan {
         self.worktrees.iter().filter(|worktree| worktree.unsaved())
     }
 
-    /// Nothing left to remove (a second run, or a machine auracode never ran on).
+    /// Nothing left to remove (a second run, or a machine o7 never ran on).
     pub fn is_empty(&self) -> bool {
         self.items.is_empty() && self.worktrees.is_empty()
     }
@@ -128,8 +128,8 @@ impl Report {
     }
 }
 
-/// Names auracode creates directly in a data folder, by this version or an earlier one (the
-/// account and configuration-switch files are from when auracode had accounts). In a folder
+/// Names o7 creates directly in a data folder, by this version or an earlier one (the
+/// account and configuration-switch files are from when o7 had accounts). In a folder
 /// chosen with `AURACODE_DATA_DIR` only these go (with their `.corrupt-*` copies and
 /// `.<name>.tmp-*` debris), since that folder may hold other things.
 pub const DATA_ENTRIES: &[&str] = &[
@@ -152,7 +152,7 @@ pub const DATA_ENTRIES: &[&str] = &[
 ];
 
 /// Looks at what a cleanup over `targets` would remove. Changes nothing, and runs only read-only
-/// Git commands in auracode's own worktrees.
+/// Git commands in o7's own worktrees.
 pub fn plan(targets: &Targets, git: &GitTool) -> Plan {
     let mut budget = remove::SizeBudget::default();
     let mut items = Vec::new();
@@ -224,7 +224,7 @@ pub fn execute(plan: &Plan, choice: &WorktreeChoice, git: &GitTool, retry: &Retr
             report.failed.extend(removal.failed);
         } else {
             // Its folder stays where it is, registered with its repository, and is no longer
-            // locked by auracode, so `git worktree remove` works on it like any other.
+            // locked by o7, so `git worktree remove` works on it like any other.
             git.unlock(worktree);
             kept.push(worktree.path.clone());
             report.kept.push(worktree.clone());
@@ -265,7 +265,7 @@ pub fn agent_account_ids(plan: &Plan) -> Vec<String> {
     ids
 }
 
-/// The entries auracode made directly in `root`, by [`DATA_ENTRIES`].
+/// The entries o7 made directly in `root`, by [`DATA_ENTRIES`].
 pub fn data_entries(root: &Path) -> Vec<PathBuf> {
     let Ok(entries) = std::fs::read_dir(root) else {
         return Vec::new();
@@ -311,7 +311,7 @@ pub fn temporary_leftovers(temp: &Path) -> Vec<PathBuf> {
     found
 }
 
-/// Profiles another auracode process holds right now (`<profile>/owner.lock`), and data folders
+/// Profiles another o7 process holds right now (`<profile>/owner.lock`), and data folders
 /// whose `accounts.lock` an earlier version, still running, holds: the cleanup waits until this is
 /// empty. Never creates a lock file.
 pub fn in_use(data_roots: &[PathBuf]) -> Vec<PathBuf> {

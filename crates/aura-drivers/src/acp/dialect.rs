@@ -91,7 +91,7 @@ pub struct AutonomyCandidate {
     pub note: Option<String>,
 }
 
-/// What a dialect makes of an agent request auracode does not handle itself.
+/// What a dialect makes of an agent request o7 does not handle itself.
 #[derive(Debug, Clone, PartialEq)]
 pub enum DialectReply {
     NotMine,
@@ -216,7 +216,7 @@ impl AcpDialect for Vendor {
 }
 
 /// The note claude-acp's Full auto carries when the user's settings removed bypass mode.
-pub const CLAUDE_NO_BYPASS_NOTE: &str = "Claude Code's settings turn off bypass mode, so Full auto runs as Accept edits and auracode asks before other actions.";
+pub const CLAUDE_NO_BYPASS_NOTE: &str = "Claude Code's settings turn off bypass mode, so Full auto runs as Accept edits and o7 asks before other actions.";
 
 /// The note Hermes' Ask carries (recorded with Hermes 0.22.5): its `default` mode asks before
 /// edits made with its file tools, while shell commands go to its own approval model first.
@@ -230,7 +230,7 @@ pub const CODEX_ASK_NOTE: &str = "Codex works read-only and asks when it needs t
 pub const CODEX_NO_ROLLOUT: &str = "no rollout found";
 
 /// The hint for a Hermes start that failed because Windows refused its gateway's breakaway.
-pub const HERMES_BREAKAWAY_HINT: &str = "On Windows, auracode can't let Hermes start its gateway yet. Run `hermes gateway ensure` in a terminal, then press Retry.";
+pub const HERMES_BREAKAWAY_HINT: &str = "On Windows, o7 can't let Hermes start its gateway yet. Run `hermes gateway ensure` in a terminal, then press Retry.";
 
 /// What generic Auto-edit and the demo agent's Auto-edit answer on their own.
 pub const EDIT_KINDS: [ToolKind; 6] = [
@@ -380,7 +380,7 @@ impl AcpDialect for Hermes {
                 == Some("stale_generation")
     }
 
-    /// Its gateway outlives the viewer, so a turn can finish while auracode is away.
+    /// Its gateway outlives the viewer, so a turn can finish while o7 is away.
     fn replay_may_hold_unseen_work(&self) -> bool {
         true
     }

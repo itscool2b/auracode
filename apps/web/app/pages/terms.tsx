@@ -1,5 +1,5 @@
 import { Arrow, Page } from "../ui";
-export const meta = () => [{ title: "Terms · auracode" }];
+export const meta = () => [{ title: "Terms · o7" }];
 export default function Terms() {
   return (
     <Page
@@ -16,7 +16,7 @@ export default function Terms() {
         </p>
         <h2>Your agents and your decisions</h2>
         <p>
-          auracode provides a workspace for agents you choose. Their services, subscriptions and
+          o7 provides a workspace for agents you choose. Their services, subscriptions and
           restrictions remain their own. Review generated work before relying on it. You remain
           responsible for choosing which files and tools an agent may access.
         </p>
@@ -28,9 +28,8 @@ export default function Terms() {
         </p>
         <h2>Your data</h2>
         <p>
-          Your chats, projects and settings are files on your computer. There is no auracode account
-          and no copy of them on a server, so nobody can restore them for you. Keep your own
-          backups.
+          Your chats, projects and settings are files on your computer. There is no o7 account and
+          no copy of them on a server, so nobody can restore them for you. Keep your own backups.
         </p>
         <h2>Availability</h2>
         <p>

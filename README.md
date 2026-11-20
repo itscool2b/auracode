@@ -1,13 +1,13 @@
-# auracode
+# o7
 
 One beautiful home for all your coding agents.
 
-auracode is a desktop app for Windows, macOS and Linux that drives the coding agents you already use
+o7 is a desktop app for Windows, macOS and Linux that drives the coding agents you already use
 (Claude Code, Codex, Pi, Antigravity, Cursor, Grok Build, OpenCode, Hermes, and any ACP-compatible agent)
 through their real harnesses, rendered in one desktop chat interface. Projects on the left, chats
 inside projects, switch agents and models mid-chat, run several at once.
 
-- No login, and no auracode account: the app is local-only. Agents are detected automatically, with their
+- No login, and no o7 account: the app is local-only. Agents are detected automatically, with their
   versions, sign-in status, and available updates.
 - Projects, chats and settings stay on this computer. Nothing is uploaded, and nothing syncs between
   machines.
@@ -38,7 +38,7 @@ Git. When present, the lint gate requires both files to be identical; a clean ch
 Installers are unsigned preview builds: publisher signing is deferred at the owner's request. They
 are published on this repository's Releases page and listed with their checksums at
 [o7.codes/download](https://o7.codes/download); [docs/releases.md](docs/releases.md) says
-how. auracode is open source under the [MIT License](LICENSE).
+how. o7 is open source under the [MIT License](LICENSE).
 
 Current source includes native agent drivers, the desktop workspace, onboarding, project and Git
 controls, a per-agent Plugin library, remote access, readable chat export and portable folder
@@ -162,12 +162,12 @@ App data lives in a folder named `si.auracode.desktop` inside the local (never r
 | Linux | `$XDG_DATA_HOME/si.auracode.desktop`, or `~/.local/share/si.auracode.desktop` when `XDG_DATA_HOME` is unset |
 
 `AURACODE_DATA_DIR` moves it anywhere else (see [Environment switches](#environment-switches)).
-Uninstalling deletes it, with everything else auracode keeps, and Settings can do the same
+Uninstalling deletes it, with everything else o7 keeps, and Settings can do the same
 without uninstalling; [docs/uninstall.md](docs/uninstall.md) lists what goes and what stays.
 
 A development build (`pnpm dev`, `cargo run`, `tauri build --debug`) uses `si.auracode.desktop.dev`
 next to it instead, runs as its own instance beside the installed app, and cleans up only its own
-folder, so working on auracode from a chat inside auracode never touches the app running that
+folder, so working on o7 from a chat inside o7 never touches the app running that
 chat. [docs/developing-in-aura.md](docs/developing-in-aura.md) covers building, testing and
 installing a change from inside the app, and recovering from a broken build.
 
@@ -267,6 +267,6 @@ For example `AURACODE_STRESS=orbs=24,rate=200 pnpm dev`. In PowerShell, run
 - [CONTRIBUTING.md](CONTRIBUTING.md) says how to send a change and which checks to run first.
 - [SECURITY.md](SECURITY.md) says how to report a vulnerability privately. Please do not open a
   public issue for one.
-- auracode is released under the [MIT License](LICENSE). The software it includes keeps its own
+- o7 is released under the [MIT License](LICENSE). The software it includes keeps its own
   terms, preserved in [third-party/](third-party/README.md) and shown in the app under Settings,
-  About. The names and logos of the agents auracode drives belong to their owners.
+  About. The names and logos of the agents o7 drives belong to their owners.

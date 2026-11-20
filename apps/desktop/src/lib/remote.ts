@@ -4,7 +4,7 @@ import { inTauri, settle } from "./ipc";
 
 /**
  * Remote access (docs/remote-sessions.md): this computer's chats from a paired browser or a
- * linked bot, through auracode's relay. Settings is its only surface in the app.
+ * linked bot, through o7's relay. Settings is its only surface in the app.
  */
 export interface RemoteApi {
   readonly status: () => Promise<RemoteStatus>;
@@ -55,7 +55,7 @@ export function linkLabel(status: RemoteStatus): string {
       return "On. This computer can be reached by the devices and bots below.";
     case "connecting":
     case "off":
-      return "Connecting to auracode's relay…";
+      return "Connecting to o7's relay…";
     case "offline":
       return `Not reachable right now; trying again. ${status.link.reason}`;
   }

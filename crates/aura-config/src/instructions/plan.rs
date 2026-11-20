@@ -290,7 +290,7 @@ pub(crate) fn prepare(model: &Model, change: &Change) -> Result<Prepared> {
 fn known(model: &Model, key: &str) -> Result<usize> {
     model
         .file(key)
-        .ok_or_else(|| Error::Unsupported("That file isn't one auracode manages here.".into()))
+        .ok_or_else(|| Error::Unsupported("That file isn't one o7 manages here.".into()))
 }
 
 fn names(_model: &Model, ids: &[&str]) -> String {
@@ -797,10 +797,7 @@ fn universal(
                 model.files[*removal].display
             )));
         }
-        builder.remove(
-            *removal,
-            vec!["Backed up in auracode's data folder.".into()],
-        );
+        builder.remove(*removal, vec!["Backed up in o7's data folder.".into()]);
     }
     let mut parts = vec![format!("{source_display} holds the shared text.")];
     let verb = |ids: &[&str], one: &str, many: &str| {
@@ -826,7 +823,7 @@ fn universal(
     }
     if !outcome.copied.is_empty() {
         parts.push(format!(
-            "{} {} a copy auracode keeps in sync.",
+            "{} {} a copy o7 keeps in sync.",
             names(model, &outcome.copied),
             verb(&outcome.copied, "gets", "get")
         ));
@@ -911,7 +908,7 @@ fn copy_into(
 ) {
     let mut notes = Vec::new();
     if model.has_text(index) && !model.copy_of_bytes(index, bytes) {
-        notes.push("Its earlier text is backed up in auracode's data folder.".into());
+        notes.push("Its earlier text is backed up in o7's data folder.".into());
     }
     builder.write(
         index,
@@ -991,7 +988,7 @@ fn point(builder: &mut Builder, model: &Model, own: usize, source: usize, agent:
         .unwrap_or_default();
     let mut notes = Vec::new();
     if model.has_text(own) {
-        notes.push("Its earlier text is backed up in auracode's data folder.".into());
+        notes.push("Its earlier text is backed up in o7's data folder.".into());
     }
     builder.write(
         own,
@@ -1122,7 +1119,7 @@ fn restore(model: &Model, key: &str) -> Result<Prepared> {
         copy,
         bytes.clone(),
         Some(format!("Managed copy of {}", model.files[source].display)),
-        vec!["The edited text is backed up in auracode's data folder.".into()],
+        vec!["The edited text is backed up in o7's data folder.".into()],
     );
     let mut entry = model.record.clone().ok_or(Error::Stale)?;
     entry

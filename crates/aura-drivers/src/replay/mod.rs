@@ -103,7 +103,7 @@ impl AgentSpawner for ReplaySpawner {
     }
 }
 
-/// A launch that looks like the catalog's for the agents auracode knows: the dialect's sign-in
+/// A launch that looks like the catalog's for the agents o7 knows: the dialect's sign-in
 /// commands read it.
 fn replay_launch(agent_id: &str) -> LaunchSpec {
     let (program, args, set_env): (&str, &[&str], &[(&str, &str)]) = match agent_id {

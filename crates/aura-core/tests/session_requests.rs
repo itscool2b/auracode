@@ -805,9 +805,7 @@ async fn an_autonomy_report_from_the_agent_applies() {
             requested: Autonomy::FullAuto,
             native_mode: Some("ask".into()),
             auto_answer: AutoAnswer::Never,
-            note: Some(
-                "You picked the Ask mode by hand, so auracode asks before every action.".into(),
-            ),
+            note: Some("You picked the Ask mode by hand, so o7 asks before every action.".into()),
         })),
         card("asked", Some(ToolKind::Read)),
         Step::Hang,

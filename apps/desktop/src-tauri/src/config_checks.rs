@@ -79,7 +79,7 @@ fn updates_require_a_signed_version_and_only_rust_can_install() {
     }
 }
 
-/// auracode registers no link scheme with the system (`auracode://` existed only for the removed
+/// o7 registers no link scheme with the system (`auracode://` existed only for the removed
 /// sign-in page), and the page frames nothing.
 #[test]
 fn no_link_scheme_is_packaged_and_the_page_frames_nothing() {

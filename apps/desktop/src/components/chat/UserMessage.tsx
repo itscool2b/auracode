@@ -110,7 +110,7 @@ export function UserMessage({
 }
 
 /**
- * A prompt auracode sent for the chat's coordinated project (a worker's report, an assignment, a
+ * A prompt o7 sent for the chat's coordinated project (a worker's report, an assignment, a
  * routine): one quiet line naming it, which opens what the agent was sent. The person did not
  * write it, so it is no bubble and offers no edit or rewind.
  */
@@ -124,7 +124,7 @@ function SentEvent({ itemKey, event }: { readonly itemKey: string; readonly even
         className="chat-project-event-toggle"
         aria-expanded={event.body ? open : undefined}
         aria-controls={event.body ? body : undefined}
-        title="Sent to the agent by auracode for this project"
+        title="Sent to the agent by o7 for this project"
         onClick={() => setOpen(!open)}
       >
         <Workflow size={14} aria-hidden="true" />

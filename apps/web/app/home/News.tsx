@@ -33,7 +33,7 @@ export function News() {
         <p className="lead">
           {LATEST
             ? `${CHANGES} changes so far, each in plain words. The latest landed on ${LATEST}.`
-            : "Every change to auracode, in plain words."}
+            : "Every change to o7, in plain words."}
         </p>
       </div>
       {days.length ? (

@@ -104,7 +104,7 @@ const OPTION_TIMEOUT: Duration = Duration::from_secs(40);
 const BLOB_WAIT: Duration = Duration::from_secs(5);
 
 /// Permission denied, as `create_chat` reports it.
-const FOLDER_NOT_ALLOWED: &str = "auracode isn't allowed to open this folder. Allow it in System Settings > Privacy & Security > Files and Folders, then try again.";
+const FOLDER_NOT_ALLOWED: &str = "o7 isn't allowed to open this folder. Allow it in System Settings > Privacy & Security > Files and Folders, then try again.";
 
 /// An update admission barrier. Dropping it before shutdown lets the user continue normally.
 /// It does not close storage, so editor drafts can still be flushed while it is held.
@@ -241,7 +241,7 @@ pub struct SessionTimings {
     pub stop_kill_after: Duration,
     /// `attach` fails after this long.
     pub attach_timeout: Duration,
-    /// An agent that reports work in progress while no prompt of auracode's is open (its Stop
+    /// An agent that reports work in progress while no prompt of o7's is open (its Stop
     /// hooks, background tasks, a lost idle report) counts as idle for the queue after this long.
     /// Its own result-to-idle gap is milliseconds and Stop hooks take seconds, so 15 s never cuts
     /// a normal turn short, while a missing report delays the next prompt only briefly. The agent
@@ -1800,7 +1800,7 @@ pub enum SessionError {
     },
     #[error("There is no chat with id {0}.")]
     ChatNotFound(String),
-    #[error("auracode doesn't know an agent called \"{0}\".")]
+    #[error("o7 doesn't know an agent called \"{0}\".")]
     UnknownAgent(String),
     #[error("{0}")]
     AgentUnavailable(String),
@@ -1824,14 +1824,14 @@ pub enum SessionError {
     TooManyAgents { limit: usize, message: String },
     #[error("Too many views are open for this chat.")]
     TooManySubscriptions,
-    #[error("auracode's database is not available: {0}")]
+    #[error("o7's database is not available: {0}")]
     StorageUnavailable(String),
     /// The chat store's sentence ([`StoreError::BlobMissing`](crate::chatstore::StoreError::BlobMissing)),
     /// passed on as is: the output is no longer kept, or not saved yet while the disk is full.
     #[error("{0}")]
     BlobMissing(String),
-    #[error("auracode is shutting down.")]
+    #[error("o7 is shutting down.")]
     ShuttingDown,
-    #[error("Something went wrong inside auracode: {0}")]
+    #[error("Something went wrong inside o7: {0}")]
     Internal(String),
 }

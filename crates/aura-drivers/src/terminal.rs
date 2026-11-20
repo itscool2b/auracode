@@ -148,7 +148,7 @@ pub fn codex(base: &LaunchSpec, options: &TerminalOptions<'_>) -> TerminalLaunch
     }
     // Names compare as the OS compares them (TOKEN and token are one variable on Windows). A
     // variable forwarded to one server must not carry another's value, nor replace one the launch
-    // already sets (the account's, say); auracode's own AURA_ names are reserved.
+    // already sets (the account's, say); o7's own AURA_ names are reserved.
     let launch_names: std::collections::BTreeSet<EnvKey> = launch
         .set_env
         .iter()
@@ -168,7 +168,7 @@ pub fn codex(base: &LaunchSpec, options: &TerminalOptions<'_>) -> TerminalLaunch
         let mut env = Vec::new();
         match &server.definition.transport {
             McpTransport::Stdio { command, args } => {
-                // auracode's own project-memory server uses the reserved names by design.
+                // o7's own project-memory server uses the reserved names by design.
                 let own_memory = crate::mcp::managed(server);
                 let reserved = !own_memory
                     && server.credentials.env.keys().any(|key| {
@@ -178,7 +178,7 @@ pub fn codex(base: &LaunchSpec, options: &TerminalOptions<'_>) -> TerminalLaunch
                     });
                 if reserved {
                     omitted.push(format!(
-                        "{name}: it needs a variable auracode sets for the launch itself"
+                        "{name}: it needs a variable o7 sets for the launch itself"
                     ));
                     continue;
                 }
@@ -250,7 +250,7 @@ pub fn codex(base: &LaunchSpec, options: &TerminalOptions<'_>) -> TerminalLaunch
     TerminalLaunch { launch, omitted }
 }
 
-/// The agents whose own interactive interface a chat can open in auracode's terminal.
+/// The agents whose own interactive interface a chat can open in o7's terminal.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum TerminalAgent {
     Claude,
@@ -266,7 +266,7 @@ pub enum TerminalAgent {
 
 impl TerminalAgent {
     /// The agent a catalog agent ID names (`aura_agents::agent_of`), when it has an interactive
-    /// interface auracode can open.
+    /// interface o7 can open.
     pub fn of(agent: &str) -> Option<TerminalAgent> {
         Some(match agent {
             "claude" => Self::Claude,
@@ -291,7 +291,7 @@ impl TerminalAgent {
         !matches!(self, Self::Cursor | Self::Hermes)
     }
 
-    /// A new session can start under an ID auracode chooses, so Chat continues it afterwards.
+    /// A new session can start under an ID o7 chooses, so Chat continues it afterwards.
     pub fn names_new_sessions(self) -> bool {
         matches!(self, Self::Claude | Self::Grok | Self::Pi)
     }
@@ -433,7 +433,7 @@ fn interactive(base: &LaunchSpec) -> LaunchSpec {
     launch
 }
 
-/// A shared server as the chat names it: auracode's own memory server by what it is.
+/// A shared server as the chat names it: o7's own memory server by what it is.
 fn server_label(server: &ResolvedMcpServer) -> String {
     if crate::mcp::managed_memory(server) {
         "Project memory tools".to_owned()
@@ -496,7 +496,7 @@ fn add_dirs(launch: &mut LaunchSpec, options: &TerminalOptions<'_>) {
     }
 }
 
-/// Grok Build's interface. A new session takes the UUID auracode chose (`--session-id`).
+/// Grok Build's interface. A new session takes the UUID o7 chose (`--session-id`).
 pub fn grok(base: &LaunchSpec, options: &TerminalOptions<'_>) -> TerminalLaunch {
     let agent = TerminalAgent::Grok;
     let mut launch = interactive(base);
@@ -691,7 +691,7 @@ pub fn pi(base: &LaunchSpec, options: &TerminalOptions<'_>) -> TerminalLaunch {
             }
             None => omitted.extend(servers.iter().map(|server| {
                 format!(
-                    "{}: auracode could not prepare Pi's MCP extension",
+                    "{}: o7 could not prepare Pi's MCP extension",
                     server_label(server)
                 )
             })),
@@ -1025,7 +1025,7 @@ mod tests {
                 .iter()
                 .any(|a| a.starts_with("mcp_servers.aura_project_memory."))
         );
-        // Another server may still not take auracode's names.
+        // Another server may still not take o7's names.
         let mut other = memory.clone();
         other.definition.id = "61a6ce00-b99f-4f8a-9148-8f880f3c735f".into();
         other.definition.name = "imposter".into();

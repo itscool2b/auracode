@@ -342,7 +342,7 @@
         "auto_answer": {
           "type": "never"
         },
-        "note": "Claude Code's settings turn off bypass mode, so Full auto runs as Accept edits and auracode asks before other actions."
+        "note": "Claude Code's settings turn off bypass mode, so Full auto runs as Accept edits and o7 asks before other actions."
       }
     },
     {

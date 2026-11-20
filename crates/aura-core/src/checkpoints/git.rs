@@ -67,7 +67,7 @@ impl Git {
             }
         }
         // Do not inherit alternate object directories, worktrees, indexes, config injections,
-        // tracing paths, external diffs, or a credential askpass from auracode's launch context.
+        // tracing paths, external diffs, or a credential askpass from o7's launch context.
         env.vars.retain(|key, _| {
             !key.as_os_str()
                 .to_string_lossy()

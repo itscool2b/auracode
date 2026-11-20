@@ -1,4 +1,4 @@
-//! `auracode --uninstall-cleanup`: deleting all of auracode's data from this device, run before
+//! `auracode --uninstall-cleanup`: deleting all of o7's data from this device, run before
 //! anything else starts (no window, no Tauri, no data folder opened).
 //!
 //! Three callers share it, so the decisions stay in one tested piece of Rust
@@ -6,12 +6,12 @@
 //!
 //! - the Windows uninstaller's hook (`windows/hooks.nsh`), with `--interactive` unless it runs
 //!   quietly: it asks about worktrees with unsaved work and says what could not be deleted;
-//! - Settings' "Delete all auracode data" ([`crate::data_cleanup_commands`]), which starts this
+//! - Settings' "Delete all o7 data" ([`crate::data_cleanup_commands`]), which starts this
 //!   mode with `--after-pid` and the choices made in its review, then quits;
 //! - a person in a terminal, following `docs/uninstall.md` (macOS has no uninstaller).
 //!
-//! Before deleting anything it waits for auracode to be gone: a running copy is asked to quit
-//! through the single-instance hand-over ([`QUIT_FLAG`]), which stops only auracode's own agents
+//! Before deleting anything it waits for o7 to be gone: a running copy is asked to quit
+//! through the single-instance hand-over ([`QUIT_FLAG`]), which stops only o7's own agents
 //! and terminals. If it is still running after that, nothing is deleted and the exit code says so.
 
 use std::ffi::{OsStr, OsString};
@@ -25,7 +25,7 @@ use aura_core::uninstall::{
 
 /// The first argument that selects this mode.
 pub const CLEANUP_FLAG: &str = "--uninstall-cleanup";
-/// The argument a cleanup launches auracode with to ask a running copy to quit. The running copy
+/// The argument a cleanup launches o7 with to ask a running copy to quit. The running copy
 /// receives it through the single-instance plugin; a copy that finds none exits at once.
 pub const QUIT_FLAG: &str = "--quit-for-uninstall";
 
@@ -35,7 +35,7 @@ pub mod exit {
     pub const DONE: i32 = 0;
     /// The arguments were not understood; nothing was deleted.
     pub const USAGE: i32 = 2;
-    /// auracode is still running; nothing was deleted.
+    /// o7 is still running; nothing was deleted.
     pub const RUNNING: i32 = 3;
     /// Some paths could not be deleted; they are listed.
     pub const INCOMPLETE: i32 = 4;
@@ -46,7 +46,7 @@ const USAGE: &str =
        [--data-dir <folder>] [--remove-unsaved-worktrees | --remove-worktree <folder>...]
        [--after-pid <pid>] [--trash-app <auracode.app>]
 
-Deletes everything auracode keeps on this device. Your agents, their settings and your
+Deletes everything o7 keeps on this device. Your agents, their settings and your
 repositories are not touched. Worktrees with unsaved work are kept unless you choose otherwise.";
 
 /// What the command line asked for.
@@ -201,8 +201,7 @@ fn execute_cleanup(options: &Options, targets: &Targets) -> i32 {
     // Only the installed app answers the hand-over; a data folder of its own runs alone.
     let ask = options.after_pid.is_none() && options.data_dir.is_none();
     if !wait_until_free(targets, ask) {
-        let message =
-            "auracode is still running, so nothing was deleted. Quit auracode and try again.";
+        let message = "o7 is still running, so nothing was deleted. Quit o7 and try again.";
         println!("{message}");
         if options.interactive || options.report_failures {
             dialog::alert(message);
@@ -304,7 +303,7 @@ const LISTED: usize = 6;
 pub fn worktree_question(plan: &Plan) -> String {
     let unsaved: Vec<_> = plan.unsaved().collect();
     let mut text = String::from(
-        "auracode is deleting its data. These worktrees have work that is not saved anywhere else:\n\n",
+        "o7 is deleting its data. These worktrees have work that is not saved anywhere else:\n\n",
     );
     for worktree in unsaved.iter().take(LISTED) {
         let name = worktree
@@ -331,8 +330,7 @@ pub fn worktree_question(plan: &Plan) -> String {
 
 /// What could not be deleted, for the dialog.
 pub fn failure_text(report: &Report, trash: Option<&str>) -> String {
-    let mut text =
-        String::from("auracode could not delete everything. Still on this computer:\n\n");
+    let mut text = String::from("o7 could not delete everything. Still on this computer:\n\n");
     for failure in report.failed.iter().take(LISTED) {
         text.push_str(&format!("{}: {}\n", failure.path.display(), failure.error));
     }
@@ -353,7 +351,7 @@ pub fn failure_text(report: &Report, trash: Option<&str>) -> String {
 fn describe_plan(plan: &Plan) -> String {
     let mut text = String::new();
     if plan.is_empty() {
-        text.push_str("Nothing of auracode's is on this device.\n");
+        text.push_str("Nothing of o7's is on this device.\n");
     }
     for item in &plan.items {
         text.push_str(&format!("Would remove {}\n", item.path.display()));
@@ -399,7 +397,7 @@ fn describe_report(report: &Report) -> String {
     text
 }
 
-/// Waits until no auracode process holds a profile in the data folders. When `ask`, a running
+/// Waits until no o7 process holds a profile in the data folders. When `ask`, a running
 /// copy is first asked to quit the way a second launch would ask it to show its window.
 fn wait_until_free(targets: &Targets, ask: bool) -> bool {
     let busy = || !uninstall::in_use(&targets.data_roots).is_empty();
@@ -421,7 +419,7 @@ fn wait_until_free(targets: &Targets, ask: bool) -> bool {
     false
 }
 
-/// Launches auracode with [`QUIT_FLAG`]: the single-instance plugin hands it to the running copy
+/// Launches o7 with [`QUIT_FLAG`]: the single-instance plugin hands it to the running copy
 /// and exits; with no running copy it exits before opening anything.
 fn request_quit() {
     let Ok(exe) = std::env::current_exe() else {
@@ -502,7 +500,7 @@ fn move_to_trash(bundle: &Path) -> Result<(), String> {
 #[cfg(not(target_os = "macos"))]
 fn move_to_trash(_bundle: &Path) -> Result<(), String> {
     Err(
-        "Only macOS apps are moved to the Trash; on Windows, uninstall auracode from Settings."
+        "Only macOS apps are moved to the Trash; on Windows, uninstall o7 from Settings."
             .to_owned(),
     )
 }
@@ -619,7 +617,7 @@ mod windows {
 
     fn message(text: &str, style: u32) -> i32 {
         let text = wide(text);
-        let title = wide("auracode");
+        let title = wide("o7");
         // SAFETY: both strings are NUL-terminated and outlive the call; no owner window.
         unsafe {
             MessageBoxW(

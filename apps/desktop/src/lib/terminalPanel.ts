@@ -45,7 +45,7 @@ export interface ChatPanel {
   /** Counts the person's requests to use the terminal (show, a new tab, a tab chosen). */
   readonly focus: number;
   /**
-   * What this chat had open when auracode last closed, offered back until the person resumes
+   * What this chat had open when o7 last closed, offered back until the person resumes
    * or declines it. Nothing starts by itself.
    */
   readonly resume: readonly RememberedTab[] | null;
@@ -255,7 +255,7 @@ export class TerminalPanels {
   }
 
   /**
-   * The first time a chat shows in this run: what its panel had open when auracode last closed,
+   * The first time a chat shows in this run: what its panel had open when o7 last closed,
    * offered back, the panel open as it was. Nothing starts until the person resumes.
    */
   restore(chatId: string): void {

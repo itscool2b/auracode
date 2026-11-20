@@ -14,7 +14,7 @@ impl Power {
                 .idle(true)
                 .display(false)
                 .sleep(false)
-                .reason("An auracode agent is working")
+                .reason("An o7 agent is working")
                 .app_name("auracode")
                 .app_reverse_domain("si.auracode.desktop")
                 .create()

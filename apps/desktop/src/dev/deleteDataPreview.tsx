@@ -1,10 +1,10 @@
 /**
- * Development-only: Settings' "Delete all auracode data" on a synthetic review. No file, key,
+ * Development-only: Settings' "Delete all o7 data" on a synthetic review. No file, key,
  * worktree or process is touched; applying only records the call.
  *
  *   ?preview=delete-data             Windows, nothing unsaved
  *   ?preview=delete-data-worktrees   Windows, two worktrees with unsaved work
- *   ?preview=delete-data-macos       macOS, with "Also move auracode to the Trash"
+ *   ?preview=delete-data-macos       macOS, with "Also move o7 to the Trash"
  *   &case=fail                       applying fails (the review is used up)
  */
 import { StrictMode, useState } from "react";

@@ -4,7 +4,7 @@ import { AGENTS, SpriteMark } from "./Sprite";
 import { Wing } from "./Wing";
 
 /**
- * What auracode is, as dot.com says what its product is: a large title at left and two paragraphs
+ * What o7 is, as dot.com says what its product is: a large title at left and two paragraphs
  * in ink at right, then every agent in one row across the column, where dot.com sets its row of
  * bots. The marks stay at the website's 24px (third-party/brand-marks.md), each beside its name.
  * The row repeats the chips further down, so it is hidden from assistive technology. As dot.com's

@@ -30,7 +30,7 @@ const CARDS: readonly { id: string; title: string; text: string; view: ReactNode
   {
     id: "terminal",
     title: "Chat or terminal",
-    text: "Open any chat in its agent's own interface, right inside auracode. Back in Chat, the turns are already there.",
+    text: "Open any chat in its agent's own interface, right inside o7. Back in Chat, the turns are already there.",
     view: <TerminalView />,
   },
   {
@@ -116,7 +116,7 @@ const MORE: readonly { id: string; glyph: ReactNode; title: string; text: string
 ];
 
 /**
- * What auracode does, laid out as dot.com lays out its own: a centred statement over a grid of
+ * What o7 does, laid out as dot.com lays out its own: a centred statement over a grid of
  * cards two to a row, each a title and two lines above a picture of the product that runs off the
  * card's foot. The pictures are authored illustrations of supported states. Four smaller cards
  * under them name other shipped parts.

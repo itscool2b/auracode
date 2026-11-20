@@ -101,7 +101,7 @@ pub const MAIN_WINDOW: &str = "main";
 /// The main window's title in a development build, so it is never taken for the installed app's
 /// window (`auracode`, from tauri.conf.json) by a person, Alt+Tab, or automation that finds
 /// windows by title.
-pub const DEVELOPMENT_TITLE: &str = "auracode dev";
+pub const DEVELOPMENT_TITLE: &str = "o7 dev";
 
 /// The main window's title: tauri.conf.json's for an installed build, [`DEVELOPMENT_TITLE`] for a
 /// development one.
@@ -523,12 +523,9 @@ mod tests {
     /// A development window was titled `auracode` like the installed app's.
     #[test]
     fn a_development_window_has_its_own_title() {
-        assert_eq!(super::main_title("auracode", false), "auracode");
-        assert_eq!(
-            super::main_title("auracode", true),
-            super::DEVELOPMENT_TITLE
-        );
-        assert_ne!(super::DEVELOPMENT_TITLE, "auracode");
+        assert_eq!(super::main_title("o7", false), "o7");
+        assert_eq!(super::main_title("o7", true), super::DEVELOPMENT_TITLE);
+        assert_ne!(super::DEVELOPMENT_TITLE, "o7");
     }
 
     /// Native chrome must track both CSS palettes so switching appearance leaves no dark band.

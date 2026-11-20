@@ -28,7 +28,7 @@ export function Showcase() {
               width="1440"
               height="760"
               decoding="async"
-              alt="The auracode desktop: projects and chats in the sidebar, an agent's reply with code, the composer with access, account and model controls, and the Changes panel with a file's diff."
+              alt="The o7 desktop: projects and chats in the sidebar, an agent's reply with code, the composer with access, account and model controls, and the Changes panel with a file's diff."
             />
           </picture>
         </div>

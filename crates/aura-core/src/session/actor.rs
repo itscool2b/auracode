@@ -478,7 +478,7 @@ struct LiveDriver {
     /// `None` keeps the original turn-based contract. Otherwise only an idle report permits
     /// another prompt, even after the current prompt's result has arrived...
     run_idle: Option<bool>,
-    /// ...or the idle grace: the agent reported work in progress with no prompt of auracode's
+    /// ...or the idle grace: the agent reported work in progress with no prompt of o7's
     /// open for `idle_grace` without reporting idle. Cleared by the next prompt or idle report.
     idle_assumed: bool,
     native_scope: NativeSessionScope,
@@ -711,7 +711,7 @@ enum Done {
     Nothing,
 }
 
-/// The agent reported work in progress with no prompt of auracode's open: since when, and when
+/// The agent reported work in progress with no prompt of o7's open: since when, and when
 /// the queue stops waiting for its idle report.
 #[derive(Debug, Clone, Copy)]
 struct IdleWait {
@@ -1066,7 +1066,7 @@ impl ChatActor {
             stop_deadline: None,
             idle_deadline: None,
             idle_wait: None,
-            // Every queued row of a loaded chat comes back held: auracode restarted with it.
+            // Every queued row of a loaded chat comes back held: o7 restarted with it.
             hold_cause: HoldCause::Restart,
             queue_wait: None,
             worktree_setup,
@@ -3024,13 +3024,13 @@ impl ChatActor {
             self.push(
                 AuraEvent::Notice {
                     level: NoticeLevel::Warning,
-                    message: "Force stopped: auracode ended the agent's processes.".into(),
+                    message: "Force stopped: o7 ended the agent's processes.".into(),
                 },
                 tag.as_deref(),
             );
             if self.turns_survive() {
                 let message = format!(
-                    "{} may still finish this turn in its gateway; auracode asked it to cancel. Whatever it finishes shows when this chat resumes.",
+                    "{} may still finish this turn in its gateway; o7 asked it to cancel. Whatever it finishes shows when this chat resumes.",
                     self.agent_label()
                 );
                 self.push(
@@ -3299,7 +3299,7 @@ impl ChatActor {
                 Some(spec) => StartConnection::Saved(Box::new(spec)),
                 None => {
                     let reason = format!(
-                        "This chat's saved session ran through a connection this version of auracode does not have ({id}). Start a fresh session to continue."
+                        "This chat's saved session ran through a connection this version of o7 does not have ({id}). Start a fresh session to continue."
                     );
                     self.start_failed(ErrorKind::AgentUnavailable, reason, None, false);
                     return Ok(());
@@ -3428,7 +3428,7 @@ impl ChatActor {
             }
             Err(_) => self.start_failed(
                 ErrorKind::Internal,
-                "Preparing the agent failed inside auracode.".into(),
+                "Preparing the agent failed inside o7.".into(),
                 None,
                 false,
             ),
@@ -3589,7 +3589,7 @@ impl ChatActor {
             &prepared.env.vars,
         ) else {
             let why = format!(
-                "auracode could not find {}'s own interface (`{}`) on this device. Install it, or keep this chat in Chat.",
+                "o7 could not find {}'s own interface (`{}`) on this device. Install it, or keep this chat in Chat.",
                 agent.label(),
                 agent.program_name()
             );
@@ -3873,7 +3873,7 @@ The person continues this conversation here, in your terminal. Reply only that y
             let (handoff, _) = crate::conversation::handoff(
                 &turns,
                 None,
-                "Unchanged by auracode; see the folder.",
+                "Unchanged by o7; see the folder.",
                 "Not read for a terminal session.",
             );
             match &mut self.continuation {
@@ -3974,11 +3974,11 @@ The person continues this conversation here, in your terminal. Reply only that y
             .map_or("The agent", aura_drivers::terminal::TerminalAgent::label);
             let message = if read.session_known {
                 format!(
-                    "{agent} keeps the terminal's turns in its own session, which Chat continues. auracode cannot copy them into this chat's history."
+                    "{agent} keeps the terminal's turns in its own session, which Chat continues. o7 cannot copy them into this chat's history."
                 )
             } else {
                 format!(
-                    "auracode could not find the session {agent}'s terminal started, so Chat continues from this chat's history."
+                    "o7 could not find the session {agent}'s terminal started, so Chat continues from this chat's history."
                 )
             };
             self.push(
@@ -5726,7 +5726,7 @@ The person continues this conversation here, in your terminal. Reply only that y
         self.dispatch_next();
     }
 
-    /// Hermes' gateway can finish work while auracode is away: when the replay's newest reply
+    /// Hermes' gateway can finish work while o7 is away: when the replay's newest reply
     /// differs from what was stored, or it counts more turns, the reply is shown outside any turn.
     fn compare_replay(&mut self, info: &ReadyInfo) {
         let Some(summary) = &info.replay else {
@@ -5751,7 +5751,7 @@ The person continues this conversation here, in your terminal. Reply only that y
             AuraEvent::Notice {
                 level: NoticeLevel::Info,
                 message: format!(
-                    "{} continued this session while auracode was away (in its gateway or another {} app). Its latest reply is below; earlier steps aren't shown here.",
+                    "{} continued this session while o7 was away (in its gateway or another {} app). Its latest reply is below; earlier steps aren't shown here.",
                     self.agent_label(),
                     self.agent_label()
                 ),
@@ -6104,7 +6104,7 @@ The person continues this conversation here, in your terminal. Reply only that y
             }
             DriverExit::Panicked => self.crashed(
                 generation,
-                "The agent stopped unexpectedly: auracode's driver for it failed.".into(),
+                "The agent stopped unexpectedly: o7's driver for it failed.".into(),
                 None,
             ),
             DriverExit::StartFailed(error) if stopping && error.kind != ErrorKind::AuthRequired => {
@@ -6455,7 +6455,7 @@ The person continues this conversation here, in your terminal. Reply only that y
                 chat_id = %self.chat_id,
                 writes = dropped.writes.len(),
                 ops = %dropped.writes.join(", "),
-                "auracode's database closed before these writes were saved; they are lost"
+                "o7's database closed before these writes were saved; they are lost"
             );
         }
         if !dropped.reads.is_empty() {
@@ -6463,7 +6463,7 @@ The person continues this conversation here, in your terminal. Reply only that y
                 chat_id = %self.chat_id,
                 reads = dropped.reads.len(),
                 ops = %dropped.reads.join(", "),
-                "auracode's database closed before these reads ran; their callers were told it closed"
+                "o7's database closed before these reads ran; their callers were told it closed"
             );
         }
     }
@@ -6512,7 +6512,7 @@ The person continues this conversation here, in your terminal. Reply only that y
     }
 
     /// The idle grace ran out: the agent still reports work in progress with no prompt of
-    /// auracode's open and nothing waiting for an answer. It counts as idle for the queue from now
+    /// o7's open and nothing waiting for an answer. It counts as idle for the queue from now
     /// until its next prompt or idle report; a late busy report cannot take that back.
     fn idle_grace_ended(&mut self, generation: u64) {
         let open_requests = self.normalizer.has_open_requests();
@@ -7022,7 +7022,7 @@ The person continues this conversation here, in your terminal. Reply only that y
     }
 
     /// An opted-in driver's prompt can finish while its background work is still running. Work in
-    /// progress with no prompt of auracode's open and nothing to answer runs the idle grace
+    /// progress with no prompt of o7's open and nothing to answer runs the idle grace
     /// ([`Self::idle_grace_ended`]).
     fn refresh_run_status(&mut self) {
         if self.checkpointing.is_some() {
@@ -7391,14 +7391,14 @@ fn stopped_autonomy(autonomy: Autonomy, note: Option<&str>) -> AutonomyState {
     }
 }
 
-/// The agent refused the level: auracode asks before every action.
+/// The agent refused the level: o7 asks before every action.
 fn refused_autonomy(autonomy: Autonomy, agent: &str, reason: &str) -> AutonomyState {
     AutonomyState {
         requested: autonomy,
         native_mode: None,
         auto_answer: AutoAnswer::Never,
         note: Some(format!(
-            "auracode could not switch {agent} to a matching mode ({reason}), so it asks before every action."
+            "o7 could not switch {agent} to a matching mode ({reason}), so it asks before every action."
         )),
     }
 }
@@ -7817,7 +7817,7 @@ async fn check_folder(folder: PathBuf) -> Result<(), StartFailure> {
         FolderState::NotAllowed => Err(StartFailure {
             kind: ErrorKind::FolderNotAllowed,
             message: format!(
-                "auracode isn't allowed to open {shown}. Allow it in System Settings > Privacy & Security > Files and Folders, then press Retry."
+                "o7 isn't allowed to open {shown}. Allow it in System Settings > Privacy & Security > Files and Folders, then press Retry."
             ),
             folder: Some(FolderState::NotAllowed),
         }),
@@ -7826,7 +7826,7 @@ async fn check_folder(folder: PathBuf) -> Result<(), StartFailure> {
 
 /// A start's native options: a continuation's (a fork, say), and for Claude its own file
 /// checkpointing. Claude copies a file just before its edit tools change it, which costs far less
-/// than auracode's automatic checkpoints (off by default), so a sent message's Rewind can restore
+/// than o7's automatic checkpoints (off by default), so a sent message's Rewind can restore
 /// what Claude edited in any Claude chat.
 fn native_start(
     kind: aura_protocol::DriverKind,

@@ -11,7 +11,7 @@
 //! - A worker starts in one of its own project's folders, with the access level Settings gives
 //!   every new chat. The coordinator cannot raise it, and a worker cannot start workers.
 //! - Pausing, resuming and the brief are the person's alone (`chatstore::coordinator`).
-//! - auracode pauses a project by itself when its coordinator has been sent more events in an
+//! - o7 pauses a project by itself when its coordinator has been sent more events in an
 //!   hour than [`limits::EVENTS_PER_HOUR`], so two agents answering each other stop.
 //! - None of this is offered to remote devices or bots: they see these chats as the chats they
 //!   are, and no more.
@@ -31,7 +31,7 @@ use serde_json::Value;
 use std::collections::{BTreeMap, VecDeque};
 use std::sync::Weak;
 
-/// How a prompt auracode sends for a project begins. The chat shows such a prompt as an event,
+/// How a prompt o7 sends for a project begins. The chat shows such a prompt as an event,
 /// not as the person's words (`apps/desktop/src/lib/chat/projectEvent.ts`), so the two change
 /// together.
 pub const EVENT_PREFIX: &str = "[auracode project event] ";
@@ -124,7 +124,7 @@ impl Bridge for ManagerBridge {
         let inner = self.0.upgrade();
         Box::pin(async move {
             let Some(inner) = inner else {
-                return ToolReply::refused("auracode is closing.");
+                return ToolReply::refused("o7 is closing.");
             };
             SessionManager { inner }
                 .coordinator_tool(&chat_id, &tool, &arguments)
@@ -300,7 +300,7 @@ impl SessionManager {
     async fn coordination_text(&self, command: Command) -> Result<String, String> {
         match self.coordination_store(command).await? {
             Reply::Text(text) => Ok(text),
-            _ => Err("auracode answered that oddly.".into()),
+            _ => Err("o7 answered that oddly.".into()),
         }
     }
 
@@ -584,7 +584,7 @@ impl SessionManager {
                         "{} at revision {}, last written by {}.\n\n{}",
                         file.path, file.revision, file.source, file.content
                     )),
-                    _ => Err("auracode answered that oddly.".into()),
+                    _ => Err("o7 answered that oddly.".into()),
                 }
             }
             "project_context_append" => {
@@ -1053,7 +1053,7 @@ impl SessionManager {
             allow_busy_folder: true,
         };
         // A worktree that cannot be made is said, with the way on: the coordinator chooses whether
-        // this work may share the project folder, auracode never chooses it for it.
+        // this work may share the project folder, o7 never chooses it for it.
         let no_worktree = |error: SessionError| {
             format!(
                 "A worktree could not be made for this worker: {error} Pass isolated as false to start it in the project folder itself, which it then shares with other workers and the person."
@@ -1235,7 +1235,7 @@ impl SessionManager {
             .coordination_store(Command::AutoPause {
                 project_id: project_id.to_owned(),
                 reason: format!(
-                    "auracode paused this project: its coordinator was sent {} reports and routines within an hour. Look at what the agents are doing, then resume.",
+                    "o7 paused this project: its coordinator was sent {} reports and routines within an hour. Look at what the agents are doing, then resume.",
                     limits::EVENTS_PER_HOUR
                 ),
             })

@@ -164,7 +164,7 @@ pub enum EnvSource {
         took_ms: u64,
     },
     WindowsRegistry,
-    /// auracode's own env plus the known dirs, because the shell failed.
+    /// o7's own env plus the known dirs, because the shell failed.
     Fallback {
         reason: String,
     },
@@ -180,7 +180,7 @@ pub struct EnvResolverConfig {
     /// A failed attempt older than this is retried on the next `get`.
     pub retry_after: Duration,
     pub shell: Option<PathBuf>,
-    /// The shell's input env instead of auracode's own.
+    /// The shell's input env instead of o7's own.
     pub base: Option<EnvMap>,
     pub home: Option<PathBuf>,
     pub known_dirs: Option<Vec<PathBuf>>,
@@ -424,7 +424,7 @@ impl fmt::Debug for EnvResolver {
 
 /// The answer when an attempt's task ended without one (the runtime is shutting down, or the
 /// attempt panicked), so no caller waits forever: the last env, or else the fallback, `base` or
-/// auracode's own env without its launch context. A new fallback is the current env from then on,
+/// o7's own env without its launch context. A new fallback is the current env from then on,
 /// and its secrets reach the redactor before any caller gets it, as every resolution's do.
 fn failed_attempt(inner: &ResolverInner) -> Arc<ResolvedEnv> {
     let mut state = lock(&inner.state);
@@ -542,7 +542,7 @@ async fn resolve(config: &EnvResolverConfig, registry: &LeftoverRegistry) -> Res
     }
 }
 
-/// auracode's own env, without its launch context, as the env of last resort.
+/// o7's own env, without its launch context, as the env of last resort.
 fn fallback(vars: EnvMap, reason: String, warnings: Vec<String>) -> ResolvedEnv {
     ResolvedEnv {
         vars,
@@ -678,16 +678,16 @@ pub enum ResolverStatus {
     },
 }
 
-/// Variables that describe how auracode itself was launched, which the resolver's shell must not
+/// Variables that describe how o7 itself was launched, which the resolver's shell must not
 /// inherit: a dev launch from Apple Terminal would replay its session restore against the user's
 /// tab history, and a `pnpm dev` launch would leak `npm_config_*` into every agent. Whatever the
 /// user's own rc files export comes back through the shell's output.
 ///
-/// The terminal app auracode was started from names itself too, and none of it is true for an
-/// agent: auracode's own terminal is not kitty, so a child that read `KITTY_WINDOW_ID` or
+/// The terminal app o7 was started from names itself too, and none of it is true for an
+/// agent: o7's own terminal is not kitty, so a child that read `KITTY_WINDOW_ID` or
 /// `KITTY_LISTEN_ON` would send kitty remote-control commands to the person's other window, and
 /// `GHOSTTY_SHELL_FEATURES` or `VTE_VERSION` would load shell integration that writes another
-/// terminal's escape codes. A terminal inside auracode says what it is itself (`pty::spawn`).
+/// terminal's escape codes. A terminal inside o7 says what it is itself (`pty::spawn`).
 const LAUNCH_CONTEXT_NAMES: &[&str] = &[
     "TERM_PROGRAM",
     "TERM_PROGRAM_VERSION",
@@ -706,7 +706,7 @@ const LAUNCH_CONTEXT_NAMES: &[&str] = &[
     "STY",
 ];
 
-/// Names, separated by `:`, of variables auracode set for itself when it started (the NVIDIA
+/// Names, separated by `:`, of variables o7 set for itself when it started (the NVIDIA
 /// switch in the desktop's `main`). They and this variable are launch context: the app needs
 /// them, an agent's shell must not inherit them.
 pub const LAUNCH_SET_ENV: &str = "AURACODE_LAUNCH_SET";
@@ -729,14 +729,14 @@ const LAUNCH_CONTEXT_PREFIXES: &[&str] = &[
     "ZELLIJ",
 ];
 
-/// Removes the variables that describe how auracode itself was launched; returns their names,
+/// Removes the variables that describe how o7 itself was launched; returns their names,
 /// sorted. Applies to the resolver shell's input and to the fallback.
 ///
 /// Names and prefixes compare case-sensitively on every OS, unlike the scrub's: npm, pnpm and Tauri
 /// set these names in a fixed case, and a user's own `NPM_TOKEN` or `NPM_CONFIG_REGISTRY` must
 /// reach the shell on Windows too.
 ///
-/// What auracode set for itself goes too ([`LAUNCH_SET_ENV`]), and on Unix a Linux AppImage's
+/// What o7 set for itself goes too ([`LAUNCH_SET_ENV`]), and on Unix a Linux AppImage's
 /// launch context ([`strip_appimage`]); their names are reported with the rest.
 pub fn strip_launch_context(vars: &mut EnvMap) -> Vec<String> {
     let doomed: Vec<EnvKey> = vars
@@ -898,7 +898,7 @@ pub fn child_env(resolved: &ResolvedEnv, set: &[(OsString, OsString)]) -> (EnvMa
     (vars, report)
 }
 
-/// auracode's own environment.
+/// o7's own environment.
 pub fn process_env() -> EnvMap {
     std::env::vars_os()
         .map(|(name, value)| (EnvKey::from(name), value))
@@ -1033,7 +1033,7 @@ mod tests {
         assert_eq!(names(&vars), ["EDITOR", "LC_ALL", "PATH", "TERMINAL"]);
     }
 
-    /// What linuxdeploy's AppRun and its GTK and Python hooks set, as a real AppImage of auracode
+    /// What linuxdeploy's AppRun and its GTK and Python hooks set, as a real AppImage of o7
     /// left it: every entry inside the mount goes, the session's own entries stay in order.
     #[cfg(unix)]
     #[test]
@@ -1103,7 +1103,7 @@ mod tests {
     }
 
     /// What an image with GStreamer's plugins adds: its launcher's and its GStreamer hook's
-    /// variables, and the ones auracode's own `main` set for the image, all go.
+    /// variables, and the ones o7's own `main` set for the image, all go.
     #[cfg(unix)]
     #[test]
     fn an_appimages_gstreamer_context_is_stripped() {
@@ -1154,7 +1154,7 @@ mod tests {
         );
         assert_eq!(names(&vars), ["HOME"]);
 
-        // An image without plugins: auracode pointed GStreamer at the system's folders itself.
+        // An image without plugins: o7 pointed GStreamer at the system's folders itself.
         let mut vars = map(&[
             ("APPDIR", mount),
             ("GST_PLUGIN_SYSTEM_PATH_1_0", "/usr/lib/gstreamer-1.0"),
@@ -1205,7 +1205,7 @@ mod tests {
         assert!(strip_launch_context(&mut plain).is_empty());
     }
 
-    /// What auracode set for itself at launch goes; the same variable set by the person stays.
+    /// What o7 set for itself at launch goes; the same variable set by the person stays.
     #[test]
     fn variables_auracode_set_at_launch_are_stripped() {
         let mut vars = map(&[

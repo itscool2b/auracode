@@ -1,6 +1,6 @@
 //! The Windows environment: HKLM `SYSTEM\CurrentControlSet\Control\Session Manager\Environment`,
 //! then HKCU `Environment` (the user wins), read through `winreg` on a blocking thread. `REG_EXPAND_SZ`
-//! values are expanded; `PATH` is system, then user, then the entries of auracode's own `PATH` not
+//! values are expanded; `PATH` is system, then user, then the entries of o7's own `PATH` not
 //! yet present. `USERNAME` and `PROCESSOR_ARCHITECTURE` stay as the logon set them. The merge and
 //! the expansion are pure and build on every OS, so their tests run everywhere.
 
@@ -9,7 +9,7 @@ use std::collections::HashSet;
 #[cfg(any(windows, test))]
 use super::{EnvKey, EnvMap};
 
-/// Names the registry holds but the logon owns, kept as auracode's own env has them: HKLM's
+/// Names the registry holds but the logon owns, kept as o7's own env has them: HKLM's
 /// `USERNAME` is `SYSTEM` (meant for services), and its `PROCESSOR_ARCHITECTURE` is the machine's,
 /// while a process under emulation has the emulated one. Windows' `CreateEnvironmentBlock` sets
 /// both from the logon, and Chocolatey's `refreshenv` restores both after reading the registry.
@@ -97,7 +97,7 @@ pub fn merge_windows_path(
     merged.join(";")
 }
 
-/// The registry's environment over `base` (auracode's own env without its launch context).
+/// The registry's environment over `base` (o7's own env without its launch context).
 #[cfg(windows)]
 pub(crate) fn registry_env(base: &EnvMap) -> std::io::Result<EnvMap> {
     use std::io;

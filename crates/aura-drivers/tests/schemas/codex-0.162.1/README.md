@@ -17,4 +17,4 @@ disabled. The historical 0.164.0 installation recorded in the plan is not verifi
 
 The adjacent `LICENSE` and `NOTICE` are copied unchanged from OpenAI Codex tag
 [`rust-v0.162.1`](https://github.com/openai/codex/tree/rust-v0.162.1). They apply to the upstream
-material, including this generated protocol baseline, and do not select a license for auracode.
+material, including this generated protocol baseline, and do not select a license for o7.

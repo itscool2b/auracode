@@ -573,7 +573,7 @@ impl Serving {
             FromRelay::Pong => {}
             FromRelay::Replaced => {
                 return Some(Ended::Lost(
-                    "Another auracode took over this computer's remote access.".into(),
+                    "Another o7 took over this computer's remote access.".into(),
                 ));
             }
             FromRelay::Opened(cid) => {
@@ -636,7 +636,7 @@ impl Serving {
             )
         };
         let refused = if !verified {
-            Some("This bot link was removed. Its owner can create a new one in auracode.")
+            Some("This bot link was removed. Its owner can create a new one in o7.")
         } else if !bot::known(&call.tool) {
             Some("There is no such tool.")
         } else if !bot::allowed(&call.tool, full) {

@@ -526,7 +526,7 @@ fn legacy_option(
     }
 }
 
-/// One `configOptions` entry; `None` for an entry auracode cannot use (no id, another type).
+/// One `configOptions` entry; `None` for an entry o7 cannot use (no id, another type).
 pub fn parse_config_option(raw: &Value) -> Option<ConfigOption> {
     let id = wire::string_at(raw, "id")?;
     let kind = match wire::str_at(raw, "type")? {

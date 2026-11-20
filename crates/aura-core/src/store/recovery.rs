@@ -288,7 +288,7 @@ pub(super) fn resume(db_path: &Path, backups_dir: &Path) -> Result<Option<Recove
 
 /// Repairs the damaged database at `db_path` (the steps are in the module docs). `migrations` are
 /// the store's, for the salvage. Only called while holding the open lock exclusively, so no other
-/// auracode process has the file open.
+/// o7 process has the file open.
 pub(super) fn recover(
     db_path: &Path,
     backups_dir: &Path,

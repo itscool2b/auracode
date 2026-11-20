@@ -66,7 +66,7 @@ ordinary tool descendants die with their owner. See Microsoft's
 
 This checkpoint does not enable either breakaway mode or change vendor processes. Safe Windows
 daemon support still needs qualified vendor behavior, tracked escaped pid/start identities and
-crash recovery. An existing daemon outside auracode's job remains outside its kill authority.
+crash recovery. An existing daemon outside o7's job remains outside its kill authority.
 
 ## Verification
 
@@ -81,5 +81,5 @@ crash recovery. An existing daemon outside auracode's job remains outside its ki
 | WSL bridge, packaged helper deployment and distribution qualification | pending |
 | Windows cooperative daemon breakaway and recovery | pending |
 
-Only auracode's fake/test children were used. No real vendor agent, paid prompt, credential/config
+Only o7's fake/test children were used. No real vendor agent, paid prompt, credential/config
 read, security-policy change or blocked-binary workaround was performed.

@@ -9,7 +9,7 @@ use crate::acp::AcpDriver;
 use crate::driver::{AgentDriver, DriverFactory};
 use crate::mock_driver::{MockBehavior, MockDriver};
 
-/// The drivers auracode ships.
+/// The drivers o7 ships.
 #[derive(Debug, Clone, Copy, Default)]
 pub struct StandardDriverFactory;
 

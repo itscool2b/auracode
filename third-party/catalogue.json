@@ -5,25 +5,25 @@
     "Cargo.lock": "0d34f15de81816e04bea316a469d7e34260cd5de97d047d4478f9de8f16abda4",
     "Cargo.toml": "8b93f41a4d877beda33586c01bd770dd44bbfc3c0de38c40dd6fe668c37955ed",
     "apps/design-lab/package.json": "639745d0a897328f33f5958410513759a10549231c846bcdeb5a713f518ca3fb",
-    "apps/desktop/package.json": "fa05fe17819447361944d43167826eaf58bd417ca687d0024cf27d0e595e59bb",
-    "apps/desktop/scripts/dictation-models.mjs": "fff8856ebdc34c8596da75a9481d5219f90cef460eaddbe38bb6ca91f17253ef",
-    "apps/desktop/src-tauri/Cargo.toml": "e44f3de4f932409c0cdeb3d90352043a74ed1706652b6075e8b576e665caabca",
+    "apps/desktop/package.json": "1739da01bfd15d1965f39ce79c9749d78fdc3e50a55952b429a16a7a57948934",
+    "apps/desktop/scripts/dictation-models.mjs": "3dfa6af4cd4997eee017c9fda9f7a0ca5711e9c99f2e356c2ee3e7e9b3c1d31a",
+    "apps/desktop/src-tauri/Cargo.toml": "ab5c25d1e4934e861c4f70d239f2a6a08cb8582b6f498bfd6d5a824492c186ef",
     "apps/relay/package.json": "ad5bd430db785a39d2e6d688bee031126c59cc58fb2bf50100d59d6d0b7578ca",
     "apps/web-worker/Cargo.toml": "b1a95f1bb8377afb2a02c0a31feeda0bdc6971b057febbaee62f63314d6c6fb6",
     "apps/web-worker/package.json": "9bd52b46d1fc2854db835f8b44b456f395436470e095aa1e4ccc43a5a6a8ea76",
     "apps/web/package.json": "60b5670e6636337599a2aec9da64c8174ee7f0280ef2d39f2fd2e172a4ef0c52",
-    "crates/aura-agents/Cargo.toml": "ac7691f5a61b30e2ccf587aba4e9f9eed9b7690afc70c5980f7c1cef4eff5ad5",
-    "crates/aura-cli/Cargo.toml": "5f7f902ba9dd355a90a73c371099ad9d0fcd4ba769e1bbd6f2eefd05a2e0f646",
+    "crates/aura-agents/Cargo.toml": "244ca30825f9b999f46425ee126597afc904beee372a6fa6015bf6e1fba96016",
+    "crates/aura-cli/Cargo.toml": "0b0edf00e3d094494b0050095e2f395ed1f68d807257fc45f5bf03a174f99797",
     "crates/aura-config/Cargo.toml": "b1081a45ea64d702abf24805b260235b5eee8e8f6152556ba42f8cd844398350",
     "crates/aura-core/Cargo.toml": "9114112826ed8866ab1b5d207997e5ea4288a22e1466369202ef7d5cbae9e3a3",
-    "crates/aura-drivers/Cargo.toml": "d5a15a9ad07b3e9647d1aaf6b95b583c20a3d42860fbf8e3a8f37adff34392a1",
-    "crates/aura-process/Cargo.toml": "32fecd9b59aacf59a88c790bd9d03d72c84e59e2b9dcd7e4d10b53cee99095ed",
-    "crates/aura-protocol/Cargo.toml": "e9dff80578d02a929419ff66d2115934b50eadb4371d4bfa28639ca2524a15a3",
-    "crates/aura-release/Cargo.toml": "0c1edf9093c74858f415e3d76a4038b494586e30b18c1f2938115fa3ae7c762e",
-    "crates/aura-remote/Cargo.toml": "537f41c571082972f2d47303c7a49a31f236bbb464492ca7b16507d2c05ffa5d",
-    "packages/ui/package.json": "05418aca24fd93b4f7b3f83a820f9f12e6fdb21077be1607ca07c811adb11917",
+    "crates/aura-drivers/Cargo.toml": "b0524b2e8da652ff6a915acdaf13597868d056523a9a5ddb962ac30a3a5be973",
+    "crates/aura-process/Cargo.toml": "734f61e95e45c71f63cfec50db8011ccdd12617bf89c860a2bf91fdd29c55fac",
+    "crates/aura-protocol/Cargo.toml": "06cbf7d998a3bd98ddf6043742096994216d8ce9fb500828f0de28616465e0fc",
+    "crates/aura-release/Cargo.toml": "c0a02e9c8c8c62c99d1a449c1a762abd181750c7895e1a007b8620ccab29bd50",
+    "crates/aura-remote/Cargo.toml": "7dfbfe5a60aa85b931647895fc686bd647e6d39bec5dfc2ae5cf2c0c280d0d7e",
+    "packages/ui/package.json": "2358e53d7738d61922c16396329d4e70ebd8b08e404f8a996b2b581dc2b67706",
     "pnpm-lock.yaml": "ad7e37571127ffee37bd9c473e8cfd62bdd0b2d06439f0639ada5fefc9e2f391",
-    "third-party/models.json": "6c702b42c6052f5e9da76f4c4fd770fe1133326d960df4323a13835a73e856da",
+    "third-party/models.json": "ca5a13e5bc9f2ee5e17170acbe0dddf836585713c83737c3e57bd82b87d3551e",
     "third-party/overrides.json": "afbc29886b3d5703468c5c869c5c0b77ce5fef1aee2bac8be889a88fc36387b2"
   },
   "records": [
@@ -11000,7 +11000,7 @@
       ],
       "files": [
         {
-          "sha256": "b3b5e37c932410fdfe2ffc4fd6af7453433da23b1c383607c6ee424cd85966f5",
+          "sha256": "cfd4c317b67c8069d71893f93ccb9f0e1995de688aef043f64f7a2020a2484de",
           "source": "https://huggingface.co/handy-computer/parakeet-tdt_ctc-110m-gguf/tree/1c3f0d5378fdd358905cc410a93ed9e64f52d170#attribution"
         },
         {
@@ -11029,7 +11029,7 @@
       ],
       "files": [
         {
-          "sha256": "d39df661407090ae2c134fad2e7ec7c99b3843e966d69512514fdbc99504671e",
+          "sha256": "2ca3fa1890d0edee9ec04cc129dca45cc9aa6aeea517cf3465f437812d2f4bb7",
           "source": "https://huggingface.co/handy-computer/silero-vad-v6.2-gguf/tree/a9b2d61c20ae4ddf3644edb34969e8185a485448#attribution"
         },
         {

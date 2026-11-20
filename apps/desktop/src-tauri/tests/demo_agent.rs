@@ -140,7 +140,7 @@ mod end_to_end {
             let in_use = booted
                 .fatal
                 .as_deref()
-                .is_some_and(|fatal| fatal.starts_with("auracode is already running"));
+                .is_some_and(|fatal| fatal.starts_with("o7 is already running"));
             if !in_use || Instant::now() >= deadline {
                 return booted;
             }
@@ -606,7 +606,7 @@ mod end_to_end {
         assert!(page.items.iter().any(|item| matches!(
             &item.event,
             AuraEvent::Notice { level: NoticeLevel::Warning, message }
-                if message == "Force stopped: auracode ended the agent's processes."
+                if message == "Force stopped: o7 ended the agent's processes."
         )));
         assert_eq!(stored, turns(&chat.view.items()), "stored and live agree");
         chats.manager.detach(&chat.subscription_id);

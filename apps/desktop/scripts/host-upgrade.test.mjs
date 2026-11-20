@@ -468,7 +468,7 @@ test("an install without an installer or an install to keep changes nothing", as
       fakeSystem(paths),
       log,
     ),
-    /holds no installed auracode/u,
+    /holds no installed o7/u,
   );
 });
 
@@ -573,7 +573,7 @@ test("a rollback never deletes a folder that is not an install", () => {
   write(join(snapshot.dir, "app", "uninstall.exe"), "u");
   const elsewhere = join(root, "Documents");
   write(join(elsewhere, "thesis.docx"), "keep me");
-  assert.throws(() => restoreApp(snapshot, elsewhere), /not an auracode install/u);
+  assert.throws(() => restoreApp(snapshot, elsewhere), /not an o7 install/u);
   assert.equal(readFileSync(join(elsewhere, "thesis.docx"), "utf8"), "keep me");
   assert.throws(() => restoreApp({ dir: join(root, "empty") }, paths.installDir), /no copy/u);
 });

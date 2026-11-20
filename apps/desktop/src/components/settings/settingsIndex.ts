@@ -166,7 +166,7 @@ export const SETTINGS_INDEX: readonly SettingEntry[] = [
   { page: "privacy", title: "What stays on this device", words: "privacy local audio" },
   {
     page: "privacy",
-    title: "Delete all auracode data",
+    title: "Delete all o7 data",
     words: "reset remove uninstall erase",
   },
   { page: "about", title: "Updates", words: "version upgrade release" },

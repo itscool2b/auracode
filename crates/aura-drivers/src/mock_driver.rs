@@ -848,7 +848,7 @@ impl Mock {
                 native_mode: Some(mode.to_owned()),
                 auto_answer: AutoAnswer::Never,
                 note: Some(format!(
-                    "You picked the {name} mode by hand, so auracode asks before every action. Choose an autonomy level to hand control back."
+                    "You picked the {name} mode by hand, so o7 asks before every action. Choose an autonomy level to hand control back."
                 )),
             }));
         } else if self.hand_picked.take().is_some() {

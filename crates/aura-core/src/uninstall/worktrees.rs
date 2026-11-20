@@ -1,10 +1,10 @@
-//! auracode's worktrees, found on disk and checked with Git before anything is deleted.
+//! o7's worktrees, found on disk and checked with Git before anything is deleted.
 //!
-//! auracode creates every worktree inside its data folder (`profiles/<id>/worktrees/<name>`, and
+//! o7 creates every worktree inside its data folder (`profiles/<id>/worktrees/<name>`, and
 //! `worktrees/retired/<id>` once a chat is done), registered with the person's repository and
-//! locked with the reason `auracode <id>`. They are found by walking the data folder for a `.git`
-//! file rather than through auracode's records, so a profile whose records cannot be read (a
-//! damaged one, or one left by a removed auracode account) is covered too.
+//! locked with the reason `o7 <id>`. They are found by walking the data folder for a `.git`
+//! file rather than through o7's records, so a profile whose records cannot be read (a
+//! damaged one, or one left by a removed o7 account) is covered too.
 //!
 //! A worktree has unsaved work when its folder holds changes Git has not committed (untracked
 //! files included, ignored files not), or when its HEAD has commits no other branch, tag or remote
@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::time::{Duration, Instant};
 
-/// One auracode worktree and what deleting its folder would lose.
+/// One o7 worktree and what deleting its folder would lose.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Worktree {
     pub path: PathBuf,
@@ -99,7 +99,7 @@ const MAX_DEPTH: usize = 6;
 /// A bound on the folders visited, so a strange tree cannot stall the plan.
 const MAX_VISITS: usize = 20_000;
 
-/// auracode worktrees in the data folder `root`: folders under `profiles/` whose `.git` is a file
+/// o7 worktrees in the data folder `root`: folders under `profiles/` whose `.git` is a file
 /// (a linked worktree), not followed through links.
 pub(super) fn discover(root: &Path) -> Vec<PathBuf> {
     let mut found = Vec::new();
@@ -161,7 +161,7 @@ fn is_link(meta: &std::fs::Metadata) -> bool {
     meta.file_type().is_symlink() || reparse
 }
 
-/// Git for the cleanup: read-only questions about auracode's worktrees, and the unlock and prune
+/// Git for the cleanup: read-only questions about o7's worktrees, and the unlock and prune
 /// that drop their registration. No hook, filesystem monitor or inherited `GIT_*` variable runs
 /// or redirects anything, and nothing touches the person's index or their main checkout.
 #[derive(Debug, Clone)]
@@ -206,7 +206,7 @@ impl GitTool {
 
     fn run(&self, args: &[&OsStr]) -> Result<String, String> {
         let Some(program) = &self.program else {
-            return Err("Git is not installed, so auracode could not check this folder.".into());
+            return Err("Git is not installed, so o7 could not check this folder.".into());
         };
         let mut command = Command::new(program);
         command
@@ -406,7 +406,7 @@ impl GitTool {
         worktree
     }
 
-    /// Lifts auracode's lock, so Git can prune the registration or the person can manage the
+    /// Lifts o7's lock, so Git can prune the registration or the person can manage the
     /// worktree like any other. Failures are harmless: an unlocked worktree stays unlocked.
     pub(super) fn unlock(&self, worktree: &Worktree) {
         if let Some(common) = &worktree.common_dir {

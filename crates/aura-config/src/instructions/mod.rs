@@ -71,9 +71,9 @@ pub enum FileKind {
     /// The same file as another instruction file (a hard link).
     HardLink,
     /// A link that leaves the folder, a linked parent folder, or a link to another kind of file.
-    /// auracode never follows it.
+    /// o7 never follows it.
     Outside,
-    /// A link whose target does not exist. Agents read nothing there; auracode never writes it.
+    /// A link whose target does not exist. Agents read nothing there; o7 never writes it.
     Dangling,
     Directory,
     /// Not UTF-8 text. Copies stay byte-identical; editing happens in another editor.
@@ -104,7 +104,7 @@ pub enum AgentStatus {
     Import,
     /// Reads a link to the source.
     Link,
-    /// Reads a byte-identical copy auracode keeps in sync (or an identical copy it found).
+    /// Reads a byte-identical copy o7 keeps in sync (or an identical copy it found).
     Copy,
     /// Reads a copy that was edited by hand or is out of date.
     Drift,
@@ -122,7 +122,7 @@ pub enum AgentStatus {
 #[serde(rename = "InstructionsManaged")]
 pub struct Managed {
     pub source: String,
-    /// The copy no longer matches what auracode wrote.
+    /// The copy no longer matches what o7 wrote.
     pub edited: bool,
     /// The source changed since the copy was written.
     pub source_changed: bool,
@@ -281,7 +281,7 @@ pub struct ReviewFile {
     /// How this file serves its agents afterwards: "Imports AGENTS.md", "Managed copy of AGENTS.md".
     pub how: Option<String>,
     pub notes: Vec<String>,
-    /// The replaced text is backed up in auracode's data folder.
+    /// The replaced text is backed up in o7's data folder.
     pub backup: bool,
 }
 

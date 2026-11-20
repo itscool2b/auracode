@@ -96,7 +96,7 @@ impl InitializeReply {
         }
     }
 
-    /// The protocol version is 1, the only one auracode speaks.
+    /// The protocol version is 1, the only one o7 speaks.
     pub fn speaks_version_1(&self) -> bool {
         self.protocol_version
             .as_ref()
@@ -277,13 +277,13 @@ pub enum Update {
         level: NoticeLevel,
         message: String,
     },
-    /// A tag auracode knows and does not map (compaction, unstable kinds it does not advertise).
+    /// A tag o7 knows and does not map (compaction, unstable kinds it does not advertise).
     Unmapped(&'static str),
-    /// A tag auracode does not know.
+    /// A tag o7 does not know.
     Unknown(String),
 }
 
-/// An update auracode could not read: dropped, logged, and the stream goes on.
+/// An update o7 could not read: dropped, logged, and the stream goes on.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Malformed {
     /// The tag, when there was one.
@@ -291,7 +291,7 @@ pub struct Malformed {
     pub reason: &'static str,
 }
 
-/// The tags auracode knows and leaves unmapped: not advertised, or unstable.
+/// The tags o7 knows and leaves unmapped: not advertised, or unstable.
 pub const UNMAPPED_TAGS: &[&str] = &[
     "compaction_update",
     "compaction_summary_chunk",
@@ -472,7 +472,7 @@ pub struct ToolFields {
     pub content: Option<Vec<ToolContent>>,
     pub locations: Option<Vec<ToolLocation>>,
     pub raw_input: Option<Value>,
-    /// Content entries of a type auracode does not show, dropped.
+    /// Content entries of a type o7 does not show, dropped.
     pub dropped_content: usize,
     /// The content entries that are display terminals: their position and terminal id.
     pub terminals: Vec<(usize, String)>,
@@ -535,7 +535,7 @@ impl ToolFields {
     }
 }
 
-/// One tool content entry; `None` for a type auracode does not show.
+/// One tool content entry; `None` for a type o7 does not show.
 fn tool_content(entry: &Value) -> Option<ToolContent> {
     match str_at(entry, "type")? {
         "content" => Some(ToolContent::Text {
@@ -691,7 +691,7 @@ fn with_id(tool: &Value) -> Value {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PromptReply {
     pub stop_reason: StopReason,
-    /// The agent's own name for a reason auracode reads as `Other`, for the log.
+    /// The agent's own name for a reason o7 reads as `Other`, for the log.
     pub unknown_reason: Option<String>,
     pub usage: Option<WireUsage>,
 }

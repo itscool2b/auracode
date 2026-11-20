@@ -719,7 +719,7 @@ pub enum SpawnError {
     PermissionDenied { program: String },
     #[error("the folder {} can't be used: {reason}", path.display())]
     InvalidCwd { path: PathBuf, reason: String },
-    #[error("auracode isn't allowed to open {}", path.display())]
+    #[error("o7 isn't allowed to open {}", path.display())]
     CwdNotAllowed { path: PathBuf },
     #[error("spawning needs a Tokio runtime")]
     NoRuntime,
@@ -734,7 +734,7 @@ pub enum SpawnError {
 /// The environment a helper starts with. Both are scrubbed.
 #[derive(Debug, Clone)]
 pub enum HelperEnv {
-    /// auracode's own env minus `strip_launch_context`: the env resolver's shell, which must not
+    /// o7's own env minus `strip_launch_context`: the env resolver's shell, which must not
     /// wait for the resolver.
     ProcessEnv,
     Resolved(Arc<ResolvedEnv>),
@@ -750,7 +750,7 @@ pub struct HelperSpec {
     /// Always set, after the scrub.
     pub set: Vec<(OsString, OsString)>,
     /// Starts the helper in a new session (Unix), so an interactive shell never takes the
-    /// foreground of the terminal auracode was started from.
+    /// foreground of the terminal o7 was started from.
     pub new_session: bool,
     pub timeout: Duration,
     /// stdout beyond this is dropped (`stdout_truncated`).
@@ -838,7 +838,7 @@ async fn run_helper_inner(
             Arc::new(ResolvedEnv {
                 vars,
                 source: EnvSource::Fallback {
-                    reason: "auracode's own environment".into(),
+                    reason: "o7's own environment".into(),
                 },
                 warnings: Vec::new(),
                 resolved_at_ms: now_millis(),
@@ -1352,7 +1352,7 @@ mod tests {
                 path: PathBuf::from("/Users/me/Desktop/x")
             }
             .to_string(),
-            "auracode isn't allowed to open /Users/me/Desktop/x"
+            "o7 isn't allowed to open /Users/me/Desktop/x"
         );
     }
 }

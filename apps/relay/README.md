@@ -1,4 +1,4 @@
-# auracode relay
+# o7 relay
 
 The Worker behind remote sessions: one Durable Object per computer holds its outbound host socket
 and the sockets of paired browsers, forwards between them, and serves MCP to linked bots. It stores

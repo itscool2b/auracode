@@ -28,7 +28,7 @@ pub(crate) fn read(path: &Path) -> Result<Selections, String> {
     file.take(MAX_BYTES + 1)
         .read_to_end(&mut bytes)
         .map_err(|_| "The saved executable choices could not be read.")?;
-    let saved: Saved = serde_json::from_slice(&bytes).map_err(|_| "The saved executable choices are invalid. Restore this auracode preference file before choosing an installation.")?;
+    let saved: Saved = serde_json::from_slice(&bytes).map_err(|_| "The saved executable choices are invalid. Restore this o7 preference file before choosing an installation.")?;
     if bytes.len() as u64 > MAX_BYTES
         || saved.version != 1
         || saved.selections.len() > 64
@@ -69,7 +69,7 @@ pub(crate) fn save(
         .open(path.with_extension("lock"))
         .map_err(|_| "The executable preference lock could not be opened.")?;
     lock.try_lock()
-        .map_err(|_| "Another auracode window is changing executable choices. Try again.")?;
+        .map_err(|_| "Another o7 window is changing executable choices. Try again.")?;
     let _lock = aura_process::locked_file::LockedFile::new(lock);
     let mut selections = read(path)?;
     match selected {

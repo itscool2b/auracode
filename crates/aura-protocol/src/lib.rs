@@ -1,4 +1,4 @@
-//! The shared vocabulary of auracode.
+//! The shared vocabulary of o7.
 //!
 //! Every agent driver (Claude Code, Codex, Pi, any ACP agent) translates its native stream into
 //! [`AuraEvent`]s, the UI renders only `AuraEvent`s, and the chat store saves them. The shape follows
@@ -67,7 +67,7 @@ pub enum AuraEvent {
         stop_reason: StopReason,
         usage: Option<TokenUsage>,
         duration_ms: Option<u64>,
-        /// Ended by recovery at startup: auracode quit or crashed while the turn ran.
+        /// Ended by recovery at startup: o7 quit or crashed while the turn ran.
         recovered: bool,
     },
     /// The user's prompt text, as sent. The session actor emits it; drivers never do.
@@ -226,10 +226,10 @@ lenient_enum! {
         Refusal = "refusal",
         /// The agent confirmed a cancel.
         Cancelled = "cancelled",
-        /// auracode ended the turn without the agent: a force stop, a crash, a quit.
+        /// o7 ended the turn without the agent: a force stop, a crash, a quit.
         Interrupted = "interrupted",
         Error = "error",
-        /// A reason auracode does not know (an agent's, or a newer build's).
+        /// A reason o7 does not know (an agent's, or a newer build's).
         Other = "other",
     }
     fallback = Other;
@@ -692,7 +692,7 @@ pub enum QueueWait {
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum HoldCause {
-    /// auracode restarted (or reopened the chat) with prompts still queued.
+    /// o7 restarted (or reopened the chat) with prompts still queued.
     Restart,
     /// The person stopped the turn or the agent.
     Stop,
@@ -797,7 +797,7 @@ pub enum Autonomy {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct AutonomyState {
     pub requested: Autonomy,
-    /// The agent mode in effect, when auracode knows it.
+    /// The agent mode in effect, when o7 knows it.
     pub native_mode: Option<String>,
     pub auto_answer: AutoAnswer,
     /// Shown next to the autonomy picker.

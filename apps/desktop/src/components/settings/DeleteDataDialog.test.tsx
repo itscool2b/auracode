@@ -70,7 +70,7 @@ function render(
   );
 }
 
-describe("Delete all auracode data", () => {
+describe("Delete all o7 data", () => {
   it("lists exactly what Rust reviewed, with sizes and the agent tokens", () => {
     const html = render(REVIEW);
     expect(html).toContain("<dt>Chats and settings</dt>");
@@ -78,7 +78,7 @@ describe("Delete all auracode data", () => {
     expect(html).toContain("1.2 GB");
     expect(html).toContain("<dt>Window and web data</dt>");
     expect(html).toContain(
-      "Sign-in tokens of agent accounts you added in auracode, kept in Windows Credential Manager.",
+      "Sign-in tokens of agent accounts you added in o7, kept in Windows Credential Manager.",
     );
     expect(html).toContain("Your agents, their settings and your repositories are not touched.");
   });
@@ -114,7 +114,7 @@ describe("Delete all auracode data", () => {
   });
 
   it("offers the Trash only where the app bundle can move", () => {
-    expect(render(REVIEW)).not.toContain("Also move auracode to the Trash");
+    expect(render(REVIEW)).not.toContain("Also move o7 to the Trash");
     const mac = {
       ...REVIEW,
       app_bundle: "/Applications/auracode.app",
@@ -123,7 +123,7 @@ describe("Delete all auracode data", () => {
       secure_store: "the macOS keychain",
     };
     const html = render(mac, { trash: true, typed: "DELETE" });
-    expect(html).toContain("Also move auracode to the Trash");
+    expect(html).toContain("Also move o7 to the Trash");
     expect(html).toContain("Delete data and move to Trash");
     expect(cleanupChoice(mac, false, true).move_app_to_trash).toBe(true);
     expect(cleanupChoice(REVIEW, false, true).move_app_to_trash).toBe(false);
@@ -144,14 +144,12 @@ describe("Delete all auracode data", () => {
   });
 
   it("shows loading, a failed review with a retry, and quitting", () => {
-    expect(render(null, { phase: "loading" })).toContain(
-      "Reading what auracode keeps on this device",
-    );
+    expect(render(null, { phase: "loading" })).toContain("Reading what o7 keeps on this device");
     const failed = render(null, { error: "The review could not finish." });
     expect(failed).toContain('role="alert"');
     expect(failed).toContain("Review again");
     const quitting = render(REVIEW, { phase: "quitting", typed: "DELETE" });
-    expect(quitting).toContain("auracode is quitting.");
+    expect(quitting).toContain("o7 is quitting.");
     expect(quitting).toMatch(/data-testid="delete-data-apply" disabled=""/);
   });
 

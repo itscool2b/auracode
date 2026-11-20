@@ -280,7 +280,7 @@ pub fn timed_out(scenario: SmokeScenario, after: Duration) -> SmokeReport {
 /// still ends with a result line rather than only an exit code.
 pub fn no_window(scenario: SmokeScenario, reason: &str) -> SmokeReport {
     SmokeReport {
-        errors: vec![format!("auracode could not create its window: {reason}")],
+        errors: vec![format!("o7 could not create its window: {reason}")],
         ..timed_out(scenario, Duration::ZERO)
     }
 }
@@ -584,7 +584,7 @@ mod tests {
         assert_eq!(exit_code(&report), 1);
         assert_eq!(
             report.errors[0],
-            "auracode could not create its window: WebView2 is not installed"
+            "o7 could not create its window: WebView2 is not installed"
         );
         assert!(
             !report.errors.iter().any(|e| e.contains("seconds")),

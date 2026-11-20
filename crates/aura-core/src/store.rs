@@ -6,7 +6,7 @@
 //! 1. Opening is coordinated across processes through `<db>.lock` (see `store/lock.rs`): one
 //!    opener at a time holds it exclusively while it probes, repairs, and migrates, and every open
 //!    store keeps a shared hold. So two processes creating a profile at once can't both run
-//!    migration 1, and the file is only ever repaired (moved) or migrated when no other auracode
+//!    migration 1, and the file is only ever repaired (moved) or migrated when no other o7
 //!    process has it open.
 //! 2. An existing file gets a cheap probe: `user_version` first, then a read of `sqlite_schema`,
 //!    which catches a file that is not a database and a damaged header or schema page while reading
@@ -25,7 +25,7 @@
 //!    so the notice can't be lost, and a repair interrupted after the move is finished by the next
 //!    open. Only "not a database" and "corrupt" count as damage: a locked or unreadable file is an
 //!    error and stays where it is.
-//! 4. A database from a newer auracode (`user_version` above [`SCHEMA_VERSION`]) is refused with
+//! 4. A database from a newer o7 (`user_version` above [`SCHEMA_VERSION`]) is refused with
 //!    [`CoreError::SchemaTooNew`] before anything is written or repaired. The version is read before
 //!    anything else on purpose: a newer build may use schema syntax this SQLite can't parse, which
 //!    would look like damage, and an older app must never quarantine a newer app's data.
@@ -177,7 +177,7 @@ pub enum Salvage {
     /// chat's events, when the chat's page was unreadable), or lost a reference to such a row (a
     /// chat whose folder was lost stays in its project, outside any folder). `tables` names those
     /// tables, in schema order. It is empty when which ones isn't known: part of the schema itself
-    /// was unreadable (and may have listed tables auracode doesn't know of), or the record of the
+    /// was unreadable (and may have listed tables o7 doesn't know of), or the record of the
     /// repair could not be read.
     Partial { tables: Vec<String> },
     /// Nothing could be read, so the new database started out empty.
@@ -193,7 +193,7 @@ pub struct StoreInfo {
     /// The previous session did not close the database: it crashed, was killed, or lost power, so
     /// its `-wal` still held data (or its `-journal` was left behind). A good reason to run
     /// [`check_integrity`] in the background. Only known when this open had the database to itself;
-    /// false when another auracode process had it open.
+    /// false when another o7 process had it open.
     pub unclean_shutdown: bool,
 }
 
@@ -305,7 +305,7 @@ fn check_integrity_with(db_path: &Path, supported: u32) -> Result<Integrity> {
     Ok(Integrity::Damaged { problem })
 }
 
-/// The first problem `quick_check` reports, if any. Data from a newer auracode is not judged: its
+/// The first problem `quick_check` reports, if any. Data from a newer o7 is not judged: its
 /// schema may simply be beyond this SQLite.
 fn quick_check(conn: &Connection, supported: u32) -> Result<Option<String>> {
     let found = match read_user_version(conn) {
@@ -405,7 +405,7 @@ struct Ctx<'a, 'm> {
     supported: u32,
     busy_timeout: Duration,
     /// This open holds the lock exclusively (or locking doesn't work here), so it may repair and
-    /// migrate. False when another auracode process has the database open.
+    /// migrate. False when another o7 process has the database open.
     may_change: bool,
 }
 
@@ -783,11 +783,11 @@ fn version(conn: &Connection) -> std::result::Result<u32, Failure> {
     Ok(version_from_raw(sql(read_user_version(conn))?)?)
 }
 
-/// `user_version` is a signed 32-bit field; auracode only ever writes 0 or a positive migration count.
+/// `user_version` is a signed 32-bit field; o7 only ever writes 0 or a positive migration count.
 fn version_from_raw(raw: i64) -> Result<u32> {
     u32::try_from(raw).map_err(|_| {
         CoreError::Migration(format!(
-            "the database reports schema version {raw}, which auracode never writes"
+            "the database reports schema version {raw}, which o7 never writes"
         ))
     })
 }
@@ -872,7 +872,7 @@ fn remove_with_sidecars(path: &Path) {
 /// finished backup is renamed away from its `.partial` name, so one is never a valid backup, and
 /// without this every interruption, likely for a large database since the backup runs before the
 /// window appears, would leak a copy as big as the database. Only called while holding the open
-/// lock exclusively, so no other auracode process is writing one.
+/// lock exclusively, so no other o7 process is writing one.
 fn remove_stale_backup_partials(dir: &Path, db_name: &str) {
     let Ok(entries) = fs::read_dir(dir) else {
         return;

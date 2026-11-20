@@ -44,7 +44,7 @@ pub fn form(
         .as_object()
         .ok_or("The form came without its fields.")?;
     if schema.get("type").and_then(Value::as_str) != Some("object") {
-        return Err("The form's fields are not set out as auracode can show them.".into());
+        return Err("The form's fields are not set out as o7 can show them.".into());
     }
     let properties = schema
         .get("properties")
@@ -52,7 +52,7 @@ pub fn form(
         .filter(|properties| !properties.is_empty())
         .ok_or("The form came without its fields.")?;
     if properties.len() > MAX_FIELDS {
-        return Err("The form has more fields than auracode shows.".into());
+        return Err("The form has more fields than o7 shows.".into());
     }
     let required: Vec<&str> = match schema.get("required") {
         None | Some(Value::Null) => Vec::new(),
@@ -76,7 +76,7 @@ pub fn form(
     for key in keys {
         let property = properties[key]
             .as_object()
-            .ok_or("A form field is not set out as auracode can show it.")?;
+            .ok_or("A form field is not set out as o7 can show it.")?;
         let (field, choices) = field(key, property, required.contains(&key.as_str()))?;
         fields.push(field);
         values.push(choices);
@@ -87,7 +87,7 @@ pub fn form(
         fields: fields.clone(),
     };
     if serde_json::to_vec(&prompt).map_or(true, |bytes| bytes.len() > MAX_PROMPT_BYTES) {
-        return Err("The form is larger than auracode shows.".into());
+        return Err("The form is larger than o7 shows.".into());
     }
     Ok((
         prompt,
@@ -106,7 +106,7 @@ pub fn link(
     let web = url.starts_with("https://") || url.starts_with("http://");
     if !web || url.len() > MAX_URL_BYTES || url.chars().any(|c| c.is_whitespace() || c.is_control())
     {
-        return Err("The server asked to open an address auracode does not open.".into());
+        return Err("The server asked to open an address o7 does not open.".into());
     }
     Ok((
         UiPrompt::Link {
@@ -253,7 +253,7 @@ fn choices(source: &Map<String, Value>) -> Result<(Vec<String>, Vec<String>), St
             .chain(&labels)
             .any(|text| text.chars().count() > MAX_VALUE_CHARS)
     {
-        return Err("A form choice has more options than auracode shows.".into());
+        return Err("A form choice has more options than o7 shows.".into());
     }
     if values
         .iter()
@@ -297,7 +297,7 @@ fn field(
         }
         Some("string") => (
             UiFieldKind::Text {
-                // A format auracode does not check is left to the server.
+                // A format o7 does not check is left to the server.
                 format: match property.get("format").and_then(Value::as_str) {
                     Some("email") => Some(UiTextFormat::Email),
                     Some("uri") => Some(UiTextFormat::Uri),
@@ -353,7 +353,7 @@ fn field(
                 Some(values),
             )
         }
-        _ => return Err("The form has a kind of field auracode cannot show.".into()),
+        _ => return Err("The form has a kind of field o7 cannot show.".into()),
     };
     Ok((
         UiField {

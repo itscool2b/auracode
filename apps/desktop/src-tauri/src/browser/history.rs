@@ -294,7 +294,7 @@ mod tests {
         let mut history = History::default();
         history.visit(
             "https://github.com/itscool2b/auracode",
-            "auracode repo",
+            "o7 repo",
             NOW - 3.0,
         );
         history.visit("http://localhost:5173/", "Vite App", NOW - 2.0);

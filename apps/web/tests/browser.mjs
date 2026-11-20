@@ -124,7 +124,7 @@ try {
       );
       // The agents' chips: every agent once, in view.
       assertWall(await agentWall(page), "1440px");
-      assert.equal(await page.getByRole("list", { name: "Agents auracode runs" }).count(), 1);
+      assert.equal(await page.getByRole("list", { name: "Agents o7 runs" }).count(), 1);
       assert.equal(
         await page.getByRole("navigation", { name: "Main" }).getByRole("link").count(),
         5,
@@ -138,7 +138,7 @@ try {
       await settled(page);
       await page.screenshot({ path: join(artifacts, `${name}-home-dark.png`), fullPage: true });
       await page.reload();
-      await page.getByRole("heading", { name: "Meet auracode" }).waitFor();
+      await page.getByRole("heading", { name: "Meet o7" }).waitFor();
       await shot();
       // The real app is shown in the appearance the page is in.
       assert.match(

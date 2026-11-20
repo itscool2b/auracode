@@ -79,14 +79,13 @@ pub(crate) fn save(path: &Path, agent: &str, connection: Option<&str>) -> Result
         .open(path.with_extension("lock"))
         .map_err(|_| "The connection preference lock could not be opened.")?;
     lock.try_lock()
-        .map_err(|_| "Another auracode window is changing connection choices. Try again.")?;
+        .map_err(|_| "Another o7 window is changing connection choices. Try again.")?;
     let _lock = aura_process::locked_file::LockedFile::new(lock);
     let mut choices = match read(path) {
         Ok(choices) => choices,
         Err(_) if newer(path) => {
             return Err(
-                "The connection choices were saved by a newer auracode. They were left unchanged."
-                    .into(),
+                "The connection choices were saved by a newer o7. They were left unchanged.".into(),
             );
         }
         Err(_) => Choices::new(),

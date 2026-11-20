@@ -701,7 +701,7 @@ impl Checkpoints {
     }
 
     /// Folders a checkpoint never saves or restores. A workspace inside one of them is refused,
-    /// except the profile's own worktrees: auracode creates them inside the profile folder for
+    /// except the profile's own worktrees: o7 creates them inside the profile folder for
     /// worktree chats, and nothing else of the profile lies within one.
     fn protected_paths(&self, operation: &Operation, root: &Path) -> Result<Vec<PathBuf>> {
         let profile = self.root.parent().filter(|_| !self.is_owned_worktree(root));
@@ -720,7 +720,10 @@ impl Checkpoints {
             };
             let protected = std::fs::canonicalize(&protected).unwrap_or(protected);
             if root.starts_with(&protected) {
-                return Err(CheckpointError::Message("Agent configuration and auracode profile folders cannot be checkpoint workspaces.".into()));
+                return Err(CheckpointError::Message(
+                    "Agent configuration and o7 profile folders cannot be checkpoint workspaces."
+                        .into(),
+                ));
             }
             paths.push(protected);
         }
@@ -857,7 +860,7 @@ fn valid_id(id: &str) -> Result<()> {
 }
 
 #[cfg(windows)]
-const GIT_DIR_TOO_LONG: &str = "Checkpoints are unavailable because auracode's data folder path is too long for Git on Windows. Set AURACODE_DATA_DIR to a shorter folder, then restart auracode.";
+const GIT_DIR_TOO_LONG: &str = "Checkpoints are unavailable because o7's data folder path is too long for Git on Windows. Set AURACODE_DATA_DIR to a shorter folder, then restart o7.";
 
 /// Git refuses a `GIT_DIR` whose UTF-8 length exceeds `PATH_MAX - 40`, and Git for Windows
 /// defines `PATH_MAX` as 260. That also keeps `git init`'s change into the new repository within

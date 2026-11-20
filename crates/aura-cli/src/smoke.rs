@@ -846,7 +846,7 @@ impl Smoke<'_> {
             state
                 .notices_since(&self.chat.chat_id, 0)
                 .into_iter()
-                .any(|notice| notice.contains("continued this session while auracode was away"))
+                .any(|notice| notice.contains("continued this session while o7 was away"))
         });
         if continued {
             self.report.fail(
@@ -877,7 +877,7 @@ impl Smoke<'_> {
             .parse::<u64>()
             .ok();
         if FORGETS_INTERRUPTED.contains(&self.spec.dialect) && answered != self.last_number {
-            // The agent's own behaviour: auracode kept the partial answer (interrupt checked it).
+            // The agent's own behaviour: o7 kept the partial answer (interrupt checked it).
             self.report.info(
                 step,
                 format!(

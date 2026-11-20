@@ -571,7 +571,7 @@ impl Probe<'_> {
             self.report.skip(
                 step,
                 format!(
-                    "the demo agent runs inside auracode: no process and no protocol log ({} {})",
+                    "the demo agent runs inside o7: no process and no protocol log ({} {})",
                     info.as_ref()
                         .and_then(|info| info.agent_name.clone())
                         .unwrap_or_default(),
@@ -1373,7 +1373,7 @@ impl Probe<'_> {
             status == Some(SessionStatus::Ready) && cancels == 0,
             step,
             format!(
-                "an interrupt while idle left the session {} and sent {cancels} {method} (auracode sends none while no prompt runs)",
+                "an interrupt while idle left the session {} and sent {cancels} {method} (o7 sends none while no prompt runs)",
                 status_name(status)
             ),
         );
@@ -1603,7 +1603,7 @@ impl Probe<'_> {
             ),
             (was, is) => {
                 // claude-acp and codex-acp keep a session only from its first prompt, and the probe
-                // never prompts: the agent refuses the resume, and auracode falls back (5.3.2).
+                // never prompts: the agent refuses the resume, and o7 falls back (5.3.2).
                 let notice = chat
                     .watch
                     .with(|state| state.notices_since(&chat.chat_id, mark))
@@ -1613,7 +1613,7 @@ impl Probe<'_> {
                     (Some(answer), Some(notice)) => self.report.info(
                         step,
                         format!(
-                            "the agent keeps no session it was never prompted in: it answered the resume {answer}, so auracode started a new session ({}) and said so: \"{notice}\"",
+                            "the agent keeps no session it was never prompted in: it answered the resume {answer}, so o7 started a new session ({}) and said so: \"{notice}\"",
                             is.unwrap_or("none")
                         ),
                     ),
@@ -1690,7 +1690,7 @@ impl Probe<'_> {
             .watch
             .with(|state| state.notices_since(&chat.chat_id, mark))
             .into_iter()
-            .find(|notice| notice.contains("continued this session while auracode was away"));
+            .find(|notice| notice.contains("continued this session while o7 was away"));
         if let Some(notice) = continued {
             self.report.fail(
                 step,
@@ -2482,8 +2482,8 @@ fn changed_options(before: &[ConfigOption], after: &[ConfigOption]) -> Vec<Strin
 }
 
 /// What a restart changed in the options: the earlier values the agent no longer offers, each with
-/// auracode's notice about it (5.3.2: Hermes 0.22.5 can't switch back to an `auto:` model, so the
-/// session reopens on another), then every other change, which auracode should not have made.
+/// o7's notice about it (5.3.2: Hermes 0.22.5 can't switch back to an `auto:` model, so the
+/// session reopens on another), then every other change, which o7 should not have made.
 fn resume_changes(
     before: &[ConfigOption],
     after: &[ConfigOption],
@@ -2517,7 +2517,7 @@ fn resume_changes(
     (gone, changed)
 }
 
-/// When `before`'s value is not among `after`'s choices and auracode said so in a notice: the line
+/// When `before`'s value is not among `after`'s choices and o7 said so in a notice: the line
 /// that says it.
 fn no_longer_offered(
     before: &ConfigOption,
@@ -2540,7 +2540,7 @@ fn no_longer_offered(
         notice.contains("isn't offered anymore") && notice.contains(&format!("({earlier})"))
     })?;
     Some(format!(
-        "{}: the agent no longer offers {earlier} and runs {}; auracode said so: \"{notice}\"",
+        "{}: the agent no longer offers {earlier} and runs {}; o7 said so: \"{notice}\"",
         before.id,
         current_text(after)
     ))
@@ -2640,9 +2640,7 @@ fn level_name(level: Autonomy) -> &'static str {
 
 fn autonomy_text(level: Autonomy, state: &AutonomyState) -> String {
     let answers = match &state.auto_answer {
-        AutoAnswer::Never => {
-            "auracode does not auto-answer remaining permission requests".to_owned()
-        }
+        AutoAnswer::Never => "o7 does not auto-answer remaining permission requests".to_owned(),
         AutoAnswer::All => "answers every tool kind itself".to_owned(),
         AutoAnswer::Kinds { kinds } => format!(
             "answers {} itself",

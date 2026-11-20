@@ -23,7 +23,7 @@ export function ErrorScreen({
     <main className="error-screen g-root">
       <div className="error-drag" data-tauri-drag-region="" />
       <section className="error-panel">
-        <Logo className="error-logo" size={56} label="auracode" />
+        <Logo className="error-logo" size={56} label="o7" />
         <div className="error-message">
           <h1>{title}</h1>
           <p role="alert">{message}</p>
@@ -39,7 +39,7 @@ export function ErrorScreen({
         ) : null}
         {notices.length > 0 ? <Notices notices={notices} /> : null}
         <p className="error-note">
-          Nothing was deleted. Fix the problem above, then quit and reopen auracode.
+          Nothing was deleted. Fix the problem above, then quit and reopen o7.
         </p>
       </section>
     </main>

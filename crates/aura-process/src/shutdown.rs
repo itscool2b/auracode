@@ -38,7 +38,7 @@ impl ShutdownPlan {
         kill_confirm: Duration::from_secs(2),
     };
 
-    /// Quitting auracode.
+    /// Quitting o7.
     pub const QUIT: ShutdownPlan = ShutdownPlan {
         stdin_eof_grace: Duration::from_secs(3),
         sigterm_grace: Duration::from_secs(1),
@@ -149,7 +149,7 @@ pub(crate) use unix::{kill_session_blocking, kill_tree, note_reaped, record_esca
 
 #[cfg(windows)]
 pub(crate) fn kill_tree(state: &Arc<ControlState>) {
-    // A non-blocking request: the waiter owns the job. The job dies with auracode in any case.
+    // A non-blocking request: the waiter owns the job. The job dies with o7 in any case.
     let _ = state.kill.send(());
 }
 

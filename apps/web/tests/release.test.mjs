@@ -83,7 +83,7 @@ try {
   assert.equal(catalog.release.signed, true);
   assert.equal(catalog.release.publisher_signed, false);
   assert.doesNotMatch(html, /These installers are unsigned/);
-  assert.match(html, /Once installed, auracode updates itself/);
+  assert.match(html, /Once installed, o7 updates itself/);
   assert.match(html, /Run anyway/);
   for (const download of catalog.release.downloads)
     assert.match(

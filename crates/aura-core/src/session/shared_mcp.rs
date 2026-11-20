@@ -3,7 +3,7 @@ use aura_protocol::mcp::*;
 
 /// The shared MCP servers a launch takes, whether Aura's memory tools can join them, and a notice
 /// when shared servers were left out. Shared MCP applies to compatible agents: one whose own MCP
-/// configuration auracode cannot read (Antigravity, oh-my-pi), a restricted fallback connection
+/// configuration o7 cannot read (Antigravity, oh-my-pi), a restricted fallback connection
 /// and an agent on another host start without shared servers, and their chat says so. A
 /// compatible agent whose configuration cannot be read still requires review, since its own
 /// servers might clash with shared ones.
@@ -118,16 +118,16 @@ pub(super) async fn prepare_launch(
     })
     .await
     .map_err(|_| "Native MCP inventory could not be inspected.".to_owned())??;
-    // auracode's own tools (project memory, the browser) carry reserved names, so they join every
-    // agent that takes MCP servers, also one whose own configuration auracode cannot read: an
+    // o7's own tools (project memory, the browser) carry reserved names, so they join every
+    // agent that takes MCP servers, also one whose own configuration o7 cannot read: an
     // agent added later gets them with no step (owner, 10 November 2026: "if they add a new agent
     // ... those skills should transfer over"). A listed agent whose configuration could not be
     // read whole still waits for review, and a server of the same name keeps them out.
     //
     // The tradeoff, for an agent whose configuration cannot be read at all: a server of a reserved
-    // name in that agent's own configuration is not seen here, and could shadow auracode's tool in
-    // the agent's list. It gains nothing auracode holds: the browser and project memory answer
-    // only auracode's own helper, which carries a token made for this session and passed in its
+    // name in that agent's own configuration is not seen here, and could shadow o7's tool in
+    // the agent's list. It gains nothing o7 holds: the browser and project memory answer
+    // only o7's own helper, which carries a token made for this session and passed in its
     // environment, never written to any configuration. A shadowing server can do what any server
     // in the agent's configuration already can, and no more.
     let memory_available = (checked || !compatible)
@@ -185,7 +185,7 @@ fn left_out_because(native: bool, headless: bool, compatible: bool) -> Option<&'
         Some("this restricted connection runs without MCP servers")
     } else if !compatible {
         Some(
-            "auracode cannot read this agent's own MCP configuration to rule out a server of the same name",
+            "o7 cannot read this agent's own MCP configuration to rule out a server of the same name",
         )
     } else {
         None
@@ -393,7 +393,7 @@ impl SessionManager {
             .store
             .shared_mcp(crate::mcp::Command::Resolve {
                 project_id,
-                // auracode's own test connects to the server itself, for whichever agent.
+                // o7's own test connects to the server itself, for whichever agent.
                 agent: None,
                 native_names,
             })

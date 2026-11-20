@@ -72,7 +72,7 @@ export function fakeCoordinator(kind: string | null): CoordinatorApi {
     paused: kind === "paused",
     pause_reason:
       kind === "paused"
-        ? "auracode paused this project: its coordinator was sent 60 reports and routines within an hour. Look at what the agents are doing, then resume."
+        ? "o7 paused this project: its coordinator was sent 60 reports and routines within an hour. Look at what the agents are doing, then resume."
         : null,
     workers: empty
       ? []

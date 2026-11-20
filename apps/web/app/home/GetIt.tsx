@@ -43,7 +43,7 @@ export function GetIt() {
       <div className="inner two-col">
         <div className="two-col-head">
           <h2 id="getit-title" className="title">
-            Download auracode
+            Download o7
           </h2>
           <p className="lead">
             {PUBLISHED

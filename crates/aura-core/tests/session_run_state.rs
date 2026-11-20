@@ -262,7 +262,7 @@ async fn native_and_acp_chats_cannot_own_the_same_claude_session() {
     assert_eq!(h.factory.setups().len(), count);
 }
 
-/// Work an agent runs on its own (background tasks it reports, with no prompt of auracode's
+/// Work an agent runs on its own (background tasks it reports, with no prompt of o7's
 /// open) keeps it from being stopped to make room, even once it counts as idle for the queue.
 #[tokio::test(start_paused = true)]
 async fn background_work_is_not_stopped_to_make_room() {

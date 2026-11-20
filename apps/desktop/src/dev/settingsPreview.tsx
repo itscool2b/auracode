@@ -44,7 +44,7 @@ const info: AppInfo = {
   fatal: null,
   media: !mediaOff,
   media_notice: mediaOff
-    ? "Audio and video are off here: GStreamer's base and good plugins are missing. Install gst-plugins-base and gst-plugins-good, then restart auracode."
+    ? "Audio and video are off here: GStreamer's base and good plugins are missing. Install gst-plugins-base and gst-plugins-good, then restart o7."
     : null,
 };
 const calls: string[] = [];

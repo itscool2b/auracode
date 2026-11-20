@@ -91,7 +91,7 @@ pub(crate) fn only_imports(text: &str) -> bool {
         && !find(&stripped).is_empty()
 }
 
-/// The line auracode writes, escaping spaces the way Claude Code documents.
+/// The line o7 writes, escaping spaces the way Claude Code documents.
 pub(crate) fn line(path: &str) -> String {
     format!("@{}\n", path.replace(' ', "\\ "))
 }

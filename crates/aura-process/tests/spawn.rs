@@ -82,7 +82,7 @@ async fn the_child_runs_in_the_chat_folder_or_its_own() {
 async fn the_env_is_exactly_the_resolved_env_scrubbed_plus_set() {
     let folder = tempfile::tempdir().expect("tempdir");
     let mut env = (*env_with(&[("CLAUDECODE", "1"), ("AURA_TEST_KEEP", "kept")])).clone();
-    // Gone from the resolved env, so gone from the child: the spawn clears auracode's own env.
+    // Gone from the resolved env, so gone from the child: the spawn clears o7's own env.
     env.vars.remove(&EnvKey::from("PATH"));
     let mut launch = launch(&["print-env"]);
     launch.set_env = vec![
@@ -114,7 +114,7 @@ async fn the_env_is_exactly_the_resolved_env_scrubbed_plus_set() {
             })
             .map(|(_, value)| value.as_str().expect("text").to_owned())
     };
-    assert_eq!(get("PATH"), None, "the child never sees auracode's own env");
+    assert_eq!(get("PATH"), None, "the child never sees o7's own env");
     assert_eq!(get("CLAUDECODE"), None, "scrubbed");
     assert_eq!(get("AURA_TEST_SET").as_deref(), Some("set"));
     assert_eq!(

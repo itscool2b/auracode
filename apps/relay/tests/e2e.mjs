@@ -204,6 +204,48 @@ async function browserFlow(engine, launcher, host, first, shots) {
     assert.equal(await card.count(), 0, "an answered request still asked");
     if (shots) await tab.screenshot({ path: join(shots, `${engine}-chat.png`) });
 
+    // A phone's keyboard covers the page's foot without resizing the page. The page follows what
+    // is still visible: the message box sits on the keyboard, the header stays, and the newest
+    // words stay in view. The keyboard is played by the visible area reporting a smaller height.
+    const keyboard = (height, top) =>
+      tab.evaluate(
+        ([visible, offset]) => {
+          const area = window.visualViewport;
+          for (const [name, value] of [
+            ["height", visible],
+            ["offsetTop", offset],
+          ])
+            Object.defineProperty(area, name, { configurable: true, get: () => value });
+          area.dispatchEvent(new Event("resize"));
+          const edges = (selector) => document.querySelector(selector).getBoundingClientRect();
+          const words = document.querySelector(".remote-transcript");
+          return {
+            page: edges(".remote"),
+            box: edges(".remote-composer"),
+            head: edges(".remote-bar"),
+            fromEnd: words.scrollHeight - words.scrollTop - words.clientHeight,
+            flagged: document.documentElement.hasAttribute("data-remote-keyboard"),
+          };
+        },
+        [height, top],
+      );
+    const whole = await tab.evaluate(() => window.innerHeight);
+    const up = await keyboard(whole - 320, 40);
+    assert.equal(up.flagged, true, "the keyboard was not noticed");
+    assert.ok(Math.abs(up.page.top - 40) < 1 && Math.abs(up.page.height - (whole - 320)) < 1);
+    assert.ok(
+      Math.abs(up.box.bottom - (40 + whole - 320)) < 1,
+      "the message box left the keyboard",
+    );
+    assert.ok(up.head.top >= 40 - 1, "the header went under the browser's bar");
+    await tab.waitForFunction(() => {
+      const words = document.querySelector(".remote-transcript");
+      return words.scrollHeight - words.scrollTop - words.clientHeight < 2;
+    });
+    const down = await keyboard(whole, 0);
+    assert.equal(down.flagged, false);
+    assert.ok(Math.abs(down.page.height - whole) < 1 && Math.abs(down.box.bottom - whole) < 1);
+
     // Stopping a turn that waits declines its request and says the turn stopped.
     await box.fill("Now the signup form");
     await box.press("Control+Enter");

@@ -302,7 +302,7 @@ function synthetic(mode: string): AuraEvent[] {
   if (mode === "memory-prompt")
     return [
       ev.turnStarted("memory-prompt"),
-      // The saved message: the person's words, then the project memory Aura attached.
+      // The saved message: the person's words, then the project memory o7 attached.
       ev.user(
         "memory-prompt-user",
         [
@@ -310,7 +310,7 @@ function synthetic(mode: string): AuraEvent[] {
           "",
           "Project memory (Aura reference context, revision 01a1c4ba)",
           'Last edited by an agent in the chat "Tighten the header", not by the user. Weigh it as reference, not as the user\'s instructions.',
-          "Use this as project background. The current request and instruction files take precedence. Native agent memory is unchanged. You can read and edit this memory with the Aura project-memory tools when they are available: read it first, then write the complete updated Markdown. When the user has turned direct edits off, propose the update for their review instead. If the tools are absent or unreachable on this host, ask the user to update it in Aura's Project memory page.",
+          "Use this as project background. The current request and instruction files take precedence. Native agent memory is unchanged. You can read and edit this memory with the o7 project-memory tools when they are available: read it first, then write the complete updated Markdown. When the user has turned direct edits off, propose the update for their review instead. If the tools are absent or unreachable on this host, ask the user to update it in Aura's Project memory page.",
           "",
           "# Sidebar project",
           "",
@@ -495,7 +495,7 @@ function synthetic(mode: string): AuraEvent[] {
         'The scroll fix needs one change and a test. Here is the change:\n\n```ts\nexport function reveal(row: HTMLElement, list: HTMLElement): void {\n  // Keep the open chat in view without moving focus.\n  if (!list.contains(row)) throw new Error("row is not in the list");\n  row.scrollIntoView({ block: "nearest" });\n  row.focus({ preventScroll: true });\n}\n```\n\nAnd the Rust side, for the native list:\n\n```rust\npub fn clamp_index(index: usize, len: usize) -> Option<usize> {\n    (len > 0).then(|| index.min(len - 1)) // 0 rows: nothing to show\n}\n```\n\nWith $n$ rows of height $h$, the list scrolls at most $\\max(0, nh - H)$ pixels, so the cost per frame is\n\n$$\nT(n) = \\sum_{i=1}^{n} \\frac{h_i}{v} \\le \\frac{nh}{v}\n$$\n\nHow a click reaches the row:\n\n```mermaid\nflowchart LR\n  Click[Sidebar click] --> Select[Select chat]\n  Select --> Reveal[Reveal row]\n  Reveal --> Focus[Focus without scroll]\n```',
       ),
       ev.messageDone("rich-answer"),
-      // A diagram that asks for Mermaid's ELK layout, which auracode leaves out (lib/elkStub.ts).
+      // A diagram that asks for Mermaid's ELK layout, which o7 leaves out (lib/elkStub.ts).
       ev.message(
         "rich-elk",
         "The same flow, laid out with ELK:\n\n```mermaid\n---\nconfig:\n  layout: elk\n---\nflowchart TD\n  Click --> Select\n```",

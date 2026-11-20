@@ -143,7 +143,7 @@ pub(crate) async fn login_shell(
         ShellFamily::Unsupported => {
             let default = default.to_path_buf();
             warnings.push(format!(
-                "auracode can't read the environment from {}; it used {} instead.",
+                "o7 can't read the environment from {}; it used {} instead.",
                 shell.file_name().map_or_else(
                     || shell.display().to_string(),
                     |name| name.to_string_lossy().into_owned()
@@ -171,7 +171,7 @@ pub(crate) async fn login_shell(
         Err(first) => match run(false, config.retry_timeout).await {
             Ok((vars, more)) => {
                 warnings.push(format!(
-                    "Your shell's interactive startup failed ({first}); auracode read the environment without it."
+                    "Your shell's interactive startup failed ({first}); o7 read the environment without it."
                 ));
                 (vars, false, more)
             }
@@ -215,7 +215,7 @@ async fn run_once(
         cwd: home.to_path_buf(),
         env: crate::spawn::HelperEnv::Resolved(std::sync::Arc::clone(input)),
         set: vec![("AURACODE_RESOLVING_ENV".into(), "1".into())],
-        // An interactive shell must never take the foreground of the terminal auracode was
+        // An interactive shell must never take the foreground of the terminal o7 was
         // started from.
         new_session: true,
         timeout,
@@ -240,7 +240,7 @@ async fn run_once(
     let mut warnings = Vec::new();
     if code != Some(0) {
         warnings.push(format!(
-            "Your shell exited with {} while reporting its environment; auracode used what it printed.",
+            "Your shell exited with {} while reporting its environment; o7 used what it printed.",
             code.map_or_else(|| "a signal".to_owned(), |code| format!("code {code}"))
         ));
     }
@@ -284,7 +284,7 @@ fn user_shell_from(
 /// a login shell (Terminal and iTerm run `login`); Linux terminals (kitty, GNOME Terminal,
 /// Konsole) start an interactive non-login one, since the session already ran the login files and
 /// the environment the shell inherits came from a login shell. csh and tcsh take `-l` only as
-/// their sole argument, and a shell auracode does not know gets no arguments: the terminal makes
+/// their sole argument, and a shell o7 does not know gets no arguments: the terminal makes
 /// it interactive.
 pub fn terminal_args(shell: &std::path::Path, macos: bool) -> Vec<&'static str> {
     let name = shell.file_name().and_then(std::ffi::OsStr::to_str);
@@ -608,7 +608,7 @@ exit 64
             assert_eq!(
                 env.warnings,
                 [format!(
-                    "auracode can't read the environment from {unsupported}; it used {} instead.",
+                    "o7 can't read the environment from {unsupported}; it used {} instead.",
                     default.display()
                 )]
             );

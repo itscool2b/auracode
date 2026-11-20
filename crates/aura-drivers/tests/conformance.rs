@@ -1,5 +1,5 @@
 //! Our wire format against the ACP schema (`agent-client-protocol-schema` 1.12.0, a dev-dependency):
-//! every request auracode sends equals the same request built with the schema's builders, messages
+//! every request o7 sends equals the same request built with the schema's builders, messages
 //! built with the schema's builders parse with our lenient wire types to the expected events, and
 //! every `sessionUpdate` value the schema defines has a row in the mapping table.
 
@@ -63,7 +63,7 @@ mod conformance {
             requests::load_session(SESSION, "/work"),
             to_json(&acp::LoadSessionRequest::new(SESSION, "/work"))
         );
-        // The schema type skips an empty `mcpServers` on resume; auracode always sends it.
+        // The schema type skips an empty `mcpServers` on resume; o7 always sends it.
         let mut resume = requests::resume_session(SESSION, "/work");
         assert_eq!(resume["mcpServers"], json!([]));
         resume

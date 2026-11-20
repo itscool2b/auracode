@@ -1,4 +1,4 @@
-//! The auracode desktop shell: the Tauri window, the plugins, and typed commands and channels over
+//! The o7 desktop shell: the Tauri window, the plugins, and typed commands and channels over
 //! aura-core and aura-drivers. Everything that is not UI stays in Rust; this crate is the thin layer
 //! that exposes it to the React UI in `apps/desktop/src`.
 //!
@@ -90,11 +90,11 @@ use crate::state::AppState;
 /// Log filter when `RUST_LOG` is unset.
 const DEFAULT_LOG_FILTER: &str = "info";
 
-/// The exit code when auracode cannot start: Tauri failed to initialize, or no window could be
+/// The exit code when o7 cannot start: Tauri failed to initialize, or no window could be
 /// created.
 pub const STARTUP_FAILED: i32 = 1;
 
-/// Runs auracode until it exits. If the app cannot start at all (Tauri fails to initialize, or no
+/// Runs o7 until it exits. If the app cannot start at all (Tauri fails to initialize, or no
 /// window can be created), the error is logged and the process exits with [`STARTUP_FAILED`].
 pub fn run() {
     init_tracing();
@@ -167,7 +167,7 @@ pub fn run() {
     match app {
         Ok(app) => app.run(on_event),
         Err(error) => {
-            tracing::error!(%error, "auracode could not start");
+            tracing::error!(%error, "o7 could not start");
             std::process::exit(STARTUP_FAILED);
         }
     }
@@ -210,7 +210,7 @@ fn setup(app: &mut tauri::App, launch: LaunchOptions) {
     let glass = match create_window(app, &plan, launch.is_smoke(), webview_data.as_deref()) {
         Ok(glass) => glass,
         Err(error) => {
-            tracing::error!(%error, "auracode could not create its window");
+            tracing::error!(%error, "o7 could not create its window");
             if let Some(smoke) = launch.smoke_plan() {
                 let report = smoke::no_window(smoke.scenario, &error.to_string());
                 smoke::print(&smoke::finalize(report, smoke.scenario));
@@ -539,6 +539,6 @@ fn init_tracing() {
         .with_ansi(std::io::stderr().is_terminal())
         .try_init();
     if let Err(error) = installed {
-        eprintln!("auracode: logging is unavailable: {error}");
+        eprintln!("o7: logging is unavailable: {error}");
     }
 }

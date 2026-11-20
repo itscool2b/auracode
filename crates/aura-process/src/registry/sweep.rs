@@ -2,7 +2,7 @@
 //!
 //! For every registry file that is not this instance's:
 //!
-//! 1. Its instance is alive (its pid runs with the recorded start time): skip; another auracode
+//! 1. Its instance is alive (its pid runs with the recorded start time): skip; another o7
 //!    owns those processes.
 //! 2. The boot marker differs: the machine rebooted; delete the file, kill nothing.
 //! 3. The instance is dead. Candidates are (a) processes whose `pgid` and `sid` equal an entry's and
@@ -210,7 +210,7 @@ pub(crate) fn sweep(run_dir: &Path, own: &InstanceRecord, system: &dyn System) -
     if !report.killed.is_empty() {
         tracing::info!(
             killed = report.killed.len(),
-            "stopped agent processes an earlier auracode left running"
+            "stopped agent processes an earlier o7 left running"
         );
     }
     report

@@ -61,7 +61,7 @@ mod demo {
             "4 options: the model switched back to Mock Fast (mock-fast)",
             "4 autonomy: Full auto: mode full_auto, answers every tool kind itself",
             "4 autonomy: Auto-edit: mode auto_edit",
-            "4 autonomy: Ask: mode ask, auracode does not auto-answer remaining permission requests",
+            "4 autonomy: Ask: mode ask, o7 does not auto-answer remaining permission requests",
             "5 cancel: an interrupt while idle left the session ready and sent 0 session/cancel",
             "6 close: the demo agent stopped",
             "9 interrupt: an interrupt during the start stopped it",
@@ -95,7 +95,7 @@ mod demo {
             "{output}"
         );
         assert!(
-            output.contains("SKIP  1 initialize: the demo agent runs inside auracode"),
+            output.contains("SKIP  1 initialize: the demo agent runs inside o7"),
             "{output}"
         );
         assert!(

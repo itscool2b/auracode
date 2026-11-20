@@ -37,10 +37,10 @@ impl HostExecution {
                 reason: "the WSL distribution name is invalid".into(),
             },
             Self::Wsl { .. } => HostAvailability::Unavailable {
-                reason: "a qualified auracode Linux process supervisor is not deployed".into(),
+                reason: "a qualified o7 Linux process supervisor is not deployed".into(),
             },
             Self::Unsupported => HostAvailability::Unavailable {
-                reason: "this execution host is not supported by this version of auracode".into(),
+                reason: "this execution host is not supported by this version of o7".into(),
             },
         }
     }
