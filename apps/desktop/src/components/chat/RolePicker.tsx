@@ -57,14 +57,16 @@ function useChoices(catalog: RoleCatalog, agentId: string | null, model: string 
  */
 export function RolePicker({
   roles,
-  agent,
+  agentId,
+  agentName,
   agents,
   catalog,
   onSet,
 }: {
   readonly roles: ChatRoles | null;
-  /** The chat's agent: Plan with is one of its models. */
-  readonly agent: AgentEntry | null;
+  /** The chat's agent, by id even before the agent list arrives: Plan with is one of its models. */
+  readonly agentId: string | null;
+  readonly agentName: string;
   readonly agents: readonly AgentEntry[] | null;
   readonly catalog: RoleCatalog;
   /** Saves a choice for this chat; it rejects with the reason it was refused. */
@@ -72,9 +74,9 @@ export function RolePicker({
 }) {
   const id = useId();
   const [error, setError] = useState<string | null>(null);
-  const plan = planRole(roles, agent?.id);
+  const plan = planRole(roles, agentId);
   const build = roles?.build ?? null;
-  const planChoices = useChoices(catalog, agent?.id ?? null, plan?.model ?? null);
+  const planChoices = useChoices(catalog, agentId, plan?.model ?? null);
   const buildChoices = useChoices(catalog, build?.agent ?? null, build?.model ?? null);
   const set = (role: ChatRole, choice: RoleModel | null) => {
     setError(null);
@@ -104,16 +106,18 @@ export function RolePicker({
         <p className="chat-picker-roles-lead">
           Plan with applies when you turn Plan on. Build with is offered when you accept a plan.
         </p>
-        <RoleRow
-          kind="plan"
-          title="Plan with"
-          choice={plan}
-          fixedAgent={agent}
-          agents={agents}
-          models={planChoices.models}
-          levels={planChoices.levels}
-          onChange={(choice) => set("plan", choice)}
-        />
+        {agentId ? (
+          <RoleRow
+            kind="plan"
+            title="Plan with"
+            choice={plan}
+            fixedAgent={{ id: agentId, name: agentName }}
+            agents={agents}
+            models={planChoices.models}
+            levels={planChoices.levels}
+            onChange={(choice) => set("plan", choice)}
+          />
+        ) : null}
         <RoleRow
           kind="build"
           title="Build with"
@@ -148,7 +152,7 @@ function RoleRow({
   readonly title: string;
   readonly choice: RoleModel | null;
   /** Plan with stays on the chat's agent; Build with chooses one. */
-  readonly fixedAgent: AgentEntry | null;
+  readonly fixedAgent: { readonly id: string; readonly name: string } | null;
   readonly agents: readonly AgentEntry[] | null;
   readonly models: readonly ConfigChoice[];
   readonly levels: readonly ConfigChoice[];

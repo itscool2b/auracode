@@ -829,13 +829,14 @@ export function ChatView({
       onSetRole ? (
         <RolePicker
           roles={roles}
-          agent={agents?.find((entry) => entry.id === chatAgentId) ?? null}
+          agentId={chatAgentId ?? null}
+          agentName={chatAgentName}
           agents={agents}
           catalog={roleCatalog}
           onSet={setRole}
         />
       ) : null,
-    [onSetRole, roles, agents, chatAgentId, roleCatalog, setRole],
+    [onSetRole, roles, agents, chatAgentId, chatAgentName, roleCatalog, setRole],
   );
 
   const actions = useMemo<TurnActions>(
