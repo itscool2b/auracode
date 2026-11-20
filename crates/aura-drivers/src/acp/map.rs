@@ -116,7 +116,7 @@ pub struct Mapper {
     permission_only: HashSet<String>,
     message: Option<Open>,
     thought: Option<Open>,
-    /// Display terminals: commands the agent runs and streams to auracode (terminals.rs).
+    /// Display terminals: commands the agent runs and streams to o7 (terminals.rs).
     terminals: super::terminals::Terminals,
 }
 
@@ -237,7 +237,7 @@ impl Mapper {
             Update::Notice { level, message } => {
                 events.push(self.tag(AuraEvent::Notice { level, message }));
             }
-            Update::Unmapped(_) => return Mapped::Nothing("an update auracode does not advertise"),
+            Update::Unmapped(_) => return Mapped::Nothing("an update o7 does not advertise"),
             Update::Unknown(_) => return Mapped::Nothing("an unknown update"),
         }
         Mapped::Events(events)
@@ -1419,7 +1419,7 @@ mod tests {
         ] {
             assert_eq!(
                 mapper.map(update(json!({"sessionUpdate": tag})), Instant::now()),
-                Mapped::Nothing("an update auracode does not advertise"),
+                Mapped::Nothing("an update o7 does not advertise"),
                 "{tag}"
             );
         }

@@ -638,7 +638,7 @@ async fn the_sweep_stops_a_dead_instances_agent_and_spares_its_daemon() {
     let folder = tempfile::tempdir().expect("tempdir");
     let run = folder.path().join("run");
     std::fs::create_dir(&run).expect("mkdir");
-    // An agent this test owns, left running as if its auracode had crashed.
+    // An agent this test owns, left running as if its o7 had crashed.
     let (process, pids, mut reaper) = with_children(
         &spawner(),
         folder.path(),
@@ -745,7 +745,7 @@ async fn the_job_kills_the_tree_when_its_owner_dies_without_cleanup() {
 #[cfg(unix)]
 #[tokio::test]
 async fn unix_has_no_kernel_cleanup_when_the_owner_crashes() {
-    // The documented gap: nothing ties a process group to auracode's lifetime, so a crash leaves
+    // The documented gap: nothing ties a process group to o7's lifetime, so a crash leaves
     // the tree running, and the startup sweep of recorded agents has to find it.
     let mut reaper = Reaper::new();
     let (mut owner, sleeper) = crashing_owner(&mut reaper).await;

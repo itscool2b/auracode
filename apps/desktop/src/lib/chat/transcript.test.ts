@@ -468,7 +468,7 @@ describe("stop reason labels", () => {
     expect(label("refusal")).toBe("The agent declined");
     expect(label("cancelled")).toBe("Stopped");
     expect(label("interrupted")).toBe("Interrupted");
-    expect(label("interrupted", true)).toBe("Interrupted when auracode closed");
+    expect(label("interrupted", true)).toBe("Interrupted when o7 closed");
     expect(label("error")).toBe("Failed");
     expect(label("other")).toBe("Ended");
   });

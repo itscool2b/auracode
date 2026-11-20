@@ -100,7 +100,7 @@ export async function runSmoke(info: AppInfo, hooks: SmokeHooks): Promise<SmokeR
       if (summary.frames === 0) {
         // Not a failure: WebKit pauses animation frames while the window is hidden or covered
         // (a locked screen included), so there is no rate to measure.
-        console.warn("auracode smoke: no animation frames ran during the stress burst");
+        console.warn("o7 smoke: no animation frames ran during the stress burst");
       }
       const stressReason = stress.stream.turn?.stopReason ?? "no turn_ended";
       if (stressReason !== "end_turn") errors.push(`the stress turn ended with ${stressReason}`);

@@ -45,9 +45,7 @@ type View = "chats" | "diagnostics" | "stress" | "setup" | "dashboard" | "settin
  * a channel nobody reads) and the store forgets it (so the new view starts empty).
  */
 function leaveStream(store: StreamStore): void {
-  store
-    .abandon()
-    .catch((error: unknown) => console.error("auracode: could not stop the stream", error));
+  store.abandon().catch((error: unknown) => console.error("o7: could not stop the stream", error));
 }
 
 export function App({
@@ -224,7 +222,7 @@ export function App({
       try {
         await whenPainted(windowReady);
       } catch (error) {
-        console.error("auracode: window_ready failed", error);
+        console.error("o7: window_ready failed", error);
       }
       if (boot.status === "ready" && boot.info.launch.type === "smoke") {
         const { plan } = boot.info.launch;
@@ -258,7 +256,7 @@ export function App({
         try {
           await sendSmokeReport(report);
         } catch (error) {
-          console.error("auracode: smoke_report failed", error);
+          console.error("o7: smoke_report failed", error);
         }
       }
     })();
@@ -268,7 +266,7 @@ export function App({
   if (boot.status === "outside") {
     return (
       <ErrorScreen
-        title="This is auracode's interface"
+        title="This is o7's interface"
         message="It runs inside the desktop app, which provides its data and agents. Start it with `pnpm dev` from the repository root."
         dataDir={null}
         os=""
@@ -276,16 +274,14 @@ export function App({
     );
   }
   if (boot.status === "failed") {
-    return (
-      <ErrorScreen title="auracode could not start" message={boot.message} dataDir={null} os="" />
-    );
+    return <ErrorScreen title="o7 could not start" message={boot.message} dataDir={null} os="" />;
   }
 
   const { info } = boot;
   if (info.fatal !== null) {
     return (
       <ErrorScreen
-        title="auracode couldn't open your data"
+        title="o7 couldn't open your data"
         message={info.fatal}
         dataDir={info.data_dir}
         os={info.os}

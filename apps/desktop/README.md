@@ -1,4 +1,4 @@
-# auracode desktop
+# o7 desktop
 
 The Tauri v2 app: the Rust shell in `src-tauri/` and the React UI in `src/`. Run these from the
 repository root:
@@ -36,9 +36,9 @@ staged from the build machine; the bundle stops and names the packages when they
 - The window is opaque: Linux has no glass material behind windows.
 - Sound and video: where GStreamer's base and good plugins are missing, pages start with them off
   rather than crash, and Settings > General > Sounds names the packages to install.
-- The tray is an AppIndicator. Without its library auracode runs without a tray, and closing the
+- The tray is an AppIndicator. Without its library o7 runs without a tray, and closing the
   window quits. A desktop that shows no AppIndicators (Fedora's GNOME without the AppIndicator
-  extension) still hides the window on close; opening auracode again brings it back, and turning
+  extension) still hides the window on close; opening o7 again brings it back, and turning
   off Settings > General > Keep running in the tray makes closing quit.
 - Notifications need a desktop notification service, and Keep awake asks systemd's login manager.
 - Added agent accounts keep their tokens in the desktop keyring: any Secret Service, such as GNOME
@@ -56,13 +56,13 @@ staged from the build machine; the bundle stops and names the packages when they
 macOS stores privacy grants, such as access to `~/Desktop` where your projects live, against an
 app's *designated requirement*. A build with the default ad-hoc signature has the requirement
 `cdhash H"…"`, the hash of that exact build, which no other build satisfies: after every rebuild
-macOS treats auracode as a new app, asks for access again, and leaves the old entries behind in
+macOS treats o7 as a new app, asks for access again, and leaves the old entries behind in
 System Settings. Signed with one stable identity, every build has the requirement
 `identifier "si.auracode.desktop" and certificate root = H"<certificate SHA-1>"`, so grants carry
 over from build to build.
 
 The identity is a self-signed certificate named **auracode Local Signing**, kept in your login
-keychain. It is for builds on your own Mac; distributing auracode to other people needs an Apple
+keychain. It is for builds on your own Mac; distributing o7 to other people needs an Apple
 Developer ID and notarization, which come with releases (M5).
 
 ### Create it (once per Mac)
@@ -79,10 +79,10 @@ right after the import.
 
 The trade-off: `codesign` uses the key without asking, and any program running under your account
 can run `codesign`. So code on your account could sign itself as this identity and inherit the folder
-access you granted to local auracode builds, which a per-build ad-hoc signature never allows. That is
+access you granted to local o7 builds, which a per-build ad-hoc signature never allows. That is
 the usual price of a local signing identity. Keep it in mind before granting a local build broad
 access such as Full Disk Access, and rotate the identity (below) if you suspect misuse. Released
-builds never use it (CI signs them ad hoc until auracode has an Apple Developer ID), so it cannot
+builds never use it (CI signs them ad hoc until o7 has an Apple Developer ID), so it cannot
 impersonate them.
 
 `security find-identity -v -p codesigning` keeps reporting `0 valid identities`. "Valid" there
@@ -99,7 +99,7 @@ identity (marked `CSSMERR_TP_NOT_TRUSTED`, which is expected).
 - **Dev builds:** `src-tauri/.cargo/config.toml` makes `scripts/macos-signing.sh` Cargo's runner on
   macOS, so `pnpm dev` signs `target/debug/auracode` with the identity (and the bundle's
   identifier) just before it starts. Without the identity the build runs as before, with a hint.
-  Note that macOS charges a program started from a terminal to that terminal, so while auracode
+  Note that macOS charges a program started from a terminal to that terminal, so while o7
   runs under `pnpm dev`, folder-access prompts name your terminal app.
 - **CI** builds sign ad hoc (`APPLE_SIGNING_IDENTITY=-` in `.github/workflows/build.yml`) and never
   read the runner config, which Cargo only loads for commands run inside `src-tauri/`.
@@ -111,7 +111,7 @@ To keep the identity in another keychain, set `AURACODE_SIGNING_KEYCHAIN` to its
 
 ### Back it up
 
-Losing the identity means a new one, and a new one makes macOS ask for auracode's permissions
+Losing the identity means a new one, and a new one makes macOS ask for o7's permissions
 again. To back it up:
 
 1. Open Keychain Access, choose the **login** keychain and the **My Certificates** tab.

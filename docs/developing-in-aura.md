@@ -1,6 +1,6 @@
-# Developing auracode inside auracode
+# Developing o7 inside o7
 
-Chats in auracode often change auracode itself. The installed app runs those chats, its data folder
+Chats in o7 often change o7 itself. The installed app runs those chats, its data folder
 holds them and the worktrees being edited, and every agent process runs inside the app's Windows
 job object, or on Linux and macOS is stopped with the agent's process tree when the app quits. So
 anything that stops, replaces, migrates or uninstalls the installed app ends the session doing
@@ -24,11 +24,11 @@ behave exactly like the installed app.
   `apps/desktop/src-tauri/src/launch.rs`). It never hands over to the installed app. Its
   WebView2 profile is inside its data folder, and it does not share the
   window position.
-- **Its cleanup stays in its folder.** Settings' "Delete all auracode data" and
+- **Its cleanup stays in its folder.** Settings' "Delete all o7 data" and
   `--uninstall-cleanup` clean only the development build's own data folder. They never take the
   machine scope, which would delete the installed app's folder and ask the installed app to quit.
 - **It cannot update.** An update installs over the installed app and closes it first.
-- **Its window is titled `auracode dev`,** so neither a person nor automation that finds windows
+- **Its window is titled `o7 dev`,** so neither a person nor automation that finds windows
   by title mistakes it for the installed app.
 
 Every smoke run, in any build, needs `AURACODE_DATA_DIR`. Without it the run reports a failure and
@@ -103,9 +103,9 @@ after it is caught.
 links, that each pull request appears once, and that no line runs past 600 characters before its
 link.
 
-Write the line in simple English about what changed for the person using auracode (owner, 16
+Write the line in simple English about what changed for the person using o7 (owner, 16
 November 2026: the changelog is to "speak in English, simple English, about functionality changes
-in auracode"). The reader uses the app and may not be a programmer:
+in o7"). The reader uses the app and may not be a programmer:
 
 - **Headline first.** The words up to the line's first colon or full stop are the headline: a plain
   statement of the change, about twelve words at most. Then one to three short sentences of detail,
@@ -140,15 +140,15 @@ and keeps the previous one. It runs from the repository root as
 3. Arm the install from the chat: `host-upgrade install --after-exit --installer <setup.exe>`.
    It returns at once. The waiter runs outside the app's job (started through WMI), from copies of
    the script and the installer in `%LOCALAPPDATA%\auracode-upgrades`. It waits up to 30 minutes
-   (`--wait`) for auracode to quit.
-4. Quit auracode. The waiter moves the installed files in `%LOCALAPPDATA%\auracode` into a
+   (`--wait`) for o7 to quit.
+4. Quit o7. The waiter moves the installed files in `%LOCALAPPDATA%\auracode` into a
    snapshot and leaves the folder empty for the installer. Smart App Control checks a copied
    executable again and may block it, so the snapshot keeps the very files it already allowed, and
    a restore moves them back. The waiter runs the installer in update mode (`/P /UPDATE`, as the
    updater does), which keeps the data folder (`src-tauri/windows/hooks.nsh`); the registration
    stays in the registry, so the installer treats the empty folder as an update. The exit code is
    not taken as proof: the waiter checks that `auracode.exe` was written and logs its size and
-   hash next to the previous build's. Then it starts auracode again. If the binary is missing,
+   hash next to the previous build's. Then it starts o7 again. If the binary is missing,
    Windows refuses to start it, or it is not running 20 seconds later, the waiter restores the
    snapshot and starts that. A launch error is logged separately from a build that started and
    exited. If the restored app also cannot start, its files remain restored and that error is logged.
@@ -159,20 +159,20 @@ and keeps the previous one. It runs from the repository root as
 
 `host-upgrade status` shows the installed build, whether it runs, any armed install, the snapshots
 and the last log lines. `host-upgrade cancel` disarms. The waiter keeps the three newest snapshots
-(`--keep`). Without an agent, quit auracode and run `host-upgrade install --installer <setup.exe>`
+(`--keep`). Without an agent, quit o7 and run `host-upgrade install --installer <setup.exe>`
 from a terminal.
 
 ## When the new build is broken
 
 - **It does not start, or exits at once:** the waiter has already restored the snapshot.
 - **It starts but misbehaves:** quit it and run `host-upgrade rollback` from a terminal outside
-  auracode. That restores the newest snapshot, or the one `--snapshot <name>` names.
-- **The restored app says the database is from a newer auracode:** the new build migrated it. Run
+  o7. That restores the newest snapshot, or the one `--snapshot <name>` names.
+- **The restored app says the database is from a newer o7:** the new build migrated it. Run
   `host-upgrade rollback --restore-database`. aura-core backs a database up before every migration
   (`profiles\<id>\backups\aura.db.v<from>-<millis>.bak`). This puts back each database as it was
   before its first migration since the snapshot, and keeps the migrated one next to the backups as
   `<database>.rolled-back-<millis>`. Chats changed after the upgrade are only in that kept copy.
-- **No working auracode at all:** run Claude Code or Codex in a terminal in the main checkout, fix
+- **No working o7 at all:** run Claude Code or Codex in a terminal in the main checkout, fix
   forward, build an installer, and run `host-upgrade install` from that terminal.
 
 The snapshots and the log (`%LOCALAPPDATA%\auracode-upgrades\upgrade.log`) are outside both the
@@ -194,9 +194,9 @@ Arch: `gst-plugins-base gst-plugins-good patchelf`.
 
 **What an agent's shell sees.** The AppImage's launcher points `LD_LIBRARY_PATH`, `PATH`,
 `PYTHONHOME`, `PERLLIB`, `XDG_DATA_DIRS`, `GIO_MODULE_DIR` and others into its mount
-(`/tmp/.mount_auraco…`). auracode strips them before it resolves the agents' environment
+(`/tmp/.mount_auraco…`). o7 strips them before it resolves the agents' environment
 (`strip_launch_context` in `crates/aura-process/src/env/mod.rs`), so an agent's `node`, `git`,
-`python` and `cargo` load the system's libraries, not the image's. auracode's own helpers that
+`python` and `cargo` load the system's libraries, not the image's. o7's own helpers that
 agents start (project memory, browser) run through the image's `AppRun`, which sets the image's
 library path again for them alone (`helper_program` in `crates/aura-core/src/paths.rs`). An
 installed build from before that fix leaks the launcher's variables: there, `node` fails with
@@ -206,8 +206,8 @@ warns about `libpcre2-8.so.0`. Until such a build is replaced, start each comman
 first on `PATH`.
 
 **Testing next to the running app.** `pnpm tauri build --debug --no-bundle` from `apps/desktop`,
-then `target/debug/auracode`. It opens the development folder, is titled `auracode dev` and runs
-beside the installed app. Never stop `auracode` by name (`pkill auracode`): the installed app's
+then `target/debug/auracode`. It opens the development folder, is titled `o7 dev` and runs
+beside the installed app. Never stop `auracode` by name (`pkill o7`): the installed app's
 process has the same name. Stop the PID you started. A plain `cargo build` or `cargo test` writes
 `target/debug/auracode` again without the page built in (it loads the Vite dev server's address
 and shows an empty window when none runs), so build with the Tauri command again before starting
@@ -243,7 +243,7 @@ launcher (`AppRun.wrapped`) set `GST_PLUGIN_SYSTEM_PATH_1_0=$APPDIR/usr/lib/gstr
 folder the image did not have, which also hid the system's plugins. The window's own page was at
 the same risk, since Settings' Sounds play through Web Audio.
 
-- **At startup** (`apps/desktop/src-tauri/src/browser/media.rs`) auracode looks for the plugin
+- **At startup** (`apps/desktop/src-tauri/src/browser/media.rs`) o7 looks for the plugin
   files WebKit's media cannot do without (`coreelements`, `app`, `audioconvert`, `audioresample`,
   `autodetect`, `playback`, `typefindfunctions`) in the folders GStreamer will search, by its own
   rules: `GST_PLUGIN_PATH_1_0` (else `GST_PLUGIN_PATH`), then `GST_PLUGIN_SYSTEM_PATH_1_0` (else
@@ -284,7 +284,7 @@ unpacks the image's GStreamer folder and launch hooks with the image's own runti
 
 `--without-media` builds without plugins, on purpose and with a warning, and the check then makes
 sure the image has no plugin folder. Such an image uses the system's plugins: at the very start of
-`main`, when `APPDIR` is set and `$APPDIR/usr/lib/gstreamer-1.0` is missing, auracode runs itself
+`main`, when `APPDIR` is set and `$APPDIR/usr/lib/gstreamer-1.0` is missing, o7 runs itself
 again (the same single re-run as the NVIDIA switch below) with `GST_PLUGIN_SYSTEM_PATH_1_0` on the
 system's folders in place of the launcher's missing one (a value the person set after it is kept).
 Every AppImage also gets a GStreamer registry of its own under
@@ -338,7 +338,7 @@ hands over to `apps/desktop/scripts/appimage-upgrade.mjs` on Linux.
    (`systemd-run --user`, unit `auracode-upgrade-<millis>`), which shares no process with the
    app, so it outlives the agent that armed it. Without user systemd it starts in a new session
    that is reparented to init.
-4. Quit auracode. The waiter moves the link to the new build in one rename and starts it as its
+4. Quit o7. The waiter moves the link to the new build in one rename and starts it as its
    own systemd unit, with the environment the desktop launcher gives. If no process runs the new
    file 20 seconds later (`--health-seconds`), it moves the link back and starts the previous
    build. The previous build stays on disk either way; the three newest older builds are kept
@@ -347,13 +347,13 @@ hands over to `apps/desktop/scripts/appimage-upgrade.mjs` on Linux.
 `host-upgrade status` shows the link, what runs, any armed install, the kept builds and the last
 log lines; `host-upgrade cancel` disarms. The log and the install history are in
 `~/.local/state/auracode-upgrades` (`$XDG_STATE_HOME`), outside the data folder. Without an
-agent, quit auracode and run `host-upgrade install` from a terminal: it installs and starts at
+agent, quit o7 and run `host-upgrade install` from a terminal: it installs and starts at
 once.
 
 **When the new build is broken.** Quit it and run `host-upgrade rollback` from a terminal: the
 link goes back to the build the last install replaced (or `--to <file>`), and that build starts.
 `--restore-database` also puts back each database the newer build migrated, from aura-core's
-pre-migration backups, as on Windows. With no working auracode at all, run Claude Code or Codex
+pre-migration backups, as on Windows. With no working o7 at all, run Claude Code or Codex
 in a terminal in the main checkout, fix forward, build an AppImage and run `host-upgrade install`.
 
 ## macOS
@@ -372,7 +372,7 @@ The development build was built from this branch against the main checkout's war
 
 | Check | Result |
 |---|---|
-| A development build launched beside the running installed app stays up as its own instance, opens `si.auracode.desktop.dev` with its WebView2 profile inside, is titled `auracode dev`, and leaves the installed app's processes alone | pass |
+| A development build launched beside the running installed app stays up as its own instance, opens `si.auracode.desktop.dev` with its WebView2 profile inside, is titled `o7 dev`, and leaves the installed app's processes alone | pass |
 | A smoke run without `AURACODE_DATA_DIR` prints a failing result naming the reason, exits 1 and opens no store | pass |
 | `--uninstall-cleanup --dry-run` from a development build plans only the development folder | pass |
 | Smoke checks with the development build in scratch folders: stream, chat (30 of 30), chat-reopen (8 of 8) | pass |
@@ -398,7 +398,7 @@ from a chat inside the installed AppImage:
 | An agent's shell in the installed build (before the fix) | fail, as described above: `node`, `python3` and `pacman` do not start, `git` warns |
 | `strip_launch_context` against the variables that AppImage's launcher set | pass (unit tests), including entries outside the mount kept in order and an `APPDIR` that is not a mount |
 | The memory helper started through the mount's `AppRun` from an env without the image's variables | pass: MCP `initialize` answered in 39 ms |
-| `tauri build --debug --no-bundle` in a worktree, then `target/debug/auracode` beside the installed app | pass: titled `auracode dev`, its own data folder, same PID after the restart with the NVIDIA switch, the installed app untouched; without the switch the window closes with Wayland error 71 |
+| `tauri build --debug --no-bundle` in a worktree, then `target/debug/auracode` beside the installed app | pass: titled `o7 dev`, its own data folder, same PID after the restart with the NVIDIA switch, the installed app untouched; without the switch the window closes with Wayland error 71 |
 | Frame rate at 2376x1300 on a virtual 4K monitor at 1.6 (GDK scale 2), NVIDIA RTX 5080, same build, GPU renderer against CPU painting | stress view 60 against 12 to 25; a chat with the scripted agent: streaming 56 to 63 against 42, scrolling 60 (worst frame 28 ms) against 21 (153 ms); idle 0 % CPU on both; typing reaches the screen in about 23 ms on both |
 | The browser panel on Wayland (Hyprland), on the virtual monitor | pass: a local page draws in the panel at its rectangle (1040x1202 at 2x), follows a move and resize, hides with the panel and returns; an agent's snapshot reads the page while it is hidden; the chat holds 60 frames a second beside it. Not tested: real pointer and keyboard input into the page (no second seat to drive it) |
 | `host-upgrade status` against the real install | pass: names the link, the running build and its PID |
@@ -421,6 +421,6 @@ each with a data folder of its own, driven through WebKit's remote inspector and
 | Pictures | pass: the panel's stand-in is a 1280x800 JPEG with the test page's colours and box where they belong; the agents' viewport JPEG, full page PNG and element PNG come back |
 | Clear browsing data with no page open, on Wayland | pass (it failed with `UnsupportedWindowHandle` before) |
 | `pnpm bundle --bundles appimage` here | pass: stops before building, naming the missing plugin and `patchelf` and the packages for Arch, Debian and Ubuntu, and Fedora |
-| A development AppImage without plugins | pass: the image check passes for an image without media and refuses it as one with media; launched, one re-run sets the system's plugin folders, a registry of auracode's own and the NVIDIA switch, and `AURACODE_LAUNCH_SET` names all three |
+| A development AppImage without plugins | pass: the image check passes for an image without media and refuses it as one with media; launched, one re-run sets the system's plugin folders, a registry of o7's own and the NVIDIA switch, and `AURACODE_LAUNCH_SET` names all three |
 | X11 through XWayland (`GDK_BACKEND=x11`, pages as child windows) | pass: media off in a tab, its picture, a page end read as crashed, Clear browsing data with no page open. The first three X11 launches that afternoon left the window's page on `about:blank` (with either renderer); nine later launches of the same code, the very same binary among them, loaded normally, and the cause was not found |
 | An AppImage that carries the plugins; sound and video actually playing | not run: this machine has no `gst-plugins-good` and no `patchelf`. CI's Ubuntu 22.04 job installs the plugin packages |

@@ -5,17 +5,17 @@ pub fn managed_memory(server: &ResolvedMcpServer) -> bool {
     server.definition.id == "aura-project-memory"
         && server.definition.name.replace('-', "_") == "aura_project_memory"
 }
-/// auracode's browser server (the Browser universal plugin's tools).
+/// o7's browser server (the Browser universal plugin's tools).
 pub fn managed_browser(server: &ResolvedMcpServer) -> bool {
     server.definition.id == "aura-browser"
         && server.definition.name.replace('-', "_") == "aura_browser"
 }
-/// auracode's project server (a coordinated project's tools, for its coordinator and workers).
+/// o7's project server (a coordinated project's tools, for its coordinator and workers).
 pub fn managed_project(server: &ResolvedMcpServer) -> bool {
     server.definition.id == "aura-project"
         && server.definition.name.replace('-', "_") == "aura_project"
 }
-/// One of auracode's own optional servers: left out, not failed, where a connection cannot load it.
+/// One of o7's own optional servers: left out, not failed, where a connection cannot load it.
 pub fn managed(server: &ResolvedMcpServer) -> bool {
     managed_memory(server) || managed_browser(server) || managed_project(server)
 }
@@ -242,7 +242,7 @@ pub(crate) mod tests {
         server.definition.name = "aura_browser".into();
         server
     }
-    /// auracode's browser server is one of its own optional servers, like project memory: a
+    /// o7's browser server is one of its own optional servers, like project memory: a
     /// connection that cannot load it leaves it out instead of failing the start. A user's
     /// server only borrowing the name is not.
     #[test]
@@ -251,7 +251,7 @@ pub(crate) mod tests {
         assert!(!managed_memory(&browser()));
         let mut lookalike = server();
         lookalike.definition.name = "aura_browser".into();
-        assert!(!managed(&lookalike), "the id must be auracode's too");
+        assert!(!managed(&lookalike), "the id must be o7's too");
         let (servers, omitted) = acp_session(&[browser(), memory()], false, false, false).unwrap();
         assert!(omitted);
         assert_eq!(servers, json!([]));

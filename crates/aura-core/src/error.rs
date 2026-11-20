@@ -19,7 +19,7 @@ pub enum CoreError {
         source: std::io::Error,
     },
 
-    /// A JSON file auracode owns could not be parsed (or, rarely, serialized).
+    /// A JSON file o7 owns could not be parsed (or, rarely, serialized).
     #[error("{path} is not valid: {source}")]
     Json {
         path: PathBuf,
@@ -30,10 +30,10 @@ pub enum CoreError {
     #[error("Database error: {0}")]
     Sqlite(#[from] rusqlite::Error),
 
-    /// A database of a removed auracode account (see `store/encrypted.rs`). It is never opened,
+    /// A database of a removed o7 account (see `store/encrypted.rs`). It is never opened,
     /// repaired or replaced.
     #[error(
-        "The database at {path} is encrypted for an auracode account, which this version no longer opens. It was left as it is."
+        "The database at {path} is encrypted for an o7 account, which this version no longer opens. It was left as it is."
     )]
     EncryptedDatabase { path: PathBuf },
 
@@ -51,9 +51,9 @@ pub enum CoreError {
     #[error("Could not upgrade the database, so it was left unchanged: {0}")]
     Migration(String),
 
-    /// The database was written by a newer auracode. Nothing was written to it.
+    /// The database was written by a newer o7. Nothing was written to it.
     #[error(
-        "This data was saved by a newer version of auracode (database version {found}; this version reads up to {supported}). Update auracode to open it."
+        "This data was saved by a newer version of o7 (database version {found}; this version reads up to {supported}). Update o7 to open it."
     )]
     SchemaTooNew { found: u32, supported: u32 },
 
@@ -65,7 +65,7 @@ pub enum CoreError {
     /// Damage was found, but the repair failed before the damaged file was moved (disk full while
     /// copying what was readable, no permission), so nothing changed. The next open tries again.
     #[error(
-        "auracode found damage in {path} but could not repair it, so the file was left where it is: {source}"
+        "o7 found damage in {path} but could not repair it, so the file was left where it is: {source}"
     )]
     RepairFailed {
         path: PathBuf,
@@ -77,7 +77,7 @@ pub enum CoreError {
     /// (installing the repaired copy, creating or upgrading the new database). The quarantine is
     /// recorded next to the moved file, so the next open finishes the repair and still reports it.
     #[error(
-        "{path} was damaged, so auracode moved it to {quarantined}, where it is kept, but could not finish setting up its replacement: {reason}. auracode will finish the repair the next time it opens this profile."
+        "{path} was damaged, so o7 moved it to {quarantined}, where it is kept, but could not finish setting up its replacement: {reason}. o7 will finish the repair the next time it opens this profile."
     )]
     RecoveryIncomplete {
         path: PathBuf,
@@ -89,12 +89,12 @@ pub enum CoreError {
         source: Box<CoreError>,
     },
 
-    /// Another auracode process (a second window, the CLI) has the database open or is opening it,
+    /// Another o7 process (a second window, the CLI) has the database open or is opening it,
     /// and this open needed something that would disturb it.
-    #[error("{path} is in use by another auracode process (another window or the CLI), {reason}")]
+    #[error("{path} is in use by another o7 process (another window or the CLI), {reason}")]
     DatabaseInUse { path: PathBuf, reason: InUseReason },
 
-    /// A folder auracode keeps data in is a link (to a folder on another disk, say) that doesn't
+    /// A folder o7 keeps data in is a link (to a folder on another disk, say) that doesn't
     /// lead to a folder. It is left as it is: a new folder in its place would start the data over
     /// on this disk and leave the history behind the link for when the disk is back.
     #[error("{link} is a link to {target}, {problem}")]
@@ -104,10 +104,10 @@ pub enum CoreError {
         problem: LinkProblem,
     },
 
-    /// Another auracode process (a second launch with the same data folder, or the CLI) owns this
+    /// Another o7 process (a second launch with the same data folder, or the CLI) owns this
     /// profile's sessions ([`crate::owner::ProfileOwner`]). `path` is the profile's folder.
     #[error(
-        "auracode is already running with the profile in {}. Quit it first, or start this copy with its own AURACODE_DATA_DIR.",
+        "o7 is already running with the profile in {}. Quit it first, or start this copy with its own AURACODE_DATA_DIR.",
         path.display()
     )]
     ProfileInUse { path: PathBuf },
@@ -146,10 +146,10 @@ impl std::fmt::Display for InUseReason {
                 "which is still opening it (it may be repairing or upgrading it). Try again in a moment."
             }
             InUseReason::Repair => {
-                "so the damage found in it could not be repaired yet. Close the other auracode windows and the CLI, then open auracode again to repair it."
+                "so the damage found in it could not be repaired yet. Close the other o7 windows and the CLI, then open o7 again to repair it."
             }
             InUseReason::Upgrade => {
-                "so it could not be upgraded for this version of auracode. Close the other auracode windows and the CLI, then try again."
+                "so it could not be upgraded for this version of o7. Close the other o7 windows and the CLI, then try again."
             }
         })
     }
@@ -169,10 +169,10 @@ impl std::fmt::Display for LinkProblem {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         f.write_str(match self {
             LinkProblem::Missing => {
-                "which can't be found, perhaps because it is on a disk that isn't connected. Reconnect the disk and try again, or remove the link to have auracode start over with an empty folder there."
+                "which can't be found, perhaps because it is on a disk that isn't connected. Reconnect the disk and try again, or remove the link to have o7 start over with an empty folder there."
             }
             LinkProblem::NotAFolder => {
-                "which is not a folder. Point the link at a folder, or remove it to have auracode start over with an empty folder there."
+                "which is not a folder. Point the link at a folder, or remove it to have o7 start over with an empty folder there."
             }
         })
     }
@@ -207,7 +207,7 @@ mod tests {
         };
         assert_eq!(
             too_new.to_string(),
-            "This data was saved by a newer version of auracode (database version 3; this version reads up to 1). Update auracode to open it."
+            "This data was saved by a newer version of o7 (database version 3; this version reads up to 1). Update o7 to open it."
         );
 
         assert_eq!(
@@ -252,7 +252,7 @@ mod tests {
         assert!(
             failed
                 .to_string()
-                .starts_with("auracode found damage in /p/aura.db but could not repair it, so the file was left where it is: ")
+                .starts_with("o7 found damage in /p/aura.db but could not repair it, so the file was left where it is: ")
         );
 
         for problem in [LinkProblem::Missing, LinkProblem::NotAFolder] {
@@ -281,7 +281,7 @@ mod tests {
             }
             .to_string();
             assert!(
-                text.starts_with("/p/aura.db is in use by another auracode process"),
+                text.starts_with("/p/aura.db is in use by another o7 process"),
                 "{text}"
             );
             assert!(text.ends_with('.'), "{text}");

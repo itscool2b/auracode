@@ -190,7 +190,7 @@ export function endingChannel<T>(onMessage: (message: T) => void, onEnd: () => v
   return channel;
 }
 
-/** Every agent auracode knows, from the detector's cache; never waits. */
+/** Every agent o7 knows, from the detector's cache; never waits. */
 export function agentsList(): Promise<AgentEntry[]> {
   return infallible(commands.agentsList());
 }
@@ -274,7 +274,7 @@ export async function agentUpdate(agentId: string): Promise<void> {
   await settle(commands.agentUpdate(agentId));
 }
 
-/** The last lines the agent's updater printed in this run of auracode, as plain text. */
+/** The last lines the agent's updater printed in this run of o7, as plain text. */
 export function agentUpdateOutput(agentId: string): Promise<string | null> {
   return settle(commands.agentUpdateOutput(agentId));
 }

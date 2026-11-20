@@ -69,11 +69,11 @@ async fn chats_still_stopping_are_named() {
         .await
         .expect("rename");
     let names = rig.manager.chat_names(vec![titled]).await;
-    assert_eq!(names, ["\u{201c}Fix the sidebar\u{201d} in auracode"]);
+    assert_eq!(names, ["\u{201c}Fix the sidebar\u{201d} in o7"]);
     let then = "Switch profiles again in a moment.";
     assert_eq!(
         still_stopping(&names, then),
-        "\u{201c}Fix the sidebar\u{201d} in auracode is still stopping. Switch profiles again in a moment."
+        "\u{201c}Fix the sidebar\u{201d} in o7 is still stopping. Switch profiles again in a moment."
     );
     let many: Vec<String> = ["A", "B", "C", "D", "E"].map(String::from).into();
     assert_eq!(

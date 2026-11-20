@@ -2,7 +2,7 @@
 //! `clientCapabilities._meta.terminal_output`. The agent runs a command itself and embeds
 //! `{"type": "terminal", "terminalId": ..}` in the tool call (with `_meta.terminal_info`), streams
 //! its output on later updates as `_meta.terminal_output {terminal_id, data}` and ends with
-//! `_meta.terminal_exit {terminal_id, exit_code, signal}`. auracode runs nothing: it shows the
+//! `_meta.terminal_exit {terminal_id, exit_code, signal}`. o7 runs nothing: it shows the
 //! output as the tool's terminal, a short live tail while the command runs (small enough never to
 //! spill a blob per chunk) and, once it exits, the output it kept, which the session stores whole.
 //! Escape sequences are dropped and a carriage return rewrites its line, as a terminal shows it.

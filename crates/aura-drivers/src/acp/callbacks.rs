@@ -163,7 +163,7 @@ fn valid_answers(questions: &[UiQuestion], answers: &[aura_protocol::UiQuestionA
 
 pub fn request(method: &str, params: &Value, cursor: bool) -> DialectReply {
     let parsed = if params.to_string().len() > MAX_CALLBACK_BYTES {
-        Err("This user input request exceeds auracode's 64 KiB limit.")
+        Err("This user input request exceeds o7's 64 KiB limit.")
     } else if cursor {
         match method {
             "cursor/ask_question" => cursor_questions(params),

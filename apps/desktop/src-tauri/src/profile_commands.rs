@@ -108,9 +108,7 @@ async fn run(app: tauri::AppHandle, profile_id: String) -> Result<AppInfo, AppEr
         Ok(result)
     })
     .await
-    .map_err(|_| {
-        unavailable("The profile switch could not finish. Restart auracode before retrying.")
-    })?
+    .map_err(|_| unavailable("The profile switch could not finish. Restart o7 before retrying."))?
 }
 
 type OutsideFactory = fn(
@@ -147,10 +145,7 @@ async fn activate_serial(
         ),
     };
     if state.quit.is_quitting() {
-        return Err(AppError::new(
-            AppErrorCode::ShuttingDown,
-            "auracode is closing.",
-        ));
+        return Err(AppError::new(AppErrorCode::ShuttingDown, "o7 is closing."));
     }
     {
         let mut runtime = lock(&state.runtime);
@@ -269,7 +264,7 @@ async fn activate_one(
     {
         discard(&next).await;
         return Err(unavailable(
-            "The selected profile could not confirm its storage, or auracode is closing. Nothing was switched.",
+            "The selected profile could not confirm its storage, or o7 is closing. Nothing was switched.",
         ));
     }
     let profiles = Profiles::new(root(state)?);

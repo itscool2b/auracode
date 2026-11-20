@@ -134,7 +134,7 @@ const api: GitWorkspaceApi = {
       message: `${input.message.trim()}\n`,
       diff_stat: `${files.map((file) => ` ${file.path} | 4 ++--`).join("\n")}\n ${files.length} files changed`,
       warnings: [
-        "Git hooks do not run: auracode commits exactly the reviewed files. Run your project's checks yourself if it relies on them.",
+        "Git hooks do not run: o7 commits exactly the reviewed files. Run your project's checks yourself if it relies on them.",
       ],
       expires_at: Date.now() + 600_000,
     };

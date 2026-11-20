@@ -171,7 +171,7 @@ pub async fn chat_move(
 }
 
 /// What a folder the person picked already is: its projects (compared canonical, so a link or
-/// another spelling of the same folder finds them) and whether auracode manages it as a worktree.
+/// another spelling of the same folder finds them) and whether o7 manages it as a worktree.
 #[tauri::command]
 #[specta::specta]
 pub async fn workspace_folder_matches(

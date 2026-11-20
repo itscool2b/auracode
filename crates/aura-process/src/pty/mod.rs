@@ -230,8 +230,8 @@ async fn deadline_reached(deadline: Option<tokio::time::Instant>) {
     }
 }
 
-/// What every terminal inside auracode says it is, whatever the environment it came from: xterm.js
-/// speaks xterm's codes with 24-bit colour. A `TERM` inherited from the terminal auracode was
+/// What every terminal inside o7 says it is, whatever the environment it came from: xterm.js
+/// speaks xterm's codes with 24-bit colour. A `TERM` inherited from the terminal o7 was
 /// started from (`xterm-kitty`, `xterm-ghostty`) would make programs send codes this terminal
 /// does not draw, and without `COLORTERM` agents fall back to 256 colours. A launch's own
 /// `set_env` still wins.

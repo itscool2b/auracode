@@ -145,14 +145,12 @@ describe("joining a chat (the join protocol)", () => {
     const pending = fake.lastAttach();
     // The shell drops the refused view's channel as well.
     pending.onEnd();
-    pending.reject(
-      new CommandError("storage_unavailable", "auracode's database is not available."),
-    );
+    pending.reject(new CommandError("storage_unavailable", "o7's database is not available."));
     await opening;
     await settled();
     expect(store.getSnapshot()).toMatchObject({
       phase: "failed",
-      attachError: "auracode's database is not available.",
+      attachError: "o7's database is not available.",
     });
     expect(fake.attaches).toHaveLength(1);
 
@@ -1287,7 +1285,7 @@ describe("history errors", () => {
       history: () =>
         fail
           ? Promise.reject(
-              new CommandError("storage_unavailable", "auracode's database is not available: busy"),
+              new CommandError("storage_unavailable", "o7's database is not available: busy"),
             )
           : Promise.resolve(historyPage(CHAT, [], { has_more: false })),
     });
@@ -1295,7 +1293,7 @@ describe("history errors", () => {
     await store.loadEarlier();
     expect(store.getSnapshot()).toMatchObject({
       loadingEarlier: false,
-      earlierError: "auracode's database is not available: busy",
+      earlierError: "o7's database is not available: busy",
       historyRevision: 0,
       hasMore: true,
     });

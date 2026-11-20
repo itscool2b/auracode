@@ -41,7 +41,7 @@ export function Hero() {
   return (
     <section className="hero" aria-labelledby="hero-title" data-zone="">
       <div className="hero-copy">
-        <h1 id="hero-title" className="hero-title" aria-label="Meet auracode">
+        <h1 id="hero-title" className="hero-title" aria-label="Meet o7">
           <span className="hero-word" aria-hidden="true" style={word(0)}>
             Meet
           </span>{" "}
@@ -51,7 +51,7 @@ export function Hero() {
             </span>
           </span>{" "}
           <span className="hero-word" aria-hidden="true" style={word(2)}>
-            auracode
+            o7
           </span>
         </h1>
         <p className="hero-lead">

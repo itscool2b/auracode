@@ -11,7 +11,7 @@ A useful report says what you can do that you should not be able to, the version
 operating system, and the steps. A proof of concept helps. Never include a real key, token or
 pairing link: make a throwaway one.
 
-auracode is maintained by one person. Expect an answer within a week, and a fix or a plan as soon
+o7 is maintained by one person. Expect an answer within a week, and a fix or a plan as soon
 as the problem is understood. You will be credited in the changelog unless you ask not to be.
 
 ## What is in scope
@@ -26,7 +26,7 @@ as the problem is understood. You will be credited in the changelog unless you a
 - **The website** at o7.codes and its Worker (`apps/web`, `apps/web-worker`).
 - **The build and release tooling** (`.github/`, `crates/aura-release`).
 
-The coding agents auracode drives (Claude Code, Codex and the others) are their vendors' software:
+The coding agents o7 drives (Claude Code, Codex and the others) are their vendors' software:
 report a problem in one of them to its vendor.
 
 ## What to know about the installers

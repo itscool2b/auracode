@@ -2,7 +2,7 @@
 //!
 //! First `VACUUM INTO`: it rebuilds every table and index from what their b-trees hold, so unused
 //! ("leaked") pages and broken free lists disappear, and it keeps `user_version`. It gives up at the
-//! first page it can't read, though. Then the new database gets auracode's own schema for the
+//! first page it can't read, though. Then the new database gets o7's own schema for the
 //! damaged file's `user_version`, from the migrations, so every table of that version exists even
 //! when its entry in the damaged schema is lost, and the tables are copied into it one by one, row
 //! by row: a read error skips ahead to the next readable rowid instead of abandoning the table.
@@ -143,7 +143,7 @@ struct Schema {
     /// In rowid order, which is the order things were created in.
     entries: Vec<SchemaEntry>,
     /// Part of it could not be read, so it may have listed tables nothing else knows of (the
-    /// migrations only know auracode's own).
+    /// migrations only know o7's own).
     damaged: bool,
     /// Entries were read past an unreadable part. SQLite loads the schema in rowid order and stops
     /// at the first page it can't read, so it knows none of them: their tables can only be read
@@ -341,7 +341,7 @@ fn reset_schema_root(path: &Path) -> io::Result<()> {
     file.write_all(&head)
 }
 
-/// Builds the new database at `out` from what `src` can read: auracode's schema for `version`, then
+/// Builds the new database at `out` from what `src` can read: o7's schema for `version`, then
 /// every table's rows, then whatever else the damaged schema had.
 fn copy_into(
     src: &Connection,
@@ -404,12 +404,12 @@ fn copy_into(
             .any(|name| name.eq_ignore_ascii_case(&table.name))
     }) {
         if is_shadow_in(&tx, &table.name)? {
-            // The storage of one of auracode's virtual tables, taken for a table of its own
+            // The storage of one of o7's virtual tables, taken for a table of its own
             // because the virtual table's entry was lost: the migrations made it again, and it
             // fills through the virtual table.
             continue;
         }
-        // Not one of auracode's tables (a user's own, or any table of a version the migrations
+        // Not one of o7's tables (a user's own, or any table of a version the migrations
         // don't know): created as the damaged file had it.
         order.push(&table.name);
         if let Err(error) = tx.execute_batch(table.sql.as_deref().unwrap_or_default()) {
@@ -469,11 +469,11 @@ fn is_data_table(
         && !is_shadow(&entry.name, kinds, entries)
 }
 
-/// Gives the new database auracode's schema at `version`, from the migrations, so every table,
+/// Gives the new database o7's schema at `version`, from the migrations, so every table,
 /// index, and virtual table of that version exists even when the damaged schema lost its entry.
 /// False for a version the migrations don't take a database to (0, or one above them, which the
 /// open never lets through): the damaged file's own schema is replayed instead, as it is for any
-/// table that isn't auracode's.
+/// table that isn't o7's.
 fn create_own_schema(out: &mut Connection, migrations: &[M<'_>], version: i64) -> Result<bool> {
     let Ok(version) = usize::try_from(version) else {
         return Ok(false);
@@ -1643,7 +1643,7 @@ mod tests {
         );
     }
 
-    /// A damaged schema page that listed only indexes costs no auracode table, but whatever else
+    /// A damaged schema page that listed only indexes costs no o7 table, but whatever else
     /// it listed is unknown, so the salvage still isn't called complete.
     #[test]
     fn a_damaged_schema_page_is_never_complete_even_when_every_table_survives() {
@@ -1681,7 +1681,7 @@ mod tests {
                 "SELECT count(*) FROM sqlite_schema WHERE name = 'events_turn_id'"
             ),
             1,
-            "auracode's own indexes come from the migrations"
+            "o7's own indexes come from the migrations"
         );
     }
 

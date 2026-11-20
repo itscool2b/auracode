@@ -1,4 +1,4 @@
-//! Where auracode keeps its data, and the rules for naming things inside it.
+//! Where o7 keeps its data, and the rules for naming things inside it.
 //!
 //! ```text
 //! <data root>/                 dirs::data_local_dir()/si.auracode.desktop (a development build:
@@ -75,7 +75,7 @@ const WINDOWS_RESERVED_NAMES: [&str; 24] = [
     "com8", "com9", "lpt0", "lpt1", "lpt2", "lpt3", "lpt4", "lpt5", "lpt6", "lpt7", "lpt8", "lpt9",
 ];
 
-/// The root folder of all auracode data on this machine.
+/// The root folder of all o7 data on this machine.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DataRoot {
     root: PathBuf,
@@ -144,7 +144,7 @@ impl DataRoot {
 
     /// Creates the root and `profiles/`. `profiles/` is made private to the current user even when it
     /// already exists (mode 0700 on unix; on Windows a protected ACL for the user, SYSTEM, and
-    /// Administrators), since everything under it is auracode's and `AURACODE_DATA_DIR` may put it
+    /// Administrators), since everything under it is o7's and `AURACODE_DATA_DIR` may put it
     /// somewhere other accounts can read, like `C:\aura`. A file where `profiles/` should be is
     /// moved aside, so a stray file can't block startup. A link there is used, never moved: one that
     /// leads nowhere (a folder on a disk that isn't connected) is a [`CoreError::BrokenLink`]. The
@@ -190,7 +190,7 @@ fn is_lower_alnum(byte: u8) -> bool {
     byte.is_ascii_lowercase() || byte.is_ascii_digit()
 }
 
-/// The program an agent starts to run auracode's own helpers (`--aura-memory-helper`,
+/// The program an agent starts to run o7's own helpers (`--aura-memory-helper`,
 /// `--aura-browser-helper`): this executable, or inside a Linux AppImage the image's `AppRun`.
 /// Agents get an env without the AppImage's library path (`aura_process::strip_launch_context`),
 /// and the bundled binary needs it on a system lacking WebKitGTK; `AppRun` sets it again and
@@ -202,7 +202,7 @@ pub fn helper_program() -> Option<PathBuf> {
 }
 
 /// `APPDIR/AppRun` when `exe` lies inside `appdir` and that launcher exists. An `APPDIR` naming
-/// another image (one that merely started auracode) does not contain `exe`, and is ignored.
+/// another image (one that merely started o7) does not contain `exe`, and is ignored.
 fn appimage_launcher(exe: &Path, appdir: Option<&OsStr>) -> Option<PathBuf> {
     if !cfg!(target_os = "linux") {
         return None;

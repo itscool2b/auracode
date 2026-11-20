@@ -300,7 +300,7 @@ fn injected(text: &str) -> bool {
     text.starts_with('<') || text.starts_with("# AGENTS.md") || text.starts_with("# Instructions")
 }
 
-/// A vendor session ID auracode will look a file up by: no path separators or dots.
+/// A vendor session ID o7 will look a file up by: no path separators or dots.
 fn plain_id(id: &str) -> bool {
     !id.is_empty()
         && id.len() <= 128

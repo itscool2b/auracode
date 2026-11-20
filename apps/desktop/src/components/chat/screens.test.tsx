@@ -92,7 +92,7 @@ describe("New chat", () => {
       agent("claude", {
         state: "broken",
         reason:
-          "auracode needs Claude Code 2.1.310 or newer (found 2.1.309). ACP adapter: Node.js 22 or newer is required (found 20.11.0).",
+          "o7 needs Claude Code 2.1.310 or newer (found 2.1.309). ACP adapter: Node.js 22 or newer is required (found 20.11.0).",
       }),
       agent("hermes", { state: "broken", reason: "hermes --version failed." }),
     ];
@@ -1151,7 +1151,7 @@ describe("turns and the transcript", () => {
     expect(html).toContain("8.2 s");
     expect(html).toContain("$0.0123");
     const recovered = renderToStaticMarkup(<TurnView segment={second} actions={ACTIONS} />);
-    expect(recovered).toContain("Interrupted when auracode closed");
+    expect(recovered).toContain("Interrupted when o7 closed");
     expect(buttons(recovered).map((b) => b.label)).toEqual(["Copy turn receipt", "Resume session"]);
     const live = renderToStaticMarkup(
       <TurnView segment={second} actions={{ ...ACTIONS, canResume: false }} />,
@@ -1373,7 +1373,7 @@ describe("turns and the transcript", () => {
 
 describe("the banners", () => {
   it("show the database repair notice until the shell confirms its dismissal", () => {
-    const message = "Your database was damaged, so auracode rebuilt it.";
+    const message = "Your database was damaged, so o7 rebuilt it.";
     const shown = renderToStaticMarkup(
       <RecoveryBannerView
         message={message}
@@ -1415,7 +1415,7 @@ describe("the banners", () => {
         unsaved_bytes: 9,
       }),
     ).toBe(
-      "The disk is full. auracode paused saving and the agents are waiting. Free some space; nothing is lost unless you quit now.",
+      "The disk is full. o7 paused saving and the agents are waiting. Free some space; nothing is lost unless you quit now.",
     );
     expect(
       storageBanner({ state: { state: "failed", message: "damaged" }, unsaved_bytes: 0 }),
@@ -1436,10 +1436,10 @@ describe("the banners", () => {
       storage: paused,
       env: { state: { state: "fallback", reason: "no PATH" }, removed: [] },
       onRetryEnv: noop,
-      recoveryNotice: "auracode repaired its database; the damaged copy is kept.",
+      recoveryNotice: "o7 repaired its database; the damaged copy is kept.",
       onRecoveryDismissed: noop,
       notices: [
-        "auracode stopped 1 agent process left running by an earlier session that ended unexpectedly.",
+        "o7 stopped 1 agent process left running by an earlier session that ended unexpectedly.",
       ],
       onDismissNotice: noop,
     });
@@ -1448,14 +1448,14 @@ describe("the banners", () => {
       ["env", "warning"],
       ["recovery", "warning"],
       [
-        "notice:auracode stopped 1 agent process left running by an earlier session that ended unexpectedly.",
+        "notice:o7 stopped 1 agent process left running by an earlier session that ended unexpectedly.",
         null,
       ],
     ]);
     const panel = renderToStaticMarkup(<ul>{items.map((item) => item.node)}</ul>);
     expect(panel).toContain("database is busy");
     expect(panel).toContain("(no PATH)");
-    expect(panel).toContain("auracode stopped 1 agent process");
+    expect(panel).toContain("o7 stopped 1 agent process");
     expect(buttons(panel).map((b) => b.label)).toEqual(["Retry", "Dismiss", "Dismiss"]);
     const failed = noticeItems({
       storage: { state: { state: "failed", message: "damaged" }, unsaved_bytes: 0 },

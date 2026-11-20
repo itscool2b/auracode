@@ -1330,7 +1330,7 @@ async fn ignored_cancel_then_force_stop() {
     ));
     assert!(stored.iter().any(|event| matches!(
         event,
-        AuraEvent::Notice { level: NoticeLevel::Warning, message } if message == "Force stopped: auracode ended the agent's processes."
+        AuraEvent::Notice { level: NoticeLevel::Warning, message } if message == "Force stopped: o7 ended the agent's processes."
     )));
 }
 

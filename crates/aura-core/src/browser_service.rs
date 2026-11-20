@@ -72,7 +72,7 @@ struct Request {
 }
 
 /// What an agent reads when the person turned the browser off.
-pub(crate) const TURNED_OFF: &str = "The browser is turned off in Aura (Settings > Plugins & MCP > Universal plugins > Browser use). Ask the person to turn it on, or work without it.";
+pub(crate) const TURNED_OFF: &str = "The browser is turned off in o7 (Settings > Plugins & MCP > Universal plugins > Browser use). Ask the person to turn it on, or work without it.";
 
 impl BrowserGrant {
     /// Listens for the session's helper. `enabled` is the Browser plugin's switch.
@@ -109,7 +109,7 @@ impl BrowserGrant {
                 let reply = match request {
                     None => error_reply("Invalid browser request."),
                     Some(request) if !same_token(&credential, &request.token) => {
-                        error_reply("Browser access expired. Restart the Aura session.")
+                        error_reply("Browser access expired. Restart the o7 session.")
                     }
                     Some(_) if !enabled.load(Ordering::Acquire) => error_reply(TURNED_OFF),
                     Some(request) => {

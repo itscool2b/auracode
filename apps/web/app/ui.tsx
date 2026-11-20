@@ -52,7 +52,7 @@ export function Page({
 }
 
 /**
- * The app as an object: the auracode logo on a disc of the page's ink. Decorative; the page around
+ * The app as an object: the o7 logo on a disc of the page's ink. Decorative; the page around
  * it names the app.
  */
 export function AppTile({ small = false }: { small?: boolean }) {

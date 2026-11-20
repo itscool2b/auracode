@@ -213,7 +213,7 @@ jobs:
         timeout-minutes: 15
         run: pnpm --filter @auracode/desktop check:fixtures
 
-      - name: Check Delete all auracode data
+      - name: Check Delete all o7 data
         if: ${{ !cancelled() && steps.browsers.outcome == 'success' }}
         timeout-minutes: 5
         run: pnpm --filter @auracode/desktop exec node scripts/check-delete-data.mjs

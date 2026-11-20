@@ -712,7 +712,7 @@ pub fn listing_from_output(
         })
     } else {
         parse(recipe.parser, &output.stdout)
-            .map_err(|()| format!("`{command}` printed output auracode could not read."))
+            .map_err(|()| format!("`{command}` printed output o7 could not read."))
     };
     // Codex prints MCP env and header values; nothing of the raw output outlives the parse.
     output.stdout.fill(0);
@@ -774,7 +774,7 @@ pub(crate) async fn run_listings(
             .collect::<Vec<_>>()
     };
     if installation.host != AgentHost::Native {
-        return unavailable("auracode lists plugins only for agents installed on this computer.");
+        return unavailable("o7 lists plugins only for agents installed on this computer.");
     }
     if crate::maintenance::check_unchanged(installation).is_err() {
         return unavailable("The installation changed since detection. Refresh agents.");

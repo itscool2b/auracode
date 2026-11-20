@@ -121,7 +121,7 @@ async fn direct_writes_follow_the_profile_switch_mid_grant_and_still_need_the_to
     let stranger = call(&endpoint, "wrong", write(serde_json::Value::Null, "Forged")).await;
     assert_eq!(
         stranger["error"],
-        "Memory access expired. Restart the Aura session."
+        "Memory access expired. Restart the o7 session."
     );
     let first = call(
         &endpoint,

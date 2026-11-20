@@ -219,7 +219,7 @@ pub(super) async fn refresh_preferences(live: &Arc<Live>) -> bool {
 async fn refresh_metadata(live: &Arc<Live>) {
     let preference_changed = refresh_preferences(live).await;
     // Installers can create a known tools directory or update the registry/login-shell PATH
-    // after Aura starts. Looking only at the cached PATH would never discover those locations.
+    // after o7 starts. Looking only at the cached PATH would never discover those locations.
     // The resolver shares an in-flight refresh; existing sessions retain their original env.
     live.env.refresh();
     let env = live.env.get().await;

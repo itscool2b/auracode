@@ -1,9 +1,9 @@
 //! Filesystem helpers shared by the device, profile, and store modules.
 //!
 //! Two policies live here so every module follows them the same way:
-//! - auracode's own files are written atomically (temp file, fsync, rename), so a crash or power loss
+//! - o7's own files are written atomically (temp file, fsync, rename), so a crash or power loss
 //!   leaves either the old content or the new content, never a torn file;
-//! - a file auracode cannot understand is moved aside (`<name>.corrupt-<millis>`), never deleted or
+//! - a file o7 cannot understand is moved aside (`<name>.corrupt-<millis>`), never deleted or
 //!   silently overwritten, so nothing a user might want back is destroyed.
 
 use std::ffi::OsString;
@@ -30,9 +30,9 @@ const MAX_COLLISION_COUNTER: u32 = 999;
 
 /// Creates `path` and any missing parents, readable only by the current user on unix.
 ///
-/// Profiles hold chats that contain code and secrets, so directories auracode creates start out
+/// Profiles hold chats that contain code and secrets, so directories o7 creates start out
 /// private (subject to the umask, which can only remove bits). Existing directories are left as is;
-/// see [`restrict_to_owner`] for tightening one auracode fully owns.
+/// see [`restrict_to_owner`] for tightening one o7 fully owns.
 pub(crate) fn create_private_dir_all(path: &Path) -> Result<()> {
     let mut builder = fs::DirBuilder::new();
     builder.recursive(true);
@@ -44,7 +44,7 @@ pub(crate) fn create_private_dir_all(path: &Path) -> Result<()> {
     builder.create(path).map_err(CoreError::io(path))
 }
 
-/// Makes `path` a directory auracode can use: moves aside a file (or anything else that is neither
+/// Makes `path` a directory o7 can use: moves aside a file (or anything else that is neither
 /// a folder nor a link) sitting there with [`quarantine_file`], then creates it with
 /// [`create_private_dir_all`]. A stray file where a folder belongs must not make startup fail on
 /// every launch. A link is never moved, since someone put the folder elsewhere on purpose (on
@@ -167,12 +167,12 @@ pub(crate) fn is_owner_only(path: &Path) -> io::Result<bool> {
     win_acl::read_dacl(path).map(|dacl| dacl.is_owner_only())
 }
 
-/// Result of reading one of auracode's JSON files.
+/// Result of reading one of o7's JSON files.
 #[derive(Debug)]
 pub(crate) enum JsonFile<T> {
     Missing,
     Valid(T),
-    /// The path holds something auracode can't use: bytes that aren't the expected JSON, or something
+    /// The path holds something o7 can't use: bytes that aren't the expected JSON, or something
     /// other than a regular file (a directory, a socket). Moving it aside loses nothing, since nothing
     /// better can be read from it.
     Unusable(CoreError),
@@ -261,7 +261,7 @@ fn write_synced_then_rename(temp: &Path, target: &Path, bytes: &[u8]) -> io::Res
     fs::rename(temp, target)
 }
 
-/// Moves a file auracode could not use to `<name>.corrupt-<millis>` in the same directory and returns
+/// Moves a file o7 could not use to `<name>.corrupt-<millis>` in the same directory and returns
 /// the new path.
 pub(crate) fn quarantine_file(path: &Path) -> Result<PathBuf> {
     let base = format!("{}.corrupt-{}", file_name_lossy(path), now_millis());
@@ -488,7 +488,7 @@ mod win_acl {
     #[derive(Debug, Clone, Copy, PartialEq, Eq)]
     pub(crate) struct Ace {
         pub(crate) who: Who,
-        /// An access-allowed ACE (anything else, deny ACEs included, is not what auracode writes).
+        /// An access-allowed ACE (anything else, deny ACEs included, is not what o7 writes).
         pub(crate) allow: bool,
         pub(crate) mask: u32,
         pub(crate) flags: u8,
@@ -659,7 +659,7 @@ mod win_acl {
         }
     }
 
-    /// Reads the DACL of `path` back, naming the trustees auracode cares about.
+    /// Reads the DACL of `path` back, naming the trustees o7 cares about.
     #[allow(unsafe_code)]
     pub(crate) fn read_dacl(path: &Path) -> io::Result<Dacl> {
         let trustees = trustees()?;

@@ -44,7 +44,7 @@ describe("a conflicted merge", () => {
         "- src/orbit.rs",
         "- src/app.ts",
         "",
-        "Please resolve them on aura/release-readiness in C:/auracode/worktrees/owned-one: merge main into aura/release-readiness, fix the conflicts in the files above while keeping the intent of both sides, run the relevant tests, and commit the merge. Do not push and do not change main. I will review the merge in auracode afterwards.",
+        "Please resolve them on aura/release-readiness in C:/auracode/worktrees/owned-one: merge main into aura/release-readiness, fix the conflicts in the files above while keeping the intent of both sides, run the relevant tests, and commit the merge. Do not push and do not change main. I will review the merge in o7 afterwards.",
       ].join("\n"),
     );
     expect(conflictPrompt(preview(["one.rs"]))).toContain("conflicts in 1 file:");

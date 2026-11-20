@@ -92,7 +92,7 @@ function licenseFiles(directory) {
 export const NPM_LICENSES = { "khroma@2.1.0": "MIT" };
 
 /**
- * npm packages in a dependency's metadata that auracode does not ship, each with why (reviewed),
+ * npm packages in a dependency's metadata that o7 does not ship, each with why (reviewed),
  * and what keeps it out. elkjs is EPL-2.0 or GPL-3.0; Mermaid imports it only for its optional
  * ELK layout, which apps/desktop/vite.config.ts replaces with a stub.
  */
@@ -310,15 +310,15 @@ export function renderText(catalogue, distribution) {
   const lines = [
     "Third-party software notices",
     "",
-    "These notices apply to the listed third-party components. They do not grant a license to auracode itself.",
+    "These notices apply to the listed third-party components. They do not grant a license to o7 itself.",
     "",
     "Component source archives are linked below, including the unmodified source for MPL-covered components.",
     "",
-    "Agent marks: the logos shown beside the Claude Code (the Claude spark), Codex (the OpenAI Blossom), Pi, Antigravity, Cursor, Grok Build (the Grok mark), OpenCode, oh-my-pi and Hermes agents, and the model makers' marks (Anthropic, OpenAI, Google Gemini, xAI, DeepSeek, Mistral AI, Meta, Qwen and Moonshot AI), are trademarks of their respective owners. They only identify which agent a chat uses or whose model is working, imply no endorsement or partnership, and are not covered by these notices or by any license for auracode. Their sources, guidelines and terms are listed in third-party/brand-marks.md.",
+    "Agent marks: the logos shown beside the Claude Code (the Claude spark), Codex (the OpenAI Blossom), Pi, Antigravity, Cursor, Grok Build (the Grok mark), OpenCode, oh-my-pi and Hermes agents, and the model makers' marks (Anthropic, OpenAI, Google Gemini, xAI, DeepSeek, Mistral AI, Meta, Qwen and Moonshot AI), are trademarks of their respective owners. They only identify which agent a chat uses or whose model is working, imply no endorsement or partnership, and are not covered by these notices or by any license for o7. Their sources, guidelines and terms are listed in third-party/brand-marks.md.",
     "",
     ...(distribution === "desktop"
       ? [
-          "Start screen aircraft: the pictures of aircraft the desktop app opens on were supplied by auracode's owner. They are not covered by these notices or by any license for auracode. The files and how they were prepared are listed in third-party/ascii-art.md.",
+          "Start screen aircraft: the pictures of aircraft the desktop app opens on were supplied by o7's owner. They are not covered by these notices or by any license for o7. The files and how they were prepared are listed in third-party/ascii-art.md.",
           "",
         ]
       : []),
@@ -362,7 +362,7 @@ export function renderHtml(text, distribution = "desktop") {
   const dark = web
     ? "@media(prefers-color-scheme:dark){html{--notice-bg:#0a0a0a;--notice-fg:#80848a;--notice-title:#ffffff;--notice-line:#1f2228;--notice-selection:#333}}"
     : "@media(prefers-color-scheme:dark){html{--notice-bg:#101112;--notice-fg:#a1a1aa;--notice-title:#fafafa;--notice-line:#303236;--notice-selection:#333}}";
-  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="${scheme}"><title>Third-party notices | auracode</title><style>html{color-scheme:${scheme};${light};background:var(--notice-bg);color:var(--notice-fg);font:14px/1.6 ui-sans-serif,system-ui,sans-serif;-webkit-font-smoothing:antialiased}${dark}body{max-width:72rem;margin:clamp(2rem,6vw,6rem) auto;padding:0 1.25rem}h1{margin:0 0 2rem;color:var(--notice-title);font-size:2rem;line-height:1.2;font-weight:500;letter-spacing:-0.03em}pre{margin:0;padding-top:2rem;border-top:1px solid var(--notice-line);white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.65 ui-monospace,Menlo,Consolas,monospace}::selection{background:var(--notice-selection);color:var(--notice-title)}</style><body><h1>Third-party notices</h1><pre>${safe}</pre></body></html>`;
+  return `<!doctype html><html lang="en"><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="color-scheme" content="${scheme}"><title>Third-party notices | o7</title><style>html{color-scheme:${scheme};${light};background:var(--notice-bg);color:var(--notice-fg);font:14px/1.6 ui-sans-serif,system-ui,sans-serif;-webkit-font-smoothing:antialiased}${dark}body{max-width:72rem;margin:clamp(2rem,6vw,6rem) auto;padding:0 1.25rem}h1{margin:0 0 2rem;color:var(--notice-title);font-size:2rem;line-height:1.2;font-weight:500;letter-spacing:-0.03em}pre{margin:0;padding-top:2rem;border-top:1px solid var(--notice-line);white-space:pre-wrap;overflow-wrap:anywhere;font:13px/1.65 ui-monospace,Menlo,Consolas,monospace}::selection{background:var(--notice-selection);color:var(--notice-title)}</style><body><h1>Third-party notices</h1><pre>${safe}</pre></body></html>`;
 }
 
 const virtualNotices = "virtual:third-party-notices";

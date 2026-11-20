@@ -69,7 +69,7 @@ mv "$probe" "$dest/$(basename "$probe")"
 mv "$gui" "$dest/$(basename "$gui")"
 
 cat >"$dest/README.txt" <<EOF
-auracode: the Windows spawning spike's test build, from CI (commit ${GITHUB_SHA:-unknown}).
+o7: the Windows spawning spike's test build, from CI (commit ${GITHUB_SHA:-unknown}).
 
 These three files work from any folder, as long as they stay together:
   windows-spawn-tests$ext   the spike's integration tests (tests/spawn.rs)

@@ -1,15 +1,15 @@
-//! The agents auracode can start, and what it takes to start each one.
+//! The agents o7 can start, and what it takes to start each one.
 //!
 //! - [`catalog`](mod@catalog): the data. Each [`AgentSpec`] names its driver, its dialect, how to find and run it
 //!   ([`Recipe`]), its start timeout, the vendor daemons the kill rule spares, and the version last
-//!   verified with auracode.
+//!   verified with o7.
 //! - [`Detector`]: whether each agent can start here ([`Availability`]), probed with the resolved,
 //!   scrubbed env and cached; and the launch spec of one start, which installs an npm adapter the
 //!   first time ([`Detector::prepare_launch`]). Other crates' tests use [`Detector::fixed`], whose
 //!   [`FixedAgent`]s answer as given.
 //!
 //! The catalog lists connections; people see one entry per agent. Claude Code and Codex each have
-//! auracode's own driver and an npm ACP adapter, Antigravity and Grok Build an ACP server and a
+//! o7's own driver and an npm ACP adapter, Antigravity and Grok Build an ACP server and a
 //! restricted text fallback, and OpenCode its 1.x and 2.x lines: [`Detector::cached`] shows each
 //! as one agent, and [`Detector::choose_connection`] picks the connection of a new session
 //! (Automatic, or the agent's Connection setting on this device).

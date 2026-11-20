@@ -733,7 +733,7 @@ async fn agent_config_and_oversized_files_are_excluded_without_becoming_deletion
     );
 }
 
-/// A worktree chat runs in a folder auracode created inside the profile's worktrees folder. The
+/// A worktree chat runs in a folder o7 created inside the profile's worktrees folder. The
 /// profile folder is protected, so every prompt of such a chat was held before reaching the agent.
 /// The rest of the profile, and the worktrees folder itself, stay refused.
 #[tokio::test]

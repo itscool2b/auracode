@@ -1,4 +1,4 @@
-//! Identifiers for everything auracode stores.
+//! Identifiers for everything o7 stores.
 
 /// A new UUIDv7 as a lowercase, hyphenated string.
 ///

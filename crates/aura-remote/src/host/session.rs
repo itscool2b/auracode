@@ -284,7 +284,7 @@ fn choices(list: Vec<crate::backend::Choice>) -> Vec<wire::Choice> {
 
 /// The app answered an action with something other than what that action returns.
 fn unexpected() -> BackendError {
-    BackendError::new("failed", "This computer's auracode answered unexpectedly.")
+    BackendError::new("failed", "This computer's o7 answered unexpectedly.")
 }
 
 /// Starts a request. `Err` ends the session: the request broke the protocol.
@@ -334,7 +334,7 @@ fn start(
                 id,
                 Err(BackendError::new(
                     "expired",
-                    "This pairing link is no longer open. Create a new one in auracode.",
+                    "This pairing link is no longer open. Create a new one in o7.",
                 )),
             ),
             Err(error) => reply(

@@ -1,6 +1,6 @@
 [package]
 name = "aura-agents"
-description = "The agents auracode can start: the catalog, detection, the one-time adapter install, and launch specs"
+description = "The agents o7 can start: the catalog, detection, the one-time adapter install, and launch specs"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

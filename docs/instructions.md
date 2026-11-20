@@ -33,8 +33,8 @@ same environment agents run in (`CLAUDE_CONFIG_DIR`, `CODEX_HOME`, `PI_CODING_AG
 
 The mode is read from the files, not stored: if every agent that reads something reads the same text,
 the scope is **one file**; if agents read different text it is **per agent**; with no text anywhere it
-is **none**. A local record (`<data>/instructions/managed.json`) remembers which files auracode keeps
-as managed copies, so a hand edit can be told from a stale copy. It lives in auracode's data folder,
+is **none**. A local record (`<data>/instructions/managed.json`) remembers which files o7 keeps
+as managed copies, so a hand edit can be told from a stale copy. It lives in o7's data folder,
 never in a project or an agent folder.
 
 ### One file for every agent
@@ -48,7 +48,7 @@ agent is reached by the least invasive official mechanism:
    `.claude/CLAUDE.md` or `CLAUDE.local.md` is in the folder or a parent folder.
 2. **Official import** otherwise: `CLAUDE.md` containing `@AGENTS.md`. A `CLAUDE.md` that holds only
    imports of the shared file, or is a link to it, is detected as one-file already.
-3. **Managed copy** only where neither works: a byte-identical copy auracode keeps in sync and
+3. **Managed copy** only where neither works: a byte-identical copy o7 keeps in sync and
    labels as such. In practice this happens only at user scope, where agents' files live in
    different folders.
 
@@ -103,7 +103,7 @@ keep what they started with and new sessions read the new files.
 
 A worktree checks out only what Git tracks, so a project's instruction files that Git ignores (a
 local `AGENTS.md` or `CLAUDE.md`, say) would be missing from every new worktree chat. By default
-auracode copies them in, from the source folder into the new worktree, before the chat's agent
+o7 copies them in, from the source folder into the new worktree, before the chat's agent
 starts. This happens for a new worktree chat (after its worktree setup, so a setup copy of the same
 file is kept), for a chat isolated into a worktree, and for a recreated worktree.
 
@@ -136,8 +136,8 @@ behaviour is not modelled.
 | OpenCode (`opencode`, `opencode-v2`) | First of `AGENTS.md`, `CLAUDE.md` [N1] | `~/.config/opencode/AGENTS.md`, else `~/.claude/CLAUDE.md` [N1] | None ("doesn't automatically parse file references") [N1] | None |
 | Hermes (`hermes`) | First of `.hermes.md`, `HERMES.md`, `AGENTS.override.md`, `AGENTS.md`, `CLAUDE.md`, `.cursorrules` [H1][H2] | None (`SOUL.md` sets identity) [H1] | None | Head and tail cut over the character cap, at least 20,000 [H1] |
 | Cursor (`cursor`) | `AGENTS.md` and `CLAUDE.md` both apply [U1][U2] | None (user rules live in settings and `~/.cursor/rules`) [U3] | None | Suggests under 500 lines [U2] |
-| Grok Build (`grok`, `grok-stream`) | Every one of `AGENTS.md`, `AGENT.md`, `CLAUDE.md`, `CLAUDE.local.md`, `.claude/CLAUDE.md`, `.claude/CLAUDE.local.md`; files Git ignores are skipped [G1][G2] | Every `*.md` in `$GROK_HOME/rules`, default `~/.grok/rules`; auracode uses `rules/AGENTS.md` [G1][G2][G3] | None documented | None ("loaded in full") [G1] |
-| Antigravity (`antigravity`, `agy-stream`) | `AGENTS.md`, `GEMINI.md`, `.agents/AGENTS.md`, `.agents/GEMINI.md`, cumulative [A1] | `~/.gemini/AGENTS.md`, `~/.gemini/GEMINI.md` [A1] | `@[label](path)` (not used by auracode) [A1] | Cuts a file at 24,000 bytes [A1] |
+| Grok Build (`grok`, `grok-stream`) | Every one of `AGENTS.md`, `AGENT.md`, `CLAUDE.md`, `CLAUDE.local.md`, `.claude/CLAUDE.md`, `.claude/CLAUDE.local.md`; files Git ignores are skipped [G1][G2] | Every `*.md` in `$GROK_HOME/rules`, default `~/.grok/rules`; o7 uses `rules/AGENTS.md` [G1][G2][G3] | None documented | None ("loaded in full") [G1] |
+| Antigravity (`antigravity`, `agy-stream`) | `AGENTS.md`, `GEMINI.md`, `.agents/AGENTS.md`, `.agents/GEMINI.md`, cumulative [A1] | `~/.gemini/AGENTS.md`, `~/.gemini/GEMINI.md` [A1] | `@[label](path)` (not used by o7) [A1] | Cuts a file at 24,000 bytes [A1] |
 
 All of them walk up to parent folders in some form; the page lists instruction files in parent folders
 and in subfolders read-only (with which agents read them and when), and edits only the scope's own
@@ -183,7 +183,7 @@ Each case has defined behaviour and a test (`aura-config` unless named otherwise
 | `CLAUDE.md` that imports `AGENTS.md`, or links to it | Detected as one file; saving through a link writes its target | `a_claude_md_that_imports_or_links_to_agents_md_is_already_universal` (link part needs symlink privileges) |
 | Case variants (`agents.md`) on Windows and macOS | Found, read, saved under the existing spelling; renamed only on request | `a_case_variant_is_read_kept_on_save_and_renamed_only_on_request` |
 | Two names differing only by case side by side (case-sensitive file systems) | Read-only with a note | Not tested: Windows and macOS (the release targets) cannot hold both names in one folder |
-| Edit outside auracode between review and apply | Refused before any write; review again | `an_edit_outside_auracode_after_the_review_is_refused_before_any_write`, `apply::tests::*refuses*` |
+| Edit outside o7 between review and apply | Refused before any write; review again | `an_edit_outside_auracode_after_the_review_is_refused_before_any_write`, `apply::tests::*refuses*` |
 | A managed copy edited by hand | "Edited copy" row; restore the source's text or adopt the edit everywhere; saving the source leaves it alone | `a_hand_edited_managed_copy_shows_drift_and_can_be_restored_or_adopted`; browser: drift flow |
 | Read-only files | Shown with their text, not writable, with the reason | `read_only_files_are_shown_and_never_written` |
 | Locked files and permission errors | The failing write stops, every changed file is put back, the message says the file may be locked or read-only | `a_failure_part_way_puts_back_every_file`, `apply::tests::a_failure_part_way_puts_every_changed_file_back` |

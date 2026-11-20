@@ -12,7 +12,7 @@ use aura_protocol::{
 const PROMPT_CHARS: usize = 2_000;
 const ANSWER_CHARS: usize = 6_000;
 const STEPS: usize = 12;
-/// How Aura begins the project memory it attaches after a prompt
+/// How o7 begins the project memory it attaches after a prompt
 /// (`crates/aura-core/src/chatstore/memory.rs`). It is reference context, not the person's words.
 const MEMORY: &str = "\n\nProject memory (Aura reference context, revision ";
 
@@ -305,7 +305,7 @@ fn waiting(request: &Waiting) -> String {
     }
 }
 
-/// A prompt without the project memory Aura attached after it.
+/// A prompt without the project memory o7 attached after it.
 fn person(prompt: &str) -> &str {
     match prompt.find(MEMORY) {
         Some(at) if prompt[at..].contains("\nUse this as project background.") => &prompt[..at],

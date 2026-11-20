@@ -193,7 +193,7 @@ mod tests {
         );
     }
 
-    /// Never `allow_always`; and A7: an option of a kind auracode does not know is shown, never
+    /// Never `allow_always`; and A7: an option of a kind o7 does not know is shown, never
     /// auto-selected.
     #[test]
     fn policy_only_ever_picks_the_first_allow_once() {

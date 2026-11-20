@@ -1,4 +1,4 @@
-//! The auracode executable. Everything lives in the library (`auracode_desktop`), where tests and
+//! The o7 executable. Everything lives in the library (`auracode_desktop`), where tests and
 //! the bindings export can reach it.
 
 // No console window behind the app in Windows release builds.
@@ -30,7 +30,7 @@ fn main() {
         aura_core::coordinator_service::run_helper();
         return;
     }
-    // `auracode --uninstall-cleanup` deletes auracode's data and exits; nothing else starts.
+    // `auracode --uninstall-cleanup` deletes o7's data and exits; nothing else starts.
     if let Some(code) = auracode_desktop::uninstall::run_from_args() {
         std::process::exit(code);
     }
@@ -43,7 +43,7 @@ fn main() {
 #[cfg(target_os = "linux")]
 const NVIDIA_SWITCH: &str = "__NV_DISABLE_EXPLICIT_SYNC";
 
-/// What auracode sets for itself on Linux before anything starts, which only a new process can
+/// What o7 sets for itself on Linux before anything starts, which only a new process can
 /// take (changing its own env is unsafe once anything could read it). The program runs itself
 /// again with them (same process, same arguments), once: `AURACODE_LAUNCH_SET` names them, so the
 /// new process does not run again and agents do not inherit them
@@ -60,7 +60,7 @@ const NVIDIA_SWITCH: &str = "__NV_DISABLE_EXPLICIT_SYNC";
 ///   view drew 12 to 25 against 60. So the app sets the driver's switch, unless the person set
 ///   either variable themselves.
 /// - **GStreamer in an AppImage** (`auracode_desktop::browser::media::launch_env`): a registry of
-///   auracode's own, and an image without plugins of its own uses the system's.
+///   o7's own, and an image without plugins of its own uses the system's.
 #[cfg(target_os = "linux")]
 fn relaunch_with_launch_env() {
     use std::os::unix::process::CommandExt;
@@ -86,10 +86,7 @@ fn relaunch_with_launch_env() {
         .envs(set.iter().map(|(name, value)| (*name, value)))
         .env(aura_process::LAUNCH_SET_ENV, names.join(":"))
         .exec();
-    eprintln!(
-        "auracode: could not restart with {}: {error}",
-        names.join(", ")
-    );
+    eprintln!("o7: could not restart with {}: {error}", names.join(", "));
 }
 
 /// What [`relaunch_with_launch_env`] sets: nothing when this process is already the re-run (or

@@ -1,6 +1,6 @@
 /**
- * Whether a chat shows as Chat (auracode's interface) or Terminal (its agent's own interface in
- * auracode's terminal; docs/superpowers/plans/2026-11-06-terminal-chats.md). The choice is this
+ * Whether a chat shows as Chat (o7's interface) or Terminal (its agent's own interface in
+ * o7's terminal; docs/superpowers/plans/2026-11-06-terminal-chats.md). The choice is this
  * device's: a terminal needs the agent's CLI here, and the chat's saved record stays as it was.
  * New chats take the default saved here.
  */

@@ -42,7 +42,7 @@ pub enum UrlTarget {
     },
 }
 
-/// A detected editor's launcher. The editor belongs to the person: auracode starts it detached,
+/// A detected editor's launcher. The editor belongs to the person: o7 starts it detached,
 /// with the reviewed environment and no inherited handles, and never waits for or stops it.
 pub struct EditorLaunch {
     pub program: PathBuf,
@@ -86,7 +86,7 @@ impl EditorLaunch {
         #[cfg(unix)]
         if !self.wait {
             use std::os::unix::process::CommandExt;
-            // Its own process group, so the editor never shares auracode's signals.
+            // Its own process group, so the editor never shares o7's signals.
             command.process_group(0);
         }
         let mut child = aura_process::spawn_command(&mut command)?;
@@ -334,7 +334,7 @@ impl SessionManager {
     fn folder_use_refused(&self, then: &str) -> SessionError {
         invalid(if self.shared().live.quiescing_now() {
             format!(
-                "auracode is pausing new work to install an update, switch profile or move a chat's folder. Once that finishes, {then} again."
+                "o7 is pausing new work to install an update, switch profile or move a chat's folder. Once that finishes, {then} again."
             )
         } else {
             format!(

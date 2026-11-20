@@ -843,7 +843,7 @@ fn marker(directory: &Dir, name: &str) -> Result<()> {
 }
 
 impl Library {
-    /// An agent's MCP server as one native `mcpServers` value for auracode's shared MCP, which
+    /// An agent's MCP server as one native `mcpServers` value for o7's shared MCP, which
     /// gives it to every agent. Reparsed strictly and checked against the revision the person
     /// reviewed, as a copy is; credentials in `env` and `headers` travel only to this device's
     /// local credential store (`mcp::shareable`).

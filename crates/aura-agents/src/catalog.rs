@@ -1,7 +1,7 @@
-//! The catalog: every agent auracode knows, as data.
+//! The catalog: every agent o7 knows, as data.
 //!
 //! Each entry is one *connection*: one way to start an agent. Most agents have one. Claude Code
-//! and Codex have two (auracode's own driver for the CLI, and an npm ACP adapter), Antigravity and
+//! and Codex have two (o7's own driver for the CLI, and an npm ACP adapter), Antigravity and
 //! Grok Build have their ACP server and a restricted text fallback, and OpenCode's 1.x and 2.x
 //! lines are qualified separately. People see one agent ([`AgentSpec::agent`]); which connection
 //! a new session uses is the device's Connection setting, Automatic by default (the first
@@ -9,7 +9,7 @@
 //!
 //! The npm adapters' version floors are the CLI versions they bundle (claude-agent-acp 0.95.0
 //! bundles the Agent SDK with Claude Code 2.1.309; codex-acp 2.2.2 depends on `@openai/codex`
-//! ^0.160.1). auracode always drives the user's own CLI behind an adapter, forced through the
+//! ^0.160.1). o7 always drives the user's own CLI behind an adapter, forced through the
 //! adapter's variable ([`UserBinary::env`]), never the one the adapter bundles.
 
 use std::sync::LazyLock;
@@ -41,7 +41,7 @@ pub struct AgentSpec {
     pub turns_survive_process: bool,
     /// Copied into the launch spec: spared by the kill rule.
     pub daemons: Vec<DaemonMatch>,
-    /// The version auracode was last verified with, for the "untested version" badge.
+    /// The version o7 was last verified with, for the "untested version" badge.
     pub last_verified: &'static str,
 }
 
@@ -81,7 +81,7 @@ pub enum Recipe {
         min_node_major: u32,
         user_binary: UserBinary,
     },
-    /// Runs inside auracode (the demo agent); no process.
+    /// Runs inside o7 (the demo agent); no process.
     Builtin,
 }
 
@@ -97,7 +97,7 @@ pub struct UserBinary {
     pub min_version: &'static str,
 }
 
-/// Every connection auracode knows, its agents in the order the New chat screen lists them and
+/// Every connection o7 knows, its agents in the order the New chat screen lists them and
 /// each agent's connections in preference order. Built once.
 pub fn catalog() -> &'static [AgentSpec] {
     static CATALOG: LazyLock<Vec<AgentSpec>> = LazyLock::new(build_catalog);
@@ -117,7 +117,7 @@ pub fn agent_of(id: &str) -> &str {
 }
 
 /// The agent `id` names has an interactive interface of its own that a chat can open in
-/// auracode's terminal (`aura_drivers::terminal::TerminalAgent` builds its launch).
+/// o7's terminal (`aura_drivers::terminal::TerminalAgent` builds its launch).
 pub fn has_terminal(id: &str) -> bool {
     matches!(
         agent_of(id),
@@ -435,7 +435,7 @@ fn build_catalog() -> Vec<AgentSpec> {
             agent: "mock",
             connection: "Built in",
             name: "Demo agent (scripted, no AI)",
-            description: "A scripted agent for trying auracode without an AI: it streams a demo turn, asks for permissions and questions, and can fail on purpose.",
+            description: "A scripted agent for trying o7 without an AI: it streams a demo turn, asks for permissions and questions, and can fail on purpose.",
             kind: DriverKind::Mock,
             dialect: "mock",
             recipe: Recipe::Builtin,

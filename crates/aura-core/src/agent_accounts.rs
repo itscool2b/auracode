@@ -312,7 +312,7 @@ impl AgentAccountsStore {
     }
 
     /// The saved record. A damaged file is set aside and the list starts empty; its tokens stay in
-    /// secure storage. A file from a newer auracode is refused, so it is never overwritten.
+    /// secure storage. A file from a newer o7 is refused, so it is never overwritten.
     fn read(&self) -> Result<Record, AccountError> {
         match read_json::<serde_json::Value>(&self.path) {
             JsonFile::Missing => Ok(Record {
@@ -326,8 +326,7 @@ impl AgentAccountsStore {
                     .is_some_and(|version| version > u64::from(VERSION))
                 {
                     return Err(AccountError::Unavailable(
-                        "A newer auracode saved these accounts. Update auracode to use them."
-                            .into(),
+                        "A newer o7 saved these accounts. Update o7 to use them.".into(),
                     ));
                 }
                 match serde_json::from_value::<Record>(value) {

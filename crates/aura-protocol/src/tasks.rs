@@ -22,7 +22,7 @@ lenient_enum! {
         Agent = "agent",
         /// A shell command.
         Command = "command",
-        /// A kind auracode does not know (an agent's newer kind, or a newer build's).
+        /// A kind o7 does not know (an agent's newer kind, or a newer build's).
         Other = "other",
     }
     fallback = Other;
@@ -64,7 +64,7 @@ pub struct BackgroundTask {
     pub tokens: Option<u64>,
     /// How long it ran, as the agent reported it.
     pub duration_ms: Option<u64>,
-    /// When auracode first heard of it.
+    /// When o7 first heard of it.
     pub started_at: Option<Millis>,
     pub ended_at: Option<Millis>,
     /// What the task was asked to do, cut to 4 KiB. `None` keeps the prompt already known.

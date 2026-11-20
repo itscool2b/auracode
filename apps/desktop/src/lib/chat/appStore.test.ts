@@ -48,7 +48,7 @@ describe("the app store", () => {
       chatsList: () =>
         unavailable-- > 0
           ? Promise.reject(
-              new CommandError("storage_unavailable", "auracode's database is not available."),
+              new CommandError("storage_unavailable", "o7's database is not available."),
             )
           : Promise.resolve([chatSummary("kept", { updated_at: 1 })]),
     });

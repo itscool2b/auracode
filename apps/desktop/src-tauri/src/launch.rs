@@ -318,7 +318,7 @@ fn smoke_plan(
                 return Err(SmokeSetupError::new(
                     Some(scenario),
                     format!(
-                        "{SMOKE_AGENT_ENV}=\"{id}\" is not an agent auracode knows ({}).",
+                        "{SMOKE_AGENT_ENV}=\"{id}\" is not an agent o7 knows ({}).",
                         known.join(", ")
                     ),
                 ));
@@ -462,7 +462,7 @@ impl LaunchOptions {
     /// this one's window and exit. The plugin recognizes the running instance by the bundle
     /// identifier alone, so every launch on the machine counts as the same app. Two kinds of
     /// launch run on their own instead: a smoke run, which has to run even while someone has
-    /// auracode open, and a launch with its own data folder, which would otherwise exit without
+    /// o7 open, and a launch with its own data folder, which would otherwise exit without
     /// ever opening it. Such a launch never hands over to a running instance, and later launches
     /// never hand over to it. Sharing data with a running instance is safe: aura-core coordinates
     /// processes that open the same database.
@@ -864,7 +864,7 @@ mod tests {
             Some(Err(setup_error(
                 Some(SmokeScenario::Agent),
                 &format!(
-                    "AURACODE_SMOKE_AGENT=\"gpt-cli\" is not an agent auracode knows ({}).",
+                    "AURACODE_SMOKE_AGENT=\"gpt-cli\" is not an agent o7 knows ({}).",
                     aura_agents::catalog()
                         .iter()
                         .map(|spec| spec.id)

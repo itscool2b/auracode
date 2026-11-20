@@ -1,7 +1,7 @@
-//! Where auracode's data lives on each platform.
+//! Where o7's data lives on each platform.
 //!
-//! Every folder here is named after the bundle identifier, so it is auracode's alone; a data folder
-//! chosen with `AURACODE_DATA_DIR` is not, and only the entries auracode made in it go.
+//! Every folder here is named after the bundle identifier, so it is o7's alone; a data folder
+//! chosen with `AURACODE_DATA_DIR` is not, and only the entries o7 made in it go.
 
 use std::path::PathBuf;
 
@@ -57,10 +57,10 @@ impl PlatformDirs {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Targets {
     pub scope: Scope,
-    /// Folders named after auracode, removed whole (around kept worktrees). In machine scope the
+    /// Folders named after o7, removed whole (around kept worktrees). In machine scope the
     /// first is the default data folder.
     pub owned_dirs: Vec<PathBuf>,
-    /// Files named after auracode: macOS preferences and cookies, the single-instance socket.
+    /// Files named after o7: macOS preferences and cookies, the single-instance socket.
     pub owned_files: Vec<PathBuf>,
     /// Data folders chosen with `AURACODE_DATA_DIR`: only [`super::DATA_ENTRIES`] go.
     pub shared_roots: Vec<PathBuf>,
@@ -72,7 +72,7 @@ pub struct Targets {
 
 impl Targets {
     /// Everything for this user on this machine: the default data folder, the platform's folders
-    /// for auracode, and `env_root` (a data folder from `AURACODE_DATA_DIR`) when there is one.
+    /// for o7, and `env_root` (a data folder from `AURACODE_DATA_DIR`) when there is one.
     pub fn machine(os: Os, dirs: &PlatformDirs, env_root: Option<PathBuf>) -> Targets {
         let id = APP_IDENTIFIER;
         let mut owned_dirs = Vec::new();
@@ -144,7 +144,7 @@ impl Targets {
         }
     }
 
-    /// One data folder chosen with `AURACODE_DATA_DIR`, alone: what auracode made in it, nothing
+    /// One data folder chosen with `AURACODE_DATA_DIR`, alone: what o7 made in it, nothing
     /// of the installed app's.
     pub fn data_folder(root: PathBuf) -> Targets {
         Targets {

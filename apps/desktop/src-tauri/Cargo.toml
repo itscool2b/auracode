@@ -1,6 +1,6 @@
 [package]
 name = "auracode-desktop"
-description = "The auracode desktop shell: Tauri window, typed commands and channels over aura-core's sessions"
+description = "The o7 desktop shell: Tauri window, typed commands and channels over aura-core's sessions"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -119,7 +119,7 @@ image = { version = "0.25.10", default-features = false, features = ["png", "jpe
 [target.'cfg(target_os = "macos")'.dependencies]
 # The login keychain, for added agent accounts' tokens.
 apple-native-keyring-store = { version = "1.0.2", default-features = false, features = ["keychain"] }
-# "Delete data and move auracode to the Trash" (uninstall.rs): NSFileManager's trashItemAtURL.
+# "Delete data and move o7 to the Trash" (uninstall.rs): NSFileManager's trashItemAtURL.
 # Already in the tree through Tauri, at this version.
 objc2-foundation = { version = "0.3.2", default-features = false, features = ["std", "NSError", "NSFileManager", "NSString", "NSURL"] }
 

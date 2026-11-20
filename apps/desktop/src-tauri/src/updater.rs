@@ -129,7 +129,7 @@ pub struct UpdateStatus {
     pub phase: UpdatePhase,
     /// The version running now.
     pub current_version: String,
-    /// Whether auracode looks for a newer version by itself (Settings, General).
+    /// Whether o7 looks for a newer version by itself (Settings, General).
     pub automatic: bool,
     /// The newer version, once a check has found one.
     pub version: Option<String>,
@@ -266,7 +266,7 @@ impl Updates {
 
 fn available(state: &AppState, updates: &Updates) -> Result<Source, UpdateError> {
     if state.quit.is_quitting() {
-        return Err(error("auracode is already closing."));
+        return Err(error("o7 is already closing."));
     }
     if !cfg!(any(windows, target_os = "macos", target_os = "linux")) || state.launch.is_smoke() {
         return Err(error(
@@ -301,7 +301,7 @@ pub async fn app_update_check(
 }
 
 /// Reads the manifest and records whether it offers a newer version. A check the person asked for
-/// shows its failure; one auracode made by itself leaves no trace when it fails (being offline is
+/// shows its failure; one o7 made by itself leaves no trace when it fails (being offline is
 /// not news), and never disturbs a download or an installation.
 async fn check(
     app: &tauri::AppHandle,
@@ -669,7 +669,7 @@ pub async fn app_update_install(app: tauri::AppHandle) -> Result<UpdateStatus, U
             let updates = app.state::<Updates>();
             updates.phase(
                 UpdatePhase::RestartRequired,
-                Some("The update task failed. Restart auracode before retrying.".into()),
+                Some("The update task failed. Restart o7 before retrying.".into()),
             );
             Ok(updates.report(&app))
         }
@@ -696,9 +696,9 @@ async fn install(app: tauri::AppHandle) -> Result<UpdateStatus, UpdateError> {
         // installed, no chat is stopped and the app keeps running.
         return Ok(rehearse(&app, &updates).await);
     }
-    let chats = state.chats().ok_or_else(|| {
-        error("The current profile is unavailable. Restart auracode before updating.")
-    })?;
+    let chats = state
+        .chats()
+        .ok_or_else(|| error("The current profile is unavailable. Restart o7 before updating."))?;
     if !matches!(
         chats.manager.storage_status().state,
         aura_protocol::session::StorageState::Ok
@@ -741,7 +741,7 @@ async fn install(app: tauri::AppHandle) -> Result<UpdateStatus, UpdateError> {
         return Ok(updates.report(&app));
     };
     if state.quit.on_exit_requested() != ExitRequest::StartQuit {
-        return Err(error("auracode is already closing."));
+        return Err(error("o7 is already closing."));
     }
     updates.phase(UpdatePhase::Installing, None);
     let outcome = sessions::run_quit(
@@ -766,7 +766,7 @@ async fn install(app: tauri::AppHandle) -> Result<UpdateStatus, UpdateError> {
             summary: Some(summary),
         } if summary.forced == 0 => {}
         _ => {
-            updates.phase(UpdatePhase::RestartRequired, Some("Cleanup could not be confirmed. The update was not installed. Restart auracode before retrying.".into()));
+            updates.phase(UpdatePhase::RestartRequired, Some("Cleanup could not be confirmed. The update was not installed. Restart o7 before retrying.".into()));
             return Ok(updates.report(&app));
         }
     }
@@ -786,7 +786,13 @@ async fn install(app: tauri::AppHandle) -> Result<UpdateStatus, UpdateError> {
     match tauri::async_runtime::spawn_blocking(move || pending.update.install(bytes)).await {
         Ok(Ok(())) => app.restart(),
         _ => {
-            updates.phase(UpdatePhase::RestartRequired, Some("The installer failed after storage closed. Restart auracode and retry the update.".into()));
+            updates.phase(
+                UpdatePhase::RestartRequired,
+                Some(
+                    "The installer failed after storage closed. Restart o7 and retry the update."
+                        .into(),
+                ),
+            );
             Ok(updates.report(&app))
         }
     }

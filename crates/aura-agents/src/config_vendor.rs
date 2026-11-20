@@ -124,10 +124,10 @@ pub fn prepare(
         "Changes this device's personal agent configuration. Project and cloud-managed integrations are excluded.".into(),
         "The vendor may download or execute third-party code. Review its terminal prompts before agreeing. No confirmation is supplied automatically.".into(),
         "Closing the terminal or reaching ten minutes stops this owned command. Partial vendor changes are retained; refresh the Library before retrying. There is no automatic rollback of downloaded code.".into(),
-        "Terminal output is not logged or synchronized. auracode does not inspect vendor credentials. Refresh the Library after completion to verify the result.".into(),
+        "Terminal output is not logged or synchronized. o7 does not inspect vendor credentials. Refresh the Library after completion to verify the result.".into(),
     ];
     if request.kind == K::Native {
-        notices=vec![format!("Opens this agent's native interactive CLI. Use its {} customization screen or command. No slash command is typed automatically.",request.target),"Native changes belong to this agent and device. They do not become Aura shared MCP definitions. The terminal is not logged or synchronized.".into(),"Closing the terminal stops this owned process. Existing native homes and configuration locations are preserved.".into()];
+        notices=vec![format!("Opens this agent's native interactive CLI. Use its {} customization screen or command. No slash command is typed automatically.",request.target),"Native changes belong to this agent and device. They do not become o7 shared MCP definitions. The terminal is not logged or synchronized.".into(),"Closing the terminal stops this owned process. Existing native homes and configuration locations are preserved.".into()];
     }
     if request.kind == K::Marketplace && request.action == A::Remove {
         notices.push("Removing this marketplace can uninstall its plugins and delete their vendor-managed data, options and secrets. This cannot be undone by Library copy history.".into());

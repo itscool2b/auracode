@@ -348,7 +348,7 @@ pub fn assemble(facts: &PluginFacts) -> PluginLibrary {
                 ],
             ),
             "opencode" => {
-                const OPENCODE: &str = "OpenCode installs its plugins and checks its servers whenever it runs, so auracode reads ~/.config/opencode instead.";
+                const OPENCODE: &str = "OpenCode installs its plugins and checks its servers whenever it runs, so o7 reads ~/.config/opencode instead.";
                 let servers = extensions
                     .servers
                     .iter()
@@ -468,7 +468,7 @@ pub fn assemble(facts: &PluginFacts) -> PluginLibrary {
                         ));
                     }
                 }
-                features.push(FeatureListing{feature:PluginFeature::Plugins,state:ListingState::Unavailable{reason:"This agent has no qualified structured plugin-management interface in Aura. Open its native customization route for supported plugins, hooks, rules and memory.".into()},command:None,entries:Vec::new(),available:Vec::new(),available_total:0});
+                features.push(FeatureListing{feature:PluginFeature::Plugins,state:ListingState::Unavailable{reason:"This agent has no qualified structured plugin-management interface in o7. Open its native customization route for supported plugins, hooks, rules and memory.".into()},command:None,entries:Vec::new(),available:Vec::new(),available_total:0});
                 (
                     PluginSystem::Declared,
                     "Native customization capabilities vary by agent and installed version. Reviewed file inventory and named native routes are shown where available.",

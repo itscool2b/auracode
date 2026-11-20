@@ -31,7 +31,7 @@ pub const REMOTE_CHANGED: &str = "auracode-remote-changed";
 /// History pages a browser asks for after the first: small enough to seal into one message.
 const PAGE_BYTES: u32 = 256 * 1024;
 
-/// The relay and the website it belongs to. Release builds reach only auracode's own; a
+/// The relay and the website it belongs to. Release builds reach only o7's own; a
 /// development build may name a relay on this machine. The site was auracode.si until
 /// 19 November 2026: the relay still answers there for copies from before the move
 /// (docs/remote-sessions.md), and a copy from after it never goes there.

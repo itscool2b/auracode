@@ -13,7 +13,7 @@ pub enum McpTransport {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(deny_unknown_fields)]
 pub struct McpDefinition {
-    /// Stable Aura ID, shared by an all-project definition and its project override.
+    /// Stable o7 ID, shared by an all-project definition and its project override.
     pub id: String,
     pub name: String,
     /// None means all projects. A project UUID means every folder and worktree in that project.

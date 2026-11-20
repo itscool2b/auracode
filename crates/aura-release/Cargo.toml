@@ -1,6 +1,6 @@
 [package]
 name = "aura-release"
-description = "Offline preparation and verification of auracode release artifacts"
+description = "Offline preparation and verification of o7 release artifacts"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

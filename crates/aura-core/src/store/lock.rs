@@ -1,4 +1,4 @@
-//! The open lock: an advisory lock on `<db>.lock` that coordinates every auracode process using a
+//! The open lock: an advisory lock on `<db>.lock` that coordinates every o7 process using a
 //! profile database.
 //!
 //! - [`Store::open`](super::Store::open) takes it exclusively for the whole open: probe, repair,

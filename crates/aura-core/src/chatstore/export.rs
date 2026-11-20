@@ -137,7 +137,7 @@ fn read(conn: &Connection, chat_id: &str, max_source: u64) -> rusqlite::Result<S
         });
     }
     let mut output = format!(
-        "# Saved auracode conversation\n\n{}\nSaved through event {}. Running turns may still be incomplete. This snapshot excludes queued drafts, binary attachments and external tool blobs; their visible text references remain.\n\n",
+        "# Saved o7 conversation\n\n{}\nSaved through event {}. Running turns may still be incomplete. This snapshot excludes queued drafts, binary attachments and external tool blobs; their visible text references remain.\n\n",
         fenced(&title),
         last.map_or_else(|| "none".into(), |seq| seq.to_string())
     );

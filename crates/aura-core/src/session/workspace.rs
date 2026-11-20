@@ -216,7 +216,7 @@ impl SessionManager {
     }
 
     /// What a picked folder already is on this device: the project folders it is, however the
-    /// pick spelled it, and whether it is a worktree auracode manages. Both sides are compared
+    /// pick spelled it, and whether it is a worktree o7 manages. Both sides are compared
     /// canonical, as folder keys are, so a pick through a link or in other letter case on a
     /// case-insensitive file system finds its project instead of becoming a new one. The folder
     /// whose chat was active most recently comes first, then the workspace's order.

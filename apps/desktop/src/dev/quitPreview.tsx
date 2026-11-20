@@ -7,7 +7,7 @@ const QUESTION: QuitQuestion = {
   token: "preview",
   message: "One chat is still active. Quitting stops its agent.",
   quit: "Stop agents and quit",
-  keep: "Keep auracode open",
+  keep: "Keep o7 open",
 };
 
 export function mountQuitPreview(): void {

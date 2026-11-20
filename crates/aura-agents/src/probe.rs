@@ -189,7 +189,7 @@ pub(crate) fn missing_user_binary(binary: &UserBinary, lookup: &UserBinaryLookup
 fn missing_native_binary(binary: &UserBinary, lookup: &UserBinaryLookup) -> String {
     match lookup {
         UserBinaryLookup::ShimOnly(shim) => format!(
-            "auracode can't run the {shim} shell shim as native {label} on Windows. Install the standalone {label}, or set {env} to a {program}.exe.",
+            "o7 can't run the {shim} shell shim as native {label} on Windows. Install the standalone {label}, or set {env} to a {program}.exe.",
             shim = shim.file_name().map_or_else(
                 || shim.display().to_string(),
                 |name| name.to_string_lossy().into_owned()
@@ -413,7 +413,7 @@ async fn detect_inner(
                     .is_some_and(|found| version_at_least(found, floor))
             {
                 return Detection::broken(format!(
-                    "auracode needs {} {floor} or newer (found {}).",
+                    "o7 needs {} {floor} or newer (found {}).",
                     spec.name,
                     version.as_deref().unwrap_or("an unknown version")
                 ));
@@ -470,7 +470,7 @@ async fn detect_inner(
                 .is_some_and(|found| version_at_least(found, user_binary.min_version))
             {
                 return Detection::broken(format!(
-                    "auracode needs {} {} or newer (found {}).",
+                    "o7 needs {} {} or newer (found {}).",
                     user_binary.label,
                     user_binary.min_version,
                     version.as_deref().unwrap_or("an unknown version")
@@ -607,7 +607,7 @@ async fn detect_inner(
                 .is_some_and(|found| version_at_least(found, user_binary.min_version))
             {
                 return Detection::broken(format!(
-                    "auracode needs {} {} or newer (found {}).",
+                    "o7 needs {} {} or newer (found {}).",
                     user_binary.label,
                     user_binary.min_version,
                     user_version.as_deref().unwrap_or("an unknown version")
@@ -616,7 +616,7 @@ async fn detect_inner(
             let installed = installed_entry(&folder, package, version).is_some();
             if !installed && find_program("npm", &env.vars).is_none() {
                 return Detection::missing(
-                    "npm was not found; auracode needs it once to download the adapter.".into(),
+                    "npm was not found; o7 needs it once to download the adapter.".into(),
                 );
             }
             Detection {
@@ -713,7 +713,7 @@ mod tests {
         );
         assert_eq!(
             missing_native_binary(&binary, &lookup),
-            "auracode can't run the claude.cmd shell shim as native Claude Code on Windows. Install the standalone Claude Code, or set CLAUDE_CODE_EXECUTABLE to a claude.exe."
+            "o7 can't run the claude.cmd shell shim as native Claude Code on Windows. Install the standalone Claude Code, or set CLAUDE_CODE_EXECUTABLE to a claude.exe."
         );
 
         // A .exe elsewhere on PATH is used, even after the shim's folder.

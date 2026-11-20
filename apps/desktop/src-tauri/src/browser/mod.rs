@@ -2,9 +2,9 @@
 //! their pages, history, downloads and Annotate, and the browser tools agents use.
 //!
 //! A tab's page is a native webview of its own (wry: WebView2, WKWebView or WebKitGTK), a child of
-//! the main window placed over the panel's page area. It is not a Tauri webview: no auracode
+//! the main window placed over the panel's page area. It is not a Tauri webview: no o7
 //! command, protocol or IPC key reaches a guest page. Its one channel back is wry's message
-//! handler, which takes a few typed messages from auracode's page script ([`PAGE_SCRIPT`]) and
+//! handler, which takes a few typed messages from o7's page script ([`PAGE_SCRIPT`]) and
 //! checks each against the page the engine says sent it.
 //!
 //! The pages live on the main thread ([`host`]); everything else (the tab list, history, what the
@@ -42,7 +42,7 @@ pub use history::HistoryEntry;
 /// The window event every change of the browser goes out on.
 pub const EVENT: &str = "auracode-browser";
 
-/// auracode's page script, injected into every top document before the page's own scripts.
+/// o7's page script, injected into every top document before the page's own scripts.
 pub const PAGE_SCRIPT: &str = include_str!("page.js");
 
 /// Tabs one chat may have open.
@@ -51,14 +51,14 @@ pub const TAB_LIMIT: usize = 24;
 /// Pages loaded at once across every chat; the least recently used hidden ones sleep beyond it.
 pub const LIVE_LIMIT: usize = 10;
 
-/// How long a page script call may take before auracode gives up on it (a hung page, an `alert`).
+/// How long a page script call may take before o7 gives up on it (a hung page, an `alert`).
 pub const SCRIPT_TIMEOUT: Duration = Duration::from_secs(10);
 
 /// One tab of a chat's browser.
 #[derive(Debug, Clone, PartialEq, Serialize, specta::Type)]
 pub struct BrowserTab {
     pub id: String,
-    /// `None`: a new tab, which shows auracode's start page instead of a web page.
+    /// `None`: a new tab, which shows o7's start page instead of a web page.
     pub url: Option<String>,
     pub title: String,
     pub loading: bool,
@@ -1236,7 +1236,7 @@ impl Browser {
         Ok(pick.and_then(|pick| pick.elements.into_iter().next()))
     }
 
-    /// Calls the page script in a tab: `api` is auracode's page agent. Answers what the call
+    /// Calls the page script in a tab: `api` is o7's page agent. Answers what the call
     /// returned, or the page's error.
     pub(crate) async fn call(
         self: &Arc<Self>,
@@ -1249,7 +1249,7 @@ impl Browser {
         let answer = self.eval(tab_id, script, SCRIPT_TIMEOUT).await?;
         if answer.get("missing").is_some() {
             return Err(BrowserError::Page(
-                "auracode's page script is not running in this page (it may be a browser error page or a file auracode cannot script). Reload it, or open another address.".into(),
+                "o7's page script is not running in this page (it may be a browser error page or a file o7 cannot script). Reload it, or open another address.".into(),
             ));
         }
         if let Some(error) = answer.get("error").and_then(Value::as_str) {
@@ -1290,7 +1290,7 @@ impl Browser {
             .map_err(|error| BrowserError::Unavailable(error.to_string()))?;
         receiver
             .await
-            .map_err(|_| BrowserError::Unavailable("auracode is closing.".into()))
+            .map_err(|_| BrowserError::Unavailable("o7 is closing.".into()))
     }
 
     /// Every page goes to sleep (the plugin was turned off, or the profile is closing).
@@ -1634,7 +1634,7 @@ impl aura_core::browser_service::BrowserBridge for AgentBridge {
         Box::pin(async move {
             let Some(browser) = browser else {
                 return aura_core::browser_service::BrowserToolReply {
-                    text: "auracode is closing.".into(),
+                    text: "o7 is closing.".into(),
                     image: None,
                     error: true,
                 };
@@ -1714,7 +1714,7 @@ pub fn window_shown(app: &AppHandle, shown: bool) {
     let _ = app.run_on_main_thread(move || host::window_shown(shown));
 }
 
-/// auracode quits: every page closes and what changed is saved. On the main thread.
+/// o7 quits: every page closes and what changed is saved. On the main thread.
 pub fn shutdown(app: &AppHandle) {
     use tauri::Manager;
     if let Some(browser) = app.try_state::<Arc<Browser>>() {
@@ -1766,7 +1766,7 @@ fn color(value: &str) -> String {
     }
 }
 
-/// The value a script returned: engines hand back JSON, and auracode's scripts return a JSON
+/// The value a script returned: engines hand back JSON, and o7's scripts return a JSON
 /// string inside it.
 fn decode(raw: &str) -> Value {
     match serde_json::from_str::<Value>(raw) {

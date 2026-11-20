@@ -2,7 +2,7 @@ import { renderToStaticMarkup } from "react-dom/server";
 import { describe, expect, it } from "vitest";
 import { AgentConnect, CONNECT_SHOWN, connectState, placeTiles } from "./AgentConnect";
 
-describe("the agents joined to auracode", () => {
+describe("the agents joined to o7", () => {
   it("draws what each row shows, and leaves out an agent that is not here", () => {
     expect(connectState("ready", false)).toBe("connected");
     expect(connectState("signin", false)).toBe("signin");
@@ -30,7 +30,7 @@ describe("the agents joined to auracode", () => {
       state: index === 0 ? ("signin" as const) : ("connected" as const),
     }));
     const html = renderToStaticMarkup(<AgentConnect agents={agents} />);
-    expect(html).toContain('aria-label="9 of 10 agents connected to auracode."');
+    expect(html).toContain('aria-label="9 of 10 agents connected to o7."');
     expect(html.match(/class="agent-connect-tile"/g)).toHaveLength(CONNECT_SHOWN);
   });
 });

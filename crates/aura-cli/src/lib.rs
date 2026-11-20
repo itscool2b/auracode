@@ -1,4 +1,4 @@
-//! aura-cli: auracode's headless dev tool (M1a spec 9.5).
+//! aura-cli: o7's headless dev tool (M1a spec 9.5).
 //!
 //! It runs agents the way the app does, through a headless [`SessionManager`] on a temporary data
 //! root, with a fresh temporary git repository as the chat folder, and records what they do:
@@ -87,7 +87,7 @@ pub(crate) fn unknown_agent(headless: &Headless, id: &str) -> CliError {
         .filter(|id| headless.detector.spec(id).is_some())
         .collect();
     CliError::Message(format!(
-        "auracode doesn't know an agent called \"{id}\"; the agents are {}",
+        "o7 doesn't know an agent called \"{id}\"; the agents are {}",
         known.join(", ")
     ))
 }

@@ -315,7 +315,7 @@ export function Onboarding({
               absent > 0 ? `${absent} more can be installed.` : "Nothing left to install.",
             ];
   const headings: Record<SetupStep, [string, string]> = {
-    welcome: ["Welcome to auracode.", "Your agents, one window."],
+    welcome: ["Welcome to o7.", "Your agents, one window."],
     agents: agentsHeading,
     motion: ["Add a first project.", "Any folder works."],
     project: ["Add a first project.", "Any folder works."],
@@ -377,7 +377,7 @@ export function Onboarding({
             {step === "welcome" ? (
               <p className="setup-lead">
                 Run the coding agents already on this computer in one window. Each keeps its own
-                sign-in, and auracode itself needs no account or network.
+                sign-in, and o7 itself needs no account or network.
               </p>
             ) : null}
             {step === "agents" ? (
@@ -553,7 +553,7 @@ export function Onboarding({
                   : step === "welcome"
                     ? "Get started"
                     : step === "project"
-                      ? "Open auracode"
+                      ? "Open o7"
                       : "Continue"}
                 <span className="setup-enter" aria-hidden="true">
                   <Keycap>↵</Keycap>

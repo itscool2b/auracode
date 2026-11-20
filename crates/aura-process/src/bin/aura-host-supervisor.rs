@@ -22,7 +22,7 @@ fn main() -> ExitCode {
                     Ok(()) => ExitCode::SUCCESS,
                     Err(_) => {
                         // Never echo a malformed control frame, agent arguments or environment.
-                        eprintln!("auracode host supervisor stopped before confirming completion");
+                        eprintln!("o7 host supervisor stopped before confirming completion");
                         ExitCode::FAILURE
                     }
                 };

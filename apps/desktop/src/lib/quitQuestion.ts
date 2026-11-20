@@ -7,7 +7,7 @@ export interface QuitQuestion {
   readonly message: string;
   /** The explicit choice that quits, such as "Stop agents and quit". */
   readonly quit: string;
-  /** The default, focused choice: "Keep auracode open". */
+  /** The default, focused choice: "Keep o7 open". */
   readonly keep: string;
 }
 
@@ -47,7 +47,7 @@ export const tauriQuitChannel: QuitChannel = {
 /**
  * The open question, one at a time (Rust runs one quit flow at a time; a newer question replaces
  * an older one). The dialog reports that it shows the question once it is on screen, and every
- * way of closing it but the quit button keeps auracode open.
+ * way of closing it but the quit button keeps o7 open.
  */
 export class QuitQuestions {
   #current: QuitQuestion | null = null;

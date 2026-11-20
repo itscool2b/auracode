@@ -231,7 +231,7 @@ async fn env_timeout_retries_then_falls_back() {
         "{reason}"
     );
     assert!(matches!(resolver.status(), ResolverStatus::Fallback { .. }));
-    // The fallback is auracode's own env without its launch context.
+    // The fallback is o7's own env without its launch context.
     assert_eq!(get(&env, "PATH"), Some("/usr/bin:/bin"));
     assert_eq!(get(&env, "TERM_PROGRAM"), None);
     // Interactive first, then the login shell without -i.

@@ -1,4 +1,4 @@
-//! The local foundation of auracode: which device this is, where its data lives, which profile is
+//! The local foundation of o7: which device this is, where its data lives, which profile is
 //! active, the per-profile SQLite store, and the chat sessions that run on it.
 //!
 //! Nothing here depends on Tauri. The desktop shell and the CLI both find the data root through
@@ -23,7 +23,7 @@
 //! moved aside (never deleted) and replaced, a damaged database is moved aside and replaced by a
 //! copy of everything still readable in it, and the outcome is reported so the UI can tell the
 //! user. Errors are reserved for what can't be repaired (no permission, a file that can't be read,
-//! disk full, data from a newer auracode, a database another auracode process is using, a linked
+//! disk full, data from a newer o7, a database another o7 process is using, a linked
 //! data folder whose disk isn't connected), and their messages are written to be shown as they are.
 //!
 //! The process that runs chats also takes the profile's owner lock ([`owner::ProfileOwner`]) between

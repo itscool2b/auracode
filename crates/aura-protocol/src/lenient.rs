@@ -1,6 +1,6 @@
 //! `lenient_enum!`: unit enums that read a name they do not know as a fallback variant.
 //!
-//! Stored rows outlive the build that wrote them, and agents send values auracode has never seen, so
+//! Stored rows outlive the build that wrote them, and agents send values o7 has never seen, so
 //! the enums that reach storage or come from agents read an unknown name as their fallback (`Other`
 //! where the enum has one) instead of failing the whole event or history row. `#[serde(other)]` would
 //! do the same, but through tauri-specta's export it widens the TypeScript union to `string` and drops

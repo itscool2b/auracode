@@ -58,7 +58,7 @@ export interface WingProps {
 }
 
 /**
- * The auracode logo as something alive: the same wing, whose eyes blink now and then and can look
+ * The o7 logo as something alive: the same wing, whose eyes blink now and then and can look
  * toward the pointer. Filled, the eyes are holes cut by a mask, so they show whatever is behind
  * the wing; in line, the outline and the eyes are stroked. Always decorative: the page names the
  * app in words. It moves only where motion is welcome (styles/home.css).

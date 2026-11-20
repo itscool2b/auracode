@@ -156,7 +156,7 @@ pub struct CoordinatorSnapshot {
     pub brief: String,
     /// No worker starts, no routine fires and no report is passed on while this is set.
     pub paused: bool,
-    /// Why auracode paused it by itself, if it did.
+    /// Why o7 paused it by itself, if it did.
     pub pause_reason: Option<String>,
     pub workers: Vec<CoordinatorWorker>,
     pub tasks: Vec<CoordinatorTask>,
@@ -296,7 +296,7 @@ pub mod limits {
     pub const LIVE_WORKERS: usize = 4;
     /// An assignment or a message to a worker.
     pub const ASSIGNMENT_BYTES: usize = 24 * 1024;
-    /// Reports and routines passed to one coordinator in an hour before auracode pauses the
+    /// Reports and routines passed to one coordinator in an hour before o7 pauses the
     /// project, so two agents answering each other cannot run all night.
     pub const EVENTS_PER_HOUR: usize = 60;
 }

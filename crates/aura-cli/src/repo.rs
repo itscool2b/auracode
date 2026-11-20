@@ -5,7 +5,7 @@
 //! adapters' npm scope and the registry at a closed local port, and a committed `node_modules`
 //! holding a fake copy of every catalog adapter at its catalog version, whose bins print
 //! [`HOSTILE_MARK`]. `npx` started in the folder would run those, so the probe checks that the mark
-//! never shows up: auracode installs and launches adapters from their own folder only. Smoke runs
+//! never shows up: o7 installs and launches adapters from their own folder only. Smoke runs
 //! get a plain repository with a README.
 //!
 //! git runs through `run_helper` (bounded, registered for the sweep) with no system or global
@@ -134,7 +134,7 @@ fn write_files(dir: &Path, kind: RepoKind) -> Result<(), CliError> {
         RepoKind::Hostile => {
             write(
                 "README.md",
-                "# Hostile clone\n\naura-cli's probe created this folder. Its npm files point at a closed port and its node_modules holds fake adapters that print HOSTILE: auracode must never use them.\n",
+                "# Hostile clone\n\naura-cli's probe created this folder. Its npm files point at a closed port and its node_modules holds fake adapters that print HOSTILE: o7 must never use them.\n",
             )?;
             let adapters = npm_adapters();
             write(

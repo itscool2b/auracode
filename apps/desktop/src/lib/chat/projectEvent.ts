@@ -1,5 +1,5 @@
 /**
- * A prompt auracode itself sent to a chat for its coordinated project: the brief that starts a
+ * A prompt o7 itself sent to a chat for its coordinated project: the brief that starts a
  * coordinator, a worker's assignment, a worker's report on its way to the coordinator, a routine.
  *
  * `EVENT_PREFIX` in `crates/aura-core/src/session/coordinator.rs` begins each one:

@@ -659,7 +659,7 @@ async fn replay_summary_compared_at_ready() {
         "outside any turn"
     );
     assert!(
-        matches!(&tail[0].event, AuraEvent::Notice { message, .. } if message.starts_with("Hermes continued this session") || message.contains("continued this session while auracode was away"))
+        matches!(&tail[0].event, AuraEvent::Notice { message, .. } if message.starts_with("Hermes continued this session") || message.contains("continued this session while o7 was away"))
     );
     assert_eq!(
         tail[1].event,
@@ -913,7 +913,7 @@ async fn one_process_per_native_session() {
         errors(&h.stored(&b.id).await),
         [(
             ErrorKind::Internal,
-            "Something went wrong inside auracode: this session is already open in another chat"
+            "Something went wrong inside o7: this session is already open in another chat"
                 .to_owned()
         )]
     );

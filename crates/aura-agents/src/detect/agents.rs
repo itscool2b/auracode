@@ -237,7 +237,7 @@ impl Detector {
         let group: Vec<AgentSpec> = self.group(id).into_iter().cloned().collect();
         let Some(first) = group.first() else {
             return Err(LaunchError::Missing {
-                reason: format!("auracode doesn't know an agent called \"{id}\"."),
+                reason: format!("o7 doesn't know an agent called \"{id}\"."),
             });
         };
         if group.len() == 1 {
@@ -374,7 +374,7 @@ mod tests {
         let old = Detector::fixed(vec![
             fixed(
                 "claude",
-                broken("auracode needs Claude Code 2.1.310 or newer (found 2.1.309)."),
+                broken("o7 needs Claude Code 2.1.310 or newer (found 2.1.309)."),
             ),
             fixed("claude-acp", ready()).with_download(Vec::new()),
         ]);
@@ -406,14 +406,14 @@ mod tests {
         let none = Detector::fixed(vec![
             fixed(
                 "claude",
-                broken("auracode needs Claude Code 2.1.310 or newer (found 2.1.309)."),
+                broken("o7 needs Claude Code 2.1.310 or newer (found 2.1.309)."),
             ),
             fixed(
                 "claude-acp",
                 missing("Node.js 22 or newer is required (found 20.11.0)."),
             ),
         ]);
-        let reason = "auracode needs Claude Code 2.1.310 or newer (found 2.1.309). ACP adapter: Node.js 22 or newer is required (found 20.11.0).";
+        let reason = "o7 needs Claude Code 2.1.310 or newer (found 2.1.309). ACP adapter: Node.js 22 or newer is required (found 20.11.0).";
         assert_eq!(none.cached()[0].availability, broken(reason));
         assert_eq!(
             none.choose_connection("claude").await,
@@ -589,11 +589,11 @@ mod tests {
         // Installed but too old for the native driver, and no Node.js for the adapter.
         assert_eq!(
             reason(
-                broken("auracode needs Claude Code 2.1.310 or newer (found 2.1.309)."),
+                broken("o7 needs Claude Code 2.1.310 or newer (found 2.1.309)."),
                 missing("Node.js 22 or newer is required (found 20.11.0).")
             ),
             broken(
-                "auracode needs Claude Code 2.1.310 or newer (found 2.1.309). ACP adapter: Node.js 22 or newer is required (found 20.11.0)."
+                "o7 needs Claude Code 2.1.310 or newer (found 2.1.309). ACP adapter: Node.js 22 or newer is required (found 20.11.0)."
             )
         );
         // The preferred one is absent, but the other is installed and unusable.

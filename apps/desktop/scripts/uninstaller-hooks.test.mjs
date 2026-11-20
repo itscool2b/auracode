@@ -67,7 +67,7 @@ test("the hooks run the Rust cleanup and keep Tauri from deleting the data folde
   has(hooks, `\${GetOptions} $CMDLINE "/KEEPDATA" $R9`);
   // A quiet uninstall never shows a dialog.
   has(hooks, `\${OrIf} \${Silent}\n      StrCpy $AuracodeCleanupFlags ""`);
-  // Still running: Tauri's own check closes auracode, then a copy of the program cleans up. Its
+  // Still running: Tauri's own check closes o7, then a copy of the program cleans up. Its
   // check is inserted once per section, since its labels come from the line number.
   assert.ok(!hooks.includes("!insertmacro CheckIfAppIsRunning"));
   has(
@@ -102,7 +102,7 @@ test("a link registration an earlier version left is removed only when it is thi
 });
 
 test("the checkbox keeps the data, and every other string is Tauri's", () => {
-  has(english, `LangString deleteAppData \${LANG_ENGLISH} "Keep my auracode data`);
+  has(english, `LangString deleteAppData \${LANG_ENGLISH} "Keep my o7 data`);
   assert.ok(keys(english).length >= 20);
 });
 

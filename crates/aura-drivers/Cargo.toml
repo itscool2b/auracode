@@ -1,6 +1,6 @@
 [package]
 name = "aura-drivers"
-description = "Agent drivers for auracode: the driver contract, the frame batcher every driver shares, the ACP client and the scripted mock agent"
+description = "Agent drivers for o7: the driver contract, the frame batcher every driver shares, the ACP client and the scripted mock agent"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
@@ -38,7 +38,7 @@ unicode-segmentation = "1.13.3"
 uuid.workspace = true
 
 [dev-dependencies]
-# The ACP schema, for the conformance tests only: auracode has no runtime dependency on the SDK.
+# The ACP schema, for the conformance tests only: o7 has no runtime dependency on the SDK.
 agent-client-protocol-schema = { version = "=1.12.0", features = ["unstable"] }
 aura-process = { workspace = true, features = ["testing"] }
 # `schema_for!`, to list every `sessionUpdate` tag the schema defines.

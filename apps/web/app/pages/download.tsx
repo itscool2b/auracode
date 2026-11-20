@@ -1,7 +1,7 @@
 import catalog from "#release-catalog";
 import { AppTile, Arrow, Page } from "../ui";
 
-export const meta = () => [{ title: "Download auracode · Windows, macOS and Linux" }];
+export const meta = () => [{ title: "Download o7 · Windows, macOS and Linux" }];
 
 const PLATFORMS = [
   {
@@ -42,12 +42,11 @@ function UnsignedSteps({ downloads }: { downloads: readonly { kind: string; file
       <li>
         <strong>Windows.</strong> SmartScreen says "Windows protected your PC". Choose More info,
         then Run anyway. Where Smart App Control is on, it may block the installer outright; do not
-        turn it off for auracode.
+        turn it off for o7.
       </li>
       <li>
-        <strong>macOS.</strong> The first time you open auracode, macOS refuses. Open System
-        Settings, then Privacy &amp; Security, and choose Open Anyway beside the message about
-        auracode.
+        <strong>macOS.</strong> The first time you open o7, macOS refuses. Open System Settings,
+        then Privacy &amp; Security, and choose Open Anyway beside the message about o7.
       </li>
       <li>
         <strong>Linux.</strong> On Debian and Ubuntu, <code>sudo apt install ./{deb}</code>. On
@@ -69,7 +68,7 @@ export default function Download() {
     <Page
       wide
       art={<AppTile />}
-      title="Download auracode."
+      title="Download o7."
       tone="Free, local, no account."
       lead={
         release
@@ -85,7 +84,7 @@ export default function Download() {
       {warned ? (
         <p className="note download-status" role="status">
           {updates
-            ? "No publisher has signed these installers yet, so your system warns before one runs. Once installed, auracode updates itself."
+            ? "No publisher has signed these installers yet, so your system warns before one runs. Once installed, o7 updates itself."
             : "Preview build. These installers are unsigned and do not update themselves."}
         </p>
       ) : null}
@@ -175,7 +174,7 @@ export default function Download() {
             {!release
               ? "Installers, checksums, and versioned release notes will appear here together. There is no public download to verify yet."
               : updates
-                ? "Compare the downloaded file's SHA-256 checksum with the value above before installing. After that, auracode checks every update itself against a signature before it installs one."
+                ? "Compare the downloaded file's SHA-256 checksum with the value above before installing. After that, o7 checks every update itself against a signature before it installs one."
                 : "Compare the downloaded file's SHA-256 checksum with the value above before installing. It is the only check these builds have."}
           </p>
           {warned && release ? (
@@ -185,7 +184,7 @@ export default function Download() {
                 system warns you before one runs. Each is built from{" "}
                 <a href={SOURCE}>the public source</a> by its own workflow.{" "}
                 {updates
-                  ? "You install once: after that auracode shows Update when a newer version is out."
+                  ? "You install once: after that o7 shows Update when a newer version is out."
                   : "They do not update themselves: come back here for a newer one."}
               </p>
               <UnsignedSteps downloads={release.downloads} />

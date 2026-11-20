@@ -245,7 +245,7 @@ impl GitWorkspaces {
             repository_id: None,
             phase: Phase::Creating,
         });
-        let mut notices=vec!["Creates a private GitHub repository and publishes the reviewed commit and its ancestors. Review committed content before confirming.".into(),"Staged, unstaged and untracked files remain on this device. Auracode does not stage or commit them.".into(),"Adds origin only after the remote commit is confirmed. Existing origins and remote branches are never overwritten.".into()];
+        let mut notices=vec!["Creates a private GitHub repository and publishes the reviewed commit and its ancestors. Review committed content before confirming.".into(),"Staged, unstaged and untracked files remain on this device. o7 does not stage or commit them.".into(),"Adds origin only after the remote commit is confirmed. Existing origins and remote branches are never overwritten.".into()];
         if previous.is_some() {
             notices.push("An earlier publication was recorded. Confirm the repository and current remote state to finish it; uncertain requests are not repeated automatically.".into());
         }

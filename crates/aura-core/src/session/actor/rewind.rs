@@ -1,5 +1,5 @@
 //! A sent message's Rewind through the agent's own file checkpoints (Claude's `rewind_files`).
-//! auracode's checkpoints come first where a turn has one; this serves turns without one.
+//! o7's checkpoints come first where a turn has one; this serves turns without one.
 use super::*;
 use aura_drivers::driver::FileRewindResult;
 use aura_protocol::changes::NativeRewind;

@@ -2,9 +2,9 @@
 //!
 //! A check is inert: it reads the form, finds Git and answers with the exact command, or the first
 //! problem, beside the field it belongs to. Start creates the destination itself, atomically, so
-//! auracode knows which folder is its own; a canceled or failed clone removes that folder and only
+//! o7 knows which folder is its own; a canceled or failed clone removes that folder and only
 //! that folder. Git runs with the person's own configuration, credential helpers and SSH setup:
-//! auracode never reads, stores or passes credentials.
+//! o7 never reads, stores or passes credentials.
 mod files;
 mod journal;
 mod process;
@@ -432,7 +432,7 @@ fn plan(
     let Some(program) = find_exe("git", &env.vars) else {
         return Err(fail(
             CloneField::Git,
-            "Install Git to clone repositories. auracode uses the Git on this computer.",
+            "Install Git to clone repositories. o7 uses the Git on this computer.",
         ));
     };
     let arguments = vec![

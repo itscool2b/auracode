@@ -41,7 +41,7 @@ import "@auracode/ui/themes.css";
 import "../styles/remote.css";
 
 export const meta = () => [
-  { title: "Remote · auracode" },
+  { title: "Remote · o7" },
   { name: "robots", content: "noindex" },
   { name: "referrer", content: "no-referrer" },
 ];
@@ -67,7 +67,7 @@ function relayOrigin(): string {
   return `${location.protocol === "https:" ? "wss" : "ws"}://${location.host}`;
 }
 
-/** auracode's own default, until the computer says otherwise. */
+/** o7's own default, until the computer says otherwise. */
 const DEFAULT_LOOK: Look = { theme: "claude", appearance: "system" };
 
 /**
@@ -196,12 +196,12 @@ function Remote({ client }: { readonly client: RemoteClient }) {
     return (
       <Centered title="Reach your computer from here.">
         <p>
-          In auracode on your computer, open Settings, then Remote access, and choose Pair. Scan the
-          code it shows with this device, or open its link here.
+          In o7 on your computer, open Settings, then Remote access, and choose Pair. Scan the code
+          it shows with this device, or open its link here.
         </p>
         <p>
           <a className="g-button remote-button remote-quiet" href="/download">
-            Get auracode
+            Get o7
           </a>
         </p>
       </Centered>
@@ -254,7 +254,7 @@ function Refused({ client, hostId }: { readonly client: RemoteClient; readonly h
 function Centered({ title, children }: { readonly title: string; readonly children: ReactNode }) {
   return (
     <div className="remote-centered">
-      <a className="remote-mark" href="/" aria-label="auracode">
+      <a className="remote-mark" href="/" aria-label="o7">
         <Logo size={64} />
       </a>
       <h1>{title}</h1>
@@ -403,7 +403,7 @@ function ListScreen({ client, state }: { readonly client: RemoteClient; readonly
   return (
     <div className="remote-screen remote-list-screen">
       <header className="remote-bar">
-        <a className="remote-mark" href="/" aria-label="auracode">
+        <a className="remote-mark" href="/" aria-label="o7">
           <Logo size={30} />
         </a>
         <div className="remote-bar-title">
@@ -429,15 +429,15 @@ function ListScreen({ client, state }: { readonly client: RemoteClient; readonly
         ) : null}
         {state.phase.name === "away" ? (
           <p className="remote-banner">
-            Your computer is not answering. Open auracode there, and check it is awake and online.
-            This page connects by itself when it is back.
+            Your computer is not answering. Open o7 there, and check it is awake and online. This
+            page connects by itself when it is back.
           </p>
         ) : null}
         {overview && groups.length === 0 ? (
           <p className="remote-hint">
             {folders.length > 0
               ? "No chats yet. Start one below."
-              : "No projects yet. Add one in auracode on your computer."}
+              : "No projects yet. Add one in o7 on your computer."}
           </p>
         ) : null}
         {!overview && state.phase.name !== "away" ? <ListSkeleton /> : null}
@@ -695,7 +695,7 @@ interface Sending {
   readonly queued: boolean;
 }
 
-/** What the person sent, without the project memory Aura attaches after it. */
+/** What the person sent, without the project memory o7 attaches after it. */
 const MEMORY = "\n\nProject memory (Aura reference context, revision ";
 function ownWords(text: string): string {
   const at = text.indexOf(MEMORY);
@@ -740,7 +740,7 @@ function ChatScreen({ client, state }: { readonly client: RemoteClient; readonly
     });
   }, [chat]);
   const ready = state.phase.name === "ready";
-  // Offered only by an auracode that answers it: an older one ends the session on the request.
+  // Offered only by an o7 that answers it: an older one ends the session on the request.
   const pickers = state.features.includes("pickers") && ready;
   const send = async (text: string) => {
     if (!chat) return;

@@ -83,9 +83,9 @@ const BOT_CALL_MS = 55_000;
 
 const MCP_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 const INSTRUCTIONS =
-  "auracode runs coding agents (Claude Code, Codex and others) on a person's computer. These tools reach the chats on that computer while auracode is open there with remote access on. Start with list_chats. After send_message or start_chat, call wait_for_chat until the agent finishes or asks for something, and answer waiting requests with respond_to_request. Agents there can edit files and run commands, so send only what the person asked for.";
+  "o7 runs coding agents (Claude Code, Codex and others) on a person's computer. These tools reach the chats on that computer while o7 is open there with remote access on. Start with list_chats. After send_message or start_chat, call wait_for_chat until the agent finishes or asks for something, and answer waiting requests with respond_to_request. Agents there can edit files and run commands, so send only what the person asked for.";
 const OFFLINE =
-  "The computer is not reachable: auracode is closed there, remote access is off, or it is offline. Ask its owner to open auracode and try again.";
+  "The computer is not reachable: o7 is closed there, remote access is off, or it is offline. Ask its owner to open o7 and try again.";
 
 const HEADERS = { "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff" };
 const CORS = {
@@ -586,7 +586,7 @@ export class Room extends DurableObject<Env> {
           protocolVersion:
             typeof asked === "string" && MCP_VERSIONS.includes(asked) ? asked : MCP_VERSIONS[0],
           capabilities: { tools: { listChanged: false } },
-          serverInfo: { name: "auracode", title: "auracode", version: "1.0.0" },
+          serverInfo: { name: "auracode", title: "o7", version: "1.0.0" },
           instructions: INSTRUCTIONS,
         });
       }

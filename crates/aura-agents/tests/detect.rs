@@ -452,7 +452,7 @@ async fn native_claude_requires_the_verified_baseline_and_preserves_acp_compatib
             detector.detect(&claude).await,
             Availability::Broken {
                 reason: format!(
-                    "auracode needs Claude Code 2.1.310 or newer (found {}).",
+                    "o7 needs Claude Code 2.1.310 or newer (found {}).",
                     if version == "unknown" {
                         "an unknown version"
                     } else {
@@ -503,7 +503,7 @@ async fn native_claude_refuses_shell_shims_without_running_them() {
     assert_eq!(
         detector.detect(&claude).await,
         Availability::Missing {
-            reason: "auracode can't run the claude.cmd shell shim as native Claude Code on Windows. Install the standalone Claude Code, or set CLAUDE_CODE_EXECUTABLE to a claude.exe.".into(),
+            reason: "o7 can't run the claude.cmd shell shim as native Claude Code on Windows. Install the standalone Claude Code, or set CLAUDE_CODE_EXECUTABLE to a claude.exe.".into(),
         }
     );
     assert!(matches!(
@@ -647,13 +647,13 @@ async fn version_floor() {
     assert_eq!(
         detector.detect(&spec("claude-acp")).await,
         Availability::Broken {
-            reason: "auracode needs Claude Code 2.1.309 or newer (found 2.0.1).".into()
+            reason: "o7 needs Claude Code 2.1.309 or newer (found 2.0.1).".into()
         }
     );
     assert_eq!(
         detector.detect(&spec("codex-acp")).await,
         Availability::Broken {
-            reason: "auracode needs Codex 0.160.1 or newer (found 0.150.0).".into()
+            reason: "o7 needs Codex 0.160.1 or newer (found 0.150.0).".into()
         }
     );
 }
@@ -665,7 +665,7 @@ async fn npm_is_needed_only_until_the_adapter_is_installed() {
     assert_eq!(
         detector.detect(&spec("claude-acp")).await,
         Availability::Missing {
-            reason: "npm was not found; auracode needs it once to download the adapter.".into()
+            reason: "npm was not found; o7 needs it once to download the adapter.".into()
         }
     );
 }

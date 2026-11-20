@@ -158,7 +158,7 @@ pub trait Backend: Send + Sync + 'static {
         Box::pin(async {
             Err(BackendError::new(
                 "unavailable",
-                "This computer's auracode does not offer that yet.",
+                "This computer's o7 does not offer that yet.",
             ))
         })
     }

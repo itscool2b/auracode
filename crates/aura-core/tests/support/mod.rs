@@ -214,7 +214,7 @@ impl Harness {
     }
 
     /// Stops as a crash would: what reached the store is saved, the actors and their processes
-    /// die without ending anything, and auracode starts again on the same profile.
+    /// die without ending anything, and o7 starts again on the same profile.
     pub async fn crash_and_restart(
         self,
         drivers: Vec<ScriptedDriver>,

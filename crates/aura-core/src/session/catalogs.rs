@@ -98,7 +98,7 @@ struct State {
     catalogs: BTreeMap<String, Catalog>,
     /// Changed since the last save.
     dirty: bool,
-    /// A newer auracode wrote the saved record: it is read, never overwritten.
+    /// A newer o7 wrote the saved record: it is read, never overwritten.
     keep_saved: bool,
     /// The saved record was read (or there was none): until then nothing is saved over it.
     loaded: bool,

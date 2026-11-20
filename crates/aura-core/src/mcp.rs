@@ -31,7 +31,7 @@ pub enum Command {
         project_id: Option<String>,
         document: String,
     },
-    /// `agent`: only the servers that agent loads; None (auracode's own connection test) takes
+    /// `agent`: only the servers that agent loads; None (o7's own connection test) takes
     /// every server in scope.
     Resolve {
         project_id: Option<String>,
@@ -987,7 +987,7 @@ pub(crate) mod tests {
             names(&for_agent_named(&conn, "hermes", vec![]).unwrap()),
             ["docs"]
         );
-        // auracode's own connection test sees every server in scope.
+        // o7's own connection test sees every server in scope.
         assert_eq!(
             names(&resolved(&conn, None, vec![]).unwrap()),
             ["browser", "docs"]

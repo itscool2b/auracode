@@ -8,7 +8,7 @@
 //! the system's. The window's own page runs the same risk, since Settings' Sounds play through Web
 //! Audio.
 //!
-//! So auracode decides once, at startup, whether the plugin files WebKit's media needs are in the
+//! So o7 decides once, at startup, whether the plugin files WebKit's media needs are in the
 //! folders GStreamer will search, by GStreamer's own rules ([`plugin_dirs`]). It never starts
 //! GStreamer in its own process for that: the first registry scan is slow and writes a registry.
 //! When the plugins are missing, every page starts with audio, video, Web Audio, Media Source,
@@ -61,7 +61,7 @@ const LIBRARY_LIMIT: u64 = 32 * 1024 * 1024;
 
 /// What Settings says once the window's page has lost its process.
 const WINDOW_RESTARTED: &str =
-    "Sounds are off until auracode restarts, because the window's page stopped working once.";
+    "Sounds are off until o7 restarts, because the window's page stopped working once.";
 
 /// What startup found.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -215,7 +215,7 @@ fn collect(dir: &Path, depth: u32, budget: &mut usize, found: &mut HashSet<OsStr
     }
 }
 
-/// The AppImage's mount, when auracode runs from one.
+/// The AppImage's mount, when o7 runs from one.
 fn appdir(var: &dyn Fn(&str) -> Option<OsString>) -> Option<PathBuf> {
     var("APPDIR")
         .map(PathBuf::from)
@@ -286,9 +286,9 @@ fn number(digits: &[u8]) -> Option<u32> {
     })
 }
 
-/// What `main` sets, before anything starts, when auracode runs from an AppImage:
+/// What `main` sets, before anything starts, when o7 runs from an AppImage:
 ///
-/// - GStreamer's registry in auracode's own cache folder, unless the person chose one. The image's
+/// - GStreamer's registry in o7's own cache folder, unless the person chose one. The image's
 ///   plugins sit at a mount that moves with every launch, so in the shared registry they would make
 ///   the person's other GStreamer apps scan everything again after each launch.
 /// - When the image carries no plugins: the system's plugin folders. The image's launcher puts its
@@ -358,19 +358,19 @@ fn cache_dir(var: &dyn Fn(&str) -> Option<OsString>) -> Option<PathBuf> {
 }
 
 /// What Settings and the browser say while sound and video are off, naming the packages to
-/// install on this distribution (by its `os-release`) where auracode knows them.
+/// install on this distribution (by its `os-release`) where o7 knows them.
 pub fn notice_for(found: &Detection, os_release: Option<&str>) -> Option<String> {
     if found.available() {
         return None;
     }
     if found.missing.is_empty() {
         return Some(
-            "Audio and video are off here: this copy of auracode was built without its own GStreamer plugins, and the system's are newer than it can load.".into(),
+            "Audio and video are off here: this copy of o7 was built without its own GStreamer plugins, and the system's are newer than it can load.".into(),
         );
     }
     let install = os_release.and_then(packages).map_or_else(
-        || "Install them with your package manager, then restart auracode.".to_owned(),
-        |names| format!("Install {names}, then restart auracode."),
+        || "Install them with your package manager, then restart o7.".to_owned(),
+        |names| format!("Install {names}, then restart o7."),
     );
     Some(format!(
         "Audio and video are off here: GStreamer's base and good plugins are missing. {install}"
@@ -847,7 +847,7 @@ mod tests {
         assert_eq!(
             notice_for(&found, Some("NAME=\"Omarchy\"\nID=omarchy\nID_LIKE=arch\n")).as_deref(),
             Some(
-                "Audio and video are off here: GStreamer's base and good plugins are missing. Install gst-plugins-base and gst-plugins-good, then restart auracode."
+                "Audio and video are off here: GStreamer's base and good plugins are missing. Install gst-plugins-base and gst-plugins-good, then restart o7."
             )
         );
         for (release, names) in [
@@ -879,7 +879,7 @@ mod tests {
         assert!(
             notice_for(&found, None)
                 .unwrap()
-                .ends_with("Install them with your package manager, then restart auracode.")
+                .ends_with("Install them with your package manager, then restart o7.")
         );
         let fine = Detection {
             missing: vec![],

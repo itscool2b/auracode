@@ -64,7 +64,7 @@ pub(crate) enum Pick {
 pub(crate) struct Reads {
     pub files: &'static [(RootId, &'static str)],
     pub pick: Pick,
-    /// The file auracode creates for this agent: where an import or a managed copy goes.
+    /// The file o7 creates for this agent: where an import or a managed copy goes.
     pub own: (RootId, &'static str),
 }
 

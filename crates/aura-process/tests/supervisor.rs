@@ -1,4 +1,4 @@
-//! Linux ownership checks use only auracode's test child, never installed agent binaries.
+//! Linux ownership checks use only o7's test child, never installed agent binaries.
 #![cfg(target_os = "linux")]
 // The rig's helpers are not tests themselves; a failed expectation there fails the test, as below.
 #![allow(clippy::expect_used)]

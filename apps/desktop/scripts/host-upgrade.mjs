@@ -1,13 +1,13 @@
-// `pnpm host-upgrade`: replaces the installed auracode on this Windows machine with a local build,
+// `pnpm host-upgrade`: replaces the installed o7 on this Windows machine with a local build,
 // and puts the previous build back when the new one does not work.
 // On Linux, `main` hands over to appimage-upgrade.mjs.
 //
 // The installed app is often the one running the agent session that built the new one, so the
 // install cannot happen while it runs, and an agent cannot wait for it to close: everything an
 // agent starts is in the app's job object and ends with it. `install --after-exit` therefore
-// starts a waiter through WMI, outside the job, and returns. When the person quits auracode, the
+// starts a waiter through WMI, outside the job, and returns. When the person quits o7, the
 // waiter snapshots the installed app, runs the installer in update mode (which keeps the data
-// folder; see src-tauri/windows/hooks.nsh), starts auracode again, and restores the snapshot if
+// folder; see src-tauri/windows/hooks.nsh), starts o7 again, and restores the snapshot if
 // the new build does not stay up. `rollback` restores a snapshot by hand and, with
 // `--restore-database`, the databases a newer schema migrated (aura-core backs each one up first).
 // See docs/developing-in-aura.md.
@@ -44,8 +44,8 @@ export const EXIT = { done: 0, usage: 2, running: 3, failed: 4 };
 const USAGE = `Usage: node apps/desktop/scripts/host-upgrade.mjs <command> [options]
 
   install [--installer <setup.exe>] [--after-exit [--wait <minutes>]]
-      Installs a local build over the installed auracode, after a snapshot of the installed app.
-      --after-exit arms it instead: it runs once auracode quits (default wait 30 minutes).
+      Installs a local build over the installed o7, after a snapshot of the installed app.
+      --after-exit arms it instead: it runs once o7 quits (default wait 30 minutes).
   rollback [--snapshot <name>] [--restore-database]
       Puts a snapshot back (the newest by default). --restore-database also restores each
       database a newer build migrated since that snapshot, from aura-core's pre-migration backup.
@@ -252,7 +252,7 @@ function isInstall(dir) {
 
 /**
  * Whether a restore may replace `dir`: it is missing, empty (the folder an installer was handed),
- * or auracode's own, including the partial install a failed installer leaves. A folder with only
+ * or o7's own, including the partial install a failed installer leaves. A folder with only
  * other things in it is somebody else's and stays.
  */
 function replaceable(dir) {
@@ -311,7 +311,7 @@ function fileHash(path) {
  */
 export function takeSnapshot(paths, installer, now) {
   if (!isInstall(paths.installDir)) {
-    throw new Error(`${paths.installDir} holds no installed auracode to keep.`);
+    throw new Error(`${paths.installDir} holds no installed o7 to keep.`);
   }
   let name = stampOf(now);
   for (let n = 2; existsSync(join(paths.stateDir, "snapshots", name)); n++) {
@@ -349,7 +349,7 @@ export function restoreApp(snapshot, installDir, now = new Date()) {
   const app = join(snapshot.dir, "app");
   if (!isInstall(app)) throw new Error(`${snapshot.dir} holds no copy of the app.`);
   if (!replaceable(installDir)) {
-    throw new Error(`${installDir} is not an auracode install; nothing was changed.`);
+    throw new Error(`${installDir} is not an o7 install; nothing was changed.`);
   }
   const aside = `${installDir}.replaced-${now.getTime()}`;
   if (existsSync(installDir)) renameSync(installDir, aside);
@@ -400,7 +400,7 @@ async function waitForExit(system, paths, minutes, log) {
     }
     if (Date.now() >= deadline) return false;
     if (!announced && minutes > 0) {
-      log(`Waiting up to ${minutes} minutes for auracode to quit.`);
+      log(`Waiting up to ${minutes} minutes for o7 to quit.`);
       announced = true;
     }
     if (minutes === 0) return false;
@@ -496,7 +496,7 @@ export async function install(options, paths, system, log) {
       `${JSON.stringify({ pid, installer: staged, armed: system.now().toISOString() }, null, 2)}\n`,
     );
     log(
-      `Armed (PID ${pid}): ${basename(installer)} installs when auracode quits, within ${options.wait} minutes. Quit auracode to start it; it opens again by itself. Log: ${join(paths.stateDir, "upgrade.log")}`,
+      `Armed (PID ${pid}): ${basename(installer)} installs when o7 quits, within ${options.wait} minutes. Quit o7 to start it; it opens again by itself. Log: ${join(paths.stateDir, "upgrade.log")}`,
     );
     return EXIT.done;
   }
@@ -504,8 +504,8 @@ export async function install(options, paths, system, log) {
   if (!(await waitForExit(system, paths, options.wait, log))) {
     log(
       options.wait > 0
-        ? `auracode did not quit within ${options.wait} minutes; nothing was installed.`
-        : "auracode is running. Quit it first, or arm the install with --after-exit.",
+        ? `o7 did not quit within ${options.wait} minutes; nothing was installed.`
+        : "o7 is running. Quit it first, or arm the install with --after-exit.",
     );
     return EXIT.running;
   }
@@ -561,7 +561,7 @@ export async function rollback(options, paths, system, log) {
     return EXIT.usage;
   }
   if (hostProcesses(system.processes(), paths.installDir).app.length > 0) {
-    log("auracode is running. Quit it first; nothing was changed.");
+    log("o7 is running. Quit it first; nothing was changed.");
     return EXIT.running;
   }
   const snapshot = readSnapshot(paths.stateDir, name);

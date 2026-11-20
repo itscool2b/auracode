@@ -4,7 +4,7 @@ import { NewChatView } from "./Scenes";
 import { AGENTS, SpriteMark } from "./Sprite";
 
 /**
- * Every agent auracode runs, as chips: choosing one names what holds for it and picks it in the
+ * Every agent o7 runs, as chips: choosing one names what holds for it and picks it in the
  * New chat view beside them, as dot.com's chips choose what its phone shows. A chip at rest is its
  * name in a hairline pill; the chosen one shows its mark and takes its agent's own colour, the one
  * place on the page an agent's colour marks words. The chips are plain toggle buttons; the sentence
@@ -21,7 +21,7 @@ export function AgentPicker() {
           <h2 id="agents-title" className="title">
             Bring every agent
           </h2>
-          <ul className="agent-chips" aria-label="Agents auracode runs">
+          <ul className="agent-chips" aria-label="Agents o7 runs">
             {AGENTS.map((agent) => (
               <li key={agent}>
                 <button
@@ -39,8 +39,8 @@ export function AgentPicker() {
           </ul>
           <p className="agents-note" aria-live="polite">
             <strong>{name}, as it is.</strong> It runs through its own harness and your own sign-in.
-            auracode never reads, stores or proxies its credentials, and any agent that speaks ACP
-            works too.
+            o7 never reads, stores or proxies its credentials, and any agent that speaks ACP works
+            too.
           </p>
           <a className="btn btn-quiet" href="/download">
             Get the app

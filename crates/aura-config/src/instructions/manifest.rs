@@ -1,4 +1,4 @@
-//! Which files auracode keeps as copies, so a hand edit to one can be told from a stale one.
+//! Which files o7 keeps as copies, so a hand edit to one can be told from a stale one.
 //! The record lives in the app's own data folder, never in a project or an agent folder.
 
 use std::{collections::BTreeMap, io::Write, path::Path};
@@ -23,7 +23,7 @@ pub(crate) struct Entry {
     pub source: String,
     /// The source's content hash when the copies were last written.
     pub source_hash: String,
-    /// Copy key to the hash auracode last wrote there.
+    /// Copy key to the hash o7 last wrote there.
     pub copies: BTreeMap<String, String>,
 }
 

@@ -25,7 +25,7 @@ use crate::window::ShowOnce;
 /// Everything the UI needs to know about this launch, from `app_info`.
 #[derive(Debug, Clone, PartialEq, Serialize, specta::Type)]
 pub struct AppInfo {
-    /// auracode's version (the Cargo workspace version).
+    /// o7's version (the Cargo workspace version).
     pub app_version: String,
     pub tauri_version: String,
     /// `"macos"`, `"windows"`, `"linux"`, or Rust's name for another OS.
@@ -403,7 +403,7 @@ impl AppState {
         {
             Ok(removed) => {
                 if !removed {
-                    // Another auracode process (the CLI) acknowledged it, or its record was
+                    // Another o7 process (the CLI) acknowledged it, or its record was
                     // removed by hand: either way there is nothing left to report.
                     tracing::info!(quarantined = %pending.quarantined, "the database repair was already acknowledged");
                 }
@@ -685,11 +685,8 @@ mod tests {
         let state = state(boot(Ok(DataRoot::at(dir.path().join("data")))));
         assert!(state.app_info().notices.is_empty());
         let chats = state.chats().expect("chats");
-        lock(&chats.late_notices).push("auracode stopped 1 agent process.".into());
-        assert_eq!(
-            state.app_info().notices,
-            ["auracode stopped 1 agent process."]
-        );
+        lock(&chats.late_notices).push("o7 stopped 1 agent process.".into());
+        assert_eq!(state.app_info().notices, ["o7 stopped 1 agent process."]);
         state.at_exit();
     }
 

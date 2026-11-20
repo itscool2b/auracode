@@ -10,7 +10,7 @@ import { Statement } from "../home/Statement";
 import { Work } from "../home/Work";
 
 export const meta = () => [
-  { title: "auracode · One window for every coding agent" },
+  { title: "o7 · One window for every coding agent" },
   {
     name: "description",
     content:

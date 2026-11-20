@@ -187,7 +187,7 @@ test("the launch env loses an agent session and an AppImage launcher, and keeps 
   assert.deepEqual(env, { HOME: "/home/me", WAYLAND_DISPLAY: "wayland-1", PATH: "/usr/bin" });
 });
 
-test("install refuses while auracode runs, unless armed", async () => {
+test("install refuses while o7 runs, unless armed", async () => {
   const { paths, installed, built } = setup();
   const system = fakeSystem({ running: [installed] });
   assert.equal(await install(options({ appimage: built }), paths, system, quiet, {}), EXIT.running);
@@ -250,7 +250,7 @@ test("an installed file that is not a link is kept as a build", async () => {
   void built;
 });
 
-test("an armed install stages at once, and the waiter installs when auracode quits", async () => {
+test("an armed install stages at once, and the waiter installs when o7 quits", async () => {
   const { paths, installed, built } = setup();
   const system = fakeSystem({ running: [installed] });
   assert.equal(
@@ -280,7 +280,7 @@ test("an armed install stages at once, and the waiter installs when auracode qui
   assert.equal(existsSync(join(paths.stateDir, "armed.json")), false);
 });
 
-test("a waiter gives up when auracode does not quit in time", async () => {
+test("a waiter gives up when o7 does not quit in time", async () => {
   const { paths, installed, built } = setup();
   const system = fakeSystem({ running: [installed] });
   await install(options({ appimage: built, afterExit: true, wait: 1 }), paths, system, quiet, {});

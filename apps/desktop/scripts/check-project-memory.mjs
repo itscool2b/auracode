@@ -88,7 +88,7 @@ export async function checkProjectMemory(browser, url, out, engine) {
       document.querySelector('textarea[aria-label="Markdown"]')?.value.includes("deploy command"),
     );
     await toast.getByText("Project memory updated").waitFor();
-    await toast.getByText("Claude Code · Fix the login flow · auracode fixture").waitFor();
+    await toast.getByText("Claude Code · Fix the login flow · o7 fixture").waitFor();
     assert.equal(await toast.getByRole("button", { name: "Review" }).count(), 0);
     await toast.getByRole("button", { name: "Open", exact: true }).waitFor();
     assert.deepEqual((await new AxeBuilder({ page }).analyze()).violations, []);
@@ -162,7 +162,7 @@ export async function checkProjectMemory(browser, url, out, engine) {
     await page.goto(`${url}/?preview=project-memory&projects=2`);
     const project = page.getByRole("combobox", { name: "Project" });
     await project.waitFor();
-    assert.deepEqual(await labels(project), ["auracode fixture", "website fixture"]);
+    assert.deepEqual(await labels(project), ["o7 fixture", "website fixture"]);
     await editor.waitFor();
     await choose(project, { label: "website fixture" });
     await page.waitForFunction(
@@ -179,7 +179,7 @@ export async function checkProjectMemory(browser, url, out, engine) {
     await save.click();
     await page.getByText("Saved. Agents get it with their next message.").waitFor();
     assert.equal(await project.isDisabled(), false);
-    await choose(project, { label: "auracode fixture" });
+    await choose(project, { label: "o7 fixture" });
     await page.waitForFunction(() =>
       document
         .querySelector('textarea[aria-label="Markdown"]')

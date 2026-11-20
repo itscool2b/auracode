@@ -1,4 +1,4 @@
-# auracode: implementation plan
+# o7: implementation plan
 
 ## Current authority
 **Accounts were removed on 16 November 2026, at the owner's request, because Claude Code and Codex
@@ -19,7 +19,7 @@ fixes rerun as needed. Visual work follows the proposed Aura system, with a webs
 
 ## Context
 The user runs many coding agents (Claude Code, Codex, Antigravity, Pi / oh-my-pi, Cursor, Grok Build,
-OpenCode, Hermes...) and hates toggling between apps. auracode is one desktop app (macOS, Windows and Linux)
+OpenCode, Hermes...) and hates toggling between apps. o7 is one desktop app (macOS, Windows and Linux)
 with a ChatGPT-style interface: projects on the left, chats inside projects, any installed agent driving a
 chat through its real harness (headless, rendered in our UI, never a terminal). The base app needs no login.
 A website at o7.codes lets people create an account and download the app; the same account signs into
@@ -51,7 +51,7 @@ most beautiful app of its kind, a killer onboarding, dead simple, every edge cas
   the move have updated (infra/README.md).
 - **End-to-end encrypted sync.** Chats contain code and secrets. Cost:
   a new machine is approved from a signed-in one or uses a recovery key.
-- **Trust:** never read, store, or proxy agent credentials; auracode never injects hidden prompts.
+- **Trust:** never read, store, or proxy agent credentials; o7 never injects hidden prompts.
 
 ## Historical machine facts (verified 2026-10-24 on the Mac)
 - macOS 26.6.2 arm64, rustc/cargo 1.99, Node 26.0.0, npm 11.12, git 2.54, gh 2.92 logged in as itscool2b
@@ -73,7 +73,7 @@ most beautiful app of its kind, a killer onboarding, dead simple, every edge cas
 ## Product principles
 1. Simple first: zero setup, no login needed, everything auto-detected, one composer box, smart defaults.
 2. Real harnesses, not reimplementations: each agent keeps its own auth, config, tools, skills, plugins.
-3. No hidden instructions. The only thing auracode adds to a prompt is the visible handoff block when you
+3. No hidden instructions. The only thing o7 adds to a prompt is the visible handoff block when you
    switch agents or devices. (The "let the agent chill" philosophy.)
 4. Local-first; cloud only for accounts and sync.
 5. Every animation means something: agent marks and live labels show real state, not decoration.
@@ -115,7 +115,7 @@ prerender public pages and serve static assets through Cloudflare. Rust owns API
   and account deletion after a fresh code.
 - /privacy, /terms, /changelog: accurate processor, retention, export and deletion information.
   Legal copy needs review before public release; a domain suffix alone does not establish jurisdiction.
-- The auracode://signin link prefills email only, never tokens. Display Download beside Open auracode.
+- The auracode://signin link prefills email only, never tokens. Display Download beside Open o7.
 - Reduced motion, keyboard access, and a whole page without JavaScript (including essential
   information) are required.
 
@@ -126,7 +126,7 @@ prerender public pages and serve static assets through Cloudflare. Rust owns API
 - **Chat** = one primary folder; extra folders become add-dirs only where the agent supports them, and the
   chat header shows exactly which folders it can reach.
 - **Isolation (M4):** "Direct" vs "Isolated" (git worktree on a new branch `aura/<slug>`). Until M4, a second
-  chat in a busy folder gets a warning. From M4, auracode asks before isolating.
+  chat in a busy folder gets a warning. From M4, o7 asks before isolating.
 - **One thread, many agents.** Switching agent resumes that agent's native session if it has one in this
   chat (sending only what happened since its last turn), else starts one in the same cwd; either way the
   first prompt carries a visible, token-budgeted handoff block (earlier user messages, other agents' final
@@ -194,7 +194,7 @@ auracode/                        Cargo workspace + pnpm workspace
   - Rust API: email-code auth, sessions, devices, sync, scoped blob access, quotas and rate limits.
     Use Workers bindings for D1, R2, Turnstile verification and Cloudflare Email Service delivery.
     Minimal JS binding glue is permitted if workers-rs lacks a platform API; business logic stays Rust.
-  - D1 auracode: US jurisdiction, read replication disabled for the initial authentication path.
+  - D1 o7: US jurisdiction, read replication disabled for the initial authentication path.
     Check session and device revocation authoritatively, never through an eventually consistent cache.
   - R2 auracode-releases: published installers, manifests, checksums; auracode-blobs: private ciphertext.
     Development uses local/emulated or separately named resources, never production test data.
@@ -219,7 +219,7 @@ auracode/                        Cargo workspace + pnpm workspace
   title, model, effort, mode; no slash commands, which the UI fetches on request), prompt_lifecycle (the
   command lifecycle event: queued, started, completed, cancelled, failed), notice, error. `TokenUsage`
   splits cache reads from cache writes and says whether it counts a turn or the session; `StopReason`
-  adds `interrupted` (auracode ended the turn) and `other`. Stored enums read a value they don't know as a
+  adds `interrupted` (o7 ended the turn) and `other`. Stored enums read a value they don't know as a
   fallback, so rows from a newer build still load.
 - **Profiles from day one.** All local data under `<app data>/profiles/<profile_id>/` (database,
   attachments, checkpoints, logs). M0 ships one "Local" profile; M6/M7 add one per account.
@@ -230,7 +230,7 @@ auracode/                        Cargo workspace + pnpm workspace
 ## Agent integration (researched 2026-10-24)
 | Agent | Path | Notes |
 |---|---|---|
-| Claude Code | Native: own Rust control loop over stream-json; user's `claude -p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --permission-prompt-tool stdio`, always with `--permission-mode`, with `--session-id=<uuid>` (new session) or `--resume=<id>`, and with `--allow-dangerously-skip-permissions` where the user's settings allow bypass | Contract and fixtures in the [M0 spike](spikes/claude-control.md) (2.1.310). Own lenient serde types; `claude-codes` crate and the official Python Agent SDK are references, diffed each release. Control: `initialize`, `interrupt`, `set_model`, `set_permission_mode`, `apply_flag_settings` (effort), `get_usage`, `get_context_usage`, `list_models`, `rewind_files`; we answer `can_use_tool`; fork via `--fork-session` (with our `--session-id`) or resume-at. `--permission-mode` is never left out: without it every spawn, resumes included, takes `permissions.defaultMode` from the user's settings, which can be `auto`. `--session-id` gives a new session's native id before its first turn. `bypassPermissions` can be switched on mid-chat only in a process launched with `--allow-dangerously-skip-permissions`. Resume works after a cwd change (the transcript keeps appending under the original folder's project dir), and `--fork-session` with `--session-id` writes the fork under the new folder's. The user's own hooks run inside these sessions (`SessionStart` context, `PermissionRequest` hooks that can answer or delay a prompt), so a tool call may never reach us as `can_use_tool`; principle 3 still holds, since auracode itself adds nothing. `rate_limit_event` feeds the limits meter. Unknown messages logged, never fatal; capabilities from `system/init`; compatibility smoke per new version. Second connection (M1a; one agent with the native one since 2026-10-28, see "One entry per agent"): ACP via the `claude-agent-acp` npm adapter, installed once per version into `<data root>/adapters` with `npm ci --omit=optional --ignore-scripts` from a lockfile committed for that version, launched as `node <entry>` from there, with the user's `claude` forced through `CLAUDE_CODE_EXECUTABLE`; never `npx` in the chat folder. |
+| Claude Code | Native: own Rust control loop over stream-json; user's `claude -p --input-format stream-json --output-format stream-json --verbose --include-partial-messages --permission-prompt-tool stdio`, always with `--permission-mode`, with `--session-id=<uuid>` (new session) or `--resume=<id>`, and with `--allow-dangerously-skip-permissions` where the user's settings allow bypass | Contract and fixtures in the [M0 spike](spikes/claude-control.md) (2.1.310). Own lenient serde types; `claude-codes` crate and the official Python Agent SDK are references, diffed each release. Control: `initialize`, `interrupt`, `set_model`, `set_permission_mode`, `apply_flag_settings` (effort), `get_usage`, `get_context_usage`, `list_models`, `rewind_files`; we answer `can_use_tool`; fork via `--fork-session` (with our `--session-id`) or resume-at. `--permission-mode` is never left out: without it every spawn, resumes included, takes `permissions.defaultMode` from the user's settings, which can be `auto`. `--session-id` gives a new session's native id before its first turn. `bypassPermissions` can be switched on mid-chat only in a process launched with `--allow-dangerously-skip-permissions`. Resume works after a cwd change (the transcript keeps appending under the original folder's project dir), and `--fork-session` with `--session-id` writes the fork under the new folder's. The user's own hooks run inside these sessions (`SessionStart` context, `PermissionRequest` hooks that can answer or delay a prompt), so a tool call may never reach us as `can_use_tool`; principle 3 still holds, since o7 itself adds nothing. `rate_limit_event` feeds the limits meter. Unknown messages logged, never fatal; capabilities from `system/init`; compatibility smoke per new version. Second connection (M1a; one agent with the native one since 2026-10-28, see "One entry per agent"): ACP via the `claude-agent-acp` npm adapter, installed once per version into `<data root>/adapters` with `npm ci --omit=optional --ignore-scripts` from a lockfile committed for that version, launched as `node <entry>` from there, with the user's `claude` forced through `CLAUDE_CODE_EXECUTABLE`; never `npx` in the chat folder. |
 | Codex | Native: `codex app-server --listen stdio://`, own process | Own serde subset with `#[serde(other)]`, tested against the JSON Schema from `codex app-server generate-json-schema` per supported version. `thread/start/resume/fork/list`, `turn/start` (model, effort, cwd, approvalPolicy, sandboxPolicy, images, mentions), `turn/steer`, `turn/interrupt`, `turn/diff/updated`, approvals, `model/list`, `account/rateLimits/read`, plugin/skill/config APIs (reused by Library + Sync). Never the shared daemon (opt-in later). Second connection (M1a; one agent with the native one, see "One entry per agent"): the `codex-acp` npm adapter, installed and launched like Claude's, with the user's `codex` forced through `CODEX_PATH`. |
 | Pi | Native RPC `pi --mode rpc` | `prompt`/`steer`/`follow_up`/`abort`, `set_model`, `get_available_models`, `set_thinking_level`, `fork`, `get_session_stats`, `extension_ui_request` (rendered as confirm/select/input). Turn ends on `agent_settled`; split on LF only. |
 | Antigravity | ACP via Google's `agy_acp_server` (registry `antigravity-acp`) | Second connection, the text fallback: `agy --input-format stream-json --output-format stream-json`, with visible prompts on stdin (text only, no approvals, interrupt = kill). The persistent input mode drops `-p` prompts. |
@@ -250,7 +250,7 @@ found" so agents never hang.
 
 **One entry per agent (owner decision, 2026-10-28).** People see one Claude Code and one Codex. The
 catalog lists *connections* (ways to start an agent) and files each under its agent: Claude Code is
-`claude` (auracode's native driver) and `claude-acp` (the npm ACP adapter); Codex is `codex` and
+`claude` (o7's native driver) and `claude-acp` (the npm ACP adapter); Codex is `codex` and
 `codex-acp`; Antigravity and Grok Build are their ACP server and a restricted text fallback
 (`agy-stream`, `grok-stream`); OpenCode is its 1.x and 2.x lines (`opencode`, `opencode-v2`).
 New chat, the composer's picker, onboarding's count, the Agents page and the Plugin library all list
@@ -265,7 +265,7 @@ the agent once, from the same Rust list.
   the data root), names catalog ids only, and applies to new sessions. An explicit connection that
   cannot run makes the agent unavailable with that connection's reason.
 - **None can run:** the agent shows its preferred connection's reason, followed by each other
-  connection's (named by its label) when either is installed but unusable, for example "auracode
+  connection's (named by its label) when either is installed but unusable, for example "o7
   needs Claude Code 2.1.310 or newer (found 2.1.309). ACP adapter: Node.js 22 or newer is required".
 - **Existing data, no migration:** a chat, project default or New chat default saved as a
   connection id (`claude-acp`, also from a synced older device) reads as its agent. A native
@@ -286,7 +286,7 @@ the agent once, from the same Rust list.
   `~/.grok/bin`, `~/.pi/agent/bin`, `~/.bun/bin`, `~/.volta/bin`, the asdf and mise shims,
   `/opt/homebrew/bin`, and the `prefix=` of `~/.npmrc`, read rather than by running npm). nvm stays with
   the login shell: its shell function can't be resolved reliably without one. The variables that describe
-  how auracode itself was launched (terminal session, npm, pnpm, Tauri dev) are stripped from the
+  how o7 itself was launched (terminal session, npm, pnpm, Tauri dev) are stripped from the
   resolver shell's input.
 - A binary counts only if `--version` runs. Channel from the real path; updates run the vendor's own update
   command for that channel (agents also self-update; we don't fight it). Each driver records a
@@ -300,7 +300,7 @@ the agent once, from the same Rust list.
 - WSL, automatic: `wsl.exe -l -q` (UTF-16LE), probe each distro, show "Codex · WSL Ubuntu"; an `AgentHost`
   (Native | Wsl{distro}) spawns via `wsl.exe -d <distro> --cd <path> -e ...` with path translation.
 
-**Agent terms (matters now that other people can download auracode).** auracode only spawns the user's own
+**Agent terms (matters now that other people can download o7).** o7 only spawns the user's own
 unmodified binaries. Anthropic allows signing in to the unmodified binary with your own subscription for
 individual use and forbids third-party products offering claude.ai login or routing plan credentials;
 OpenAI allows local/open-source app-server use, never commercial/hosted; Google's terms ban third-party
@@ -321,7 +321,7 @@ consumer-grade polish. MIT/Apache code may be read for reference; never AGPL (To
   daemons the agent's catalog entry declares (Hermes' gateway, Claude's daemon), which are spared with their
   subtrees, on every OS. On Windows every agent runs in a kill-on-close job; job breakaway for agents that
   declare daemons arrives in M1e, so M1a's Hermes on Windows needs its gateway already running. One
-  auracode process owns a profile's sessions (`<profile>/owner.lock`); a second one refuses to start them.
+  o7 process owns a profile's sessions (`<profile>/owner.lock`); a second one refuses to start them.
 - **Env scrub:** children inherit the resolved login-shell env minus an explicit denylist. Everything
   else passes through, including documented user configuration (`CLAUDE_CODE_USE_BEDROCK`,
   `CLAUDE_CODE_USE_VERTEX`, `CLAUDE_CODE_MAX_OUTPUT_TOKENS`, `CLAUDE_CODE_GIT_BASH_PATH`, `CODEX_HOME`, and
@@ -340,7 +340,7 @@ consumer-grade polish. MIT/Apache code may be read for reference; never AGPL (To
   - `ELECTRON_RUN_AS_NODE`, `VSCODE_INSPECTOR_OPTIONS`, and `NODE_OPTIONS` only when it carries a debugger
     hook (`--inspect`, `--inspect-brk`, `--inspect-wait`, or a `--require` of a debugger bootloader such as
     the one VS Code's auto attach injects), which would attach to or pause every Node-based agent.
-- **Long runs:** keep the machine awake while turns run; closing the window keeps auracode in the menu bar /
+- **Long runs:** keep the machine awake while turns run; closing the window keeps o7 in the menu bar /
   tray with a badge; quitting with live turns asks; app updates wait for idle.
 - **Diagnostics:** rotating raw protocol log per session + "Copy debug bundle" (tokens redacted; also feeds
   fixtures).
@@ -365,7 +365,7 @@ consumer-grade polish. MIT/Apache code may be read for reference; never AGPL (To
 ## Edge cases (each one has a defined behaviour and a test)
 **Agents.** Not installed; installed but broken (`--version` fails: shown as broken with the error); several
 installs of one agent (PATH order wins, others listed as shadowed, user can pick); installed, updated, or
-removed while auracode runs (watch bin dirs + re-detect on focus; running sessions keep their process);
+removed while o7 runs (watch bin dirs + re-detect on focus; running sessions keep their process);
 signed out or token expired mid-turn (sign-in sheet, then resume); rate limit or quota hit (meter shows reset
 time, one click hands the chat to another agent); version too old (update required) or untested-new (badge,
 lenient parsing); crash mid-turn (error card with stderr tail + "Restart and resume"); silent for minutes
@@ -404,7 +404,7 @@ mapping; Locate or Clone); server down (local-first, backoff, status dot); stora
 paused", never data loss); config for an agent not installed (waits); secrets (never plaintext).
 **Website + downloads + updates.** Wrong OS/arch guess (universal macOS DMG avoids the Apple Silicon/Intel
 problem; all platforms always listed); unsigned builds (clear Gatekeeper/SmartScreen steps + checksums until
-signing is set up); "Open auracode" when not installed (Download sits next to it); cookies or JS disabled
+signing is set up); "Open o7" when not installed (Download sits next to it); cookies or JS disabled
 (download page still works); update signature mismatch (refused); interrupted download (retry); update while
 chats run (waits for idle); WebView2 missing on Windows (installer bootstraps it); Windows 10 (no Mica:
 fallback theme). Linux, Wayland, AppImage and Debian package qualification are deferred. Explicit
@@ -577,7 +577,7 @@ Settings Sync's model).
 - Deploys are separate even though the repo is shared. Batch source validation before the final
   Windows/macOS CI checkpoint. Use isolated Cloudflare preview resources for web and API acceptance.
   A merge or version tag does not publish an unqualified desktop release; follow `docs/releases.md`.
-- Cloud changes stay within the owner's authorized scope. The auracode database/storage creation was
+- Cloud changes stay within the owner's authorized scope. The o7 database/storage creation was
   authorized on 2026-10-26; do not request that permission again.
   New consequential actions outside that scope are confirmed before execution; secrets live in Wrangler/Cloudflare secrets and GitHub Actions secrets, never in git.
 

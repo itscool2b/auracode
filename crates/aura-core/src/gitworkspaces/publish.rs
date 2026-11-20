@@ -507,7 +507,7 @@ fn publishable(record: &ManagedWorktree, source: &Inspection) -> Result<()> {
         || !source.view.is_linked_worktree
     {
         return Err(invalid(
-            "Commit the intended work and resolve Git state before publishing. Auracode does not commit files automatically.",
+            "Commit the intended work and resolve Git state before publishing. o7 does not commit files automatically.",
         ));
     }
     Ok(())

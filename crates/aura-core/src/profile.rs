@@ -1,7 +1,7 @@
 //! Profiles: separate sets of projects and chats on one machine.
 //!
 //! Every profile is Local: its data lives only on this machine. A fresh install has one, `local`.
-//! A data folder may hold more (auracode once kept an account's workspace as a second Local
+//! A data folder may hold more (o7 once kept an account's workspace as a second Local
 //! profile), and the profile switcher lists them all. Each profile is a directory
 //! `<data root>/profiles/<id>/`:
 //!
@@ -21,7 +21,7 @@
 //! one that leads nowhere (the folder is on a disk that isn't connected) is an error, because a new
 //! profile in its place would leave the real one behind.
 //!
-//! auracode accounts were removed. A folder one of them left behind (its `profile.json` says
+//! o7 accounts were removed. A folder one of them left behind (its `profile.json` says
 //! `"kind": "account"`, and its database is encrypted) is never opened, listed, changed or deleted:
 //! [`Profiles::list`] skips it, and when `state.json` names it, Local opens instead.
 
@@ -60,7 +60,7 @@ pub enum ProfileKind {
 const DEFAULT_DISPLAY_NAME: &str = "Local";
 
 /// What a `profile.json` on disk may say its kind is. Wider than [`ProfileKind`]: a folder left
-/// by a removed auracode account still says `account`, and reading that as its own case (rather
+/// by a removed o7 account still says `account`, and reading that as its own case (rather
 /// than as a damaged file) is what lets the folder be recognised and left alone.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Deserialize)]
 #[serde(rename_all = "snake_case")]
@@ -112,7 +112,7 @@ impl Profile {
         self.dir.join(CHECKPOINTS_DIR)
     }
 
-    /// `<dir>/worktrees`: the Git worktrees auracode creates for isolated chats, and their
+    /// `<dir>/worktrees`: the Git worktrees o7 creates for isolated chats, and their
     /// records.
     pub fn worktrees_dir(&self) -> PathBuf {
         self.dir.join(WORKTREES_DIR)
@@ -150,7 +150,7 @@ impl Profile {
     }
 }
 
-/// The contents of `state.json`. Fields written by a newer auracode are kept in `extra` and written
+/// The contents of `state.json`. Fields written by a newer o7 are kept in `extra` and written
 /// back untouched, so running an older build doesn't erase them.
 #[derive(Debug, Serialize, Deserialize)]
 struct AppState {
@@ -164,7 +164,7 @@ struct AppState {
 enum ProfileRead {
     Missing,
     Valid(Profile),
-    /// A folder left by a removed auracode account. It is never opened, changed or deleted.
+    /// A folder left by a removed o7 account. It is never opened, changed or deleted.
     RetiredAccount,
     Invalid(CoreError),
 }
@@ -187,7 +187,7 @@ impl Profiles {
     /// Opens the profile named in `state.json`, bootstrapping Local on first run.
     ///
     /// Never fails because of what's in the files: a missing or corrupt `state.json`, or one naming a
-    /// profile that is missing, invalid, unreadable, or left by a removed auracode account, falls
+    /// profile that is missing, invalid, unreadable, or left by a removed o7 account, falls
     /// back to Local (recreating it if needed), rewrites `state.json`, and logs a warning. The
     /// profile it named is left exactly as it was. A `state.json` that can't be read also falls back
     /// to Local, but is left alone, so a passing fault doesn't forget the user's choice. A file where
@@ -219,7 +219,7 @@ impl Profiles {
                     ),
                     ProfileRead::RetiredAccount => tracing::warn!(
                         profile = %state.active_profile,
-                        "the active profile belongs to an auracode account, which this version no longer opens; leaving its folder as it is and opening Local"
+                        "the active profile belongs to an o7 account, which this version no longer opens; leaving its folder as it is and opening Local"
                     ),
                     ProfileRead::Invalid(error) => tracing::warn!(
                         profile = %state.active_profile,
@@ -253,7 +253,7 @@ impl Profiles {
     /// Every readable profile: `local` first, then the others, oldest first (a stable order for the
     /// profile switcher even when two share a creation millisecond). A directory that isn't a valid
     /// profile (bad name, missing or corrupt `profile.json`, id mismatch) is skipped with a warning
-    /// so one damaged profile can't hide the others. So is a folder left by a removed auracode
+    /// so one damaged profile can't hide the others. So is a folder left by a removed o7
     /// account, which stays on disk untouched.
     pub fn list(&self) -> Result<Vec<ProfileMeta>> {
         let profiles_dir = self.root.profiles_dir();
@@ -292,7 +292,7 @@ impl Profiles {
                     tracing::warn!(path = %path.display(), "skipping a profile folder without profile.json");
                 }
                 ProfileRead::RetiredAccount => {
-                    tracing::info!(path = %path.display(), "skipping the profile of an auracode account, which this version no longer opens; its folder is left as it is");
+                    tracing::info!(path = %path.display(), "skipping the profile of an o7 account, which this version no longer opens; its folder is left as it is");
                 }
                 ProfileRead::Invalid(error) => {
                     tracing::warn!(path = %path.display(), %error, "skipping an unreadable profile");
@@ -324,7 +324,7 @@ impl Profiles {
         self.write_new_profile(id, display_name.to_string())
     }
 
-    /// Loads an existing profile by id. A folder left by a removed auracode account is not a
+    /// Loads an existing profile by id. A folder left by a removed o7 account is not a
     /// profile this version has: it answers as not found.
     pub fn get(&self, id: &str) -> Result<Profile> {
         match self.read_profile(id)? {
@@ -379,7 +379,7 @@ impl Profiles {
             // `account` was edited by hand. Like any other unusable file it is moved aside, never
             // deleted, and nothing else in the folder is touched.
             ProfileRead::RetiredAccount => self.recreate_local_meta(
-                "the Local profile.json names an auracode account, which this version no longer opens",
+                "the Local profile.json names an o7 account, which this version no longer opens",
             ),
             ProfileRead::Invalid(error) => self.recreate_local_meta(&error.to_string()),
         }
@@ -1021,7 +1021,7 @@ mod tests {
         assert_eq!(ids, vec![local.meta.id, second.meta.id, third.meta.id]);
     }
 
-    /// What an auracode account left in a data folder: its own profile folder, with an encrypted
+    /// What an o7 account left in a data folder: its own profile folder, with an encrypted
     /// database and the files beside it. Returns the folder and every file's bytes.
     fn account_leftover(profiles: &Profiles) -> (PathBuf, Vec<(PathBuf, Vec<u8>)>) {
         let id = new_id();
@@ -1065,7 +1065,7 @@ mod tests {
         names
     }
 
-    /// auracode accounts were removed. The folder one left behind is not listed, cannot be
+    /// o7 accounts were removed. The folder one left behind is not listed, cannot be
     /// selected, and stays on disk byte for byte; when it was the last-used profile, Local opens
     /// (and is created if the account was the only profile the data folder had).
     #[test]

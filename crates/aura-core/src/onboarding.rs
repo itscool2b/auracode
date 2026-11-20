@@ -113,7 +113,7 @@ pub struct SetupPreferences {
     pub general: GeneralPreferences,
 }
 
-/// Settings' General page: what new chats start with, and how auracode behaves while agents work
+/// Settings' General page: what new chats start with, and how o7 behaves while agents work
 /// in the background. Full auto stays the default; an agent's own restrictions still apply.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, specta::Type)]
 pub struct GeneralPreferences {
@@ -134,7 +134,7 @@ pub struct GeneralPreferences {
     pub sounds: bool,
     /// Keep the computer from idle sleep while an agent works.
     pub keep_awake: bool,
-    /// Closing the window keeps auracode running in the tray or menu bar.
+    /// Closing the window keeps o7 running in the tray or menu bar.
     pub close_to_tray: bool,
     /// Copy each source folder's Git-ignored instruction files (a local `AGENTS.md` or
     /// `CLAUDE.md`) into the worktrees new chats get, so agents there read them too. On unless the
@@ -157,7 +157,7 @@ pub struct GeneralPreferences {
     /// The browser offers to save sign-ins and fills them in (WebView2's own password manager, on
     /// Windows). On by default.
     pub browser_passwords: bool,
-    /// Look for a newer auracode shortly after start and a few times a day, and show Update when
+    /// Look for a newer o7 shortly after start and a few times a day, and show Update when
     /// there is one (owner, 18 November 2026: "an update button pops up for every merge"). It
     /// reads one public file from the project's GitHub releases; downloading and installing still
     /// wait for the button. On unless the person turns it off in Settings > General.
@@ -339,7 +339,7 @@ pub enum SetupAction {
     BrowserPasswords {
         enabled: bool,
     },
-    /// Turns on or off looking for a newer auracode by itself.
+    /// Turns on or off looking for a newer o7 by itself.
     AutomaticUpdates {
         enabled: bool,
     },
@@ -381,7 +381,7 @@ impl Default for Record {
     }
 }
 
-/// What a workspace opened for the first time takes from the one being left: how auracode looks
+/// What a workspace opened for the first time takes from the one being left: how o7 looks
 /// and behaves, and how far setup got. The first project stays behind, since projects belong to
 /// their workspace.
 
@@ -391,7 +391,7 @@ pub enum SetupError {
     Stale,
     #[error("{0}")]
     Invalid(&'static str),
-    #[error("Setup preferences were saved by a newer auracode. They have been left unchanged.")]
+    #[error("Setup preferences were saved by a newer o7. They have been left unchanged.")]
     NewerVersion,
     #[error("Could not save setup preferences: {0}")]
     Storage(#[from] crate::CoreError),
@@ -1122,7 +1122,7 @@ mod tests {
         assert_eq!(restarted.step, SetupStep::Welcome);
     }
 
-    /// Setup had a sign-in step while auracode had accounts. A file saved on it still reads,
+    /// Setup had a sign-in step while o7 had accounts. A file saved on it still reads,
     /// with everything else the person chose.
     #[test]
     fn a_setup_left_on_the_removed_sign_in_step_continues_at_the_project() {

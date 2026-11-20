@@ -1,6 +1,6 @@
 [package]
 name = "aura-remote"
-description = "Remote sessions for auracode: pairing, the sealed channel to a browser, bot tools and the relay connection"
+description = "Remote sessions for o7: pairing, the sealed channel to a browser, bot tools and the relay connection"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

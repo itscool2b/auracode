@@ -587,7 +587,7 @@ export function InstructionsPanel({
               </>
             ) : (
               <>
-                auracode commits only <strong>{confirm.file.path}</strong> with the message{" "}
+                o7 commits only <strong>{confirm.file.path}</strong> with the message{" "}
                 <strong>Add {confirm.file.path}</strong>. Anything else you staged stays staged.
               </>
             )}
@@ -623,7 +623,7 @@ export function InstructionsPanel({
                   [
                     "universal",
                     "Shared instructions",
-                    "Maintain one shared source. Aura shows how each agent reads it.",
+                    "Maintain one shared source. o7 shows how each agent reads it.",
                   ],
                   [
                     "per_agent",
@@ -785,7 +785,7 @@ function FileEditor({
     notes.push({
       text: file.managed.edited
         ? "This managed copy was edited by hand."
-        : `A copy of ${fileByKey(snapshot, file.managed.source)?.path ?? "the shared file"} that auracode keeps in sync.`,
+        : `A copy of ${fileByKey(snapshot, file.managed.source)?.path ?? "the shared file"} that o7 keeps in sync.`,
       volt: file.managed.edited,
     });
   if (file.import_of)

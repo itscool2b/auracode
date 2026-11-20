@@ -61,7 +61,7 @@ function installation(
     resolved_path: null,
     version,
     channel,
-    verification: { state: "verified", version, scope: "Verified with auracode" },
+    verification: { state: "verified", version, scope: "Verified with o7" },
   };
 }
 

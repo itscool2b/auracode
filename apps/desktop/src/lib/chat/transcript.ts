@@ -61,7 +61,7 @@ export interface UserItem {
   readonly key: string;
   /** What the person sent. Project memory attached after it is in `memory`, not here. */
   readonly text: string;
-  /** Project memory Aura attached to this message as reference context, when it attached any. */
+  /** Project memory o7 attached to this message as reference context, when it attached any. */
   readonly memory?: MemoryContext;
   /** With `memory`: the whole saved message, which later pieces of it are appended to. */
   readonly sent?: string;
@@ -167,7 +167,7 @@ export interface TurnEnd {
   readonly stopReason: StopReason;
   readonly usage: TokenUsage | null;
   readonly durationMs: number | null;
-  /** Ended by recovery at startup: auracode quit or crashed while the turn ran. */
+  /** Ended by recovery at startup: o7 quit or crashed while the turn ran. */
   readonly recovered: boolean;
 }
 
@@ -705,7 +705,7 @@ export function stopReasonLabel(end: TurnEnd): string {
     case "cancelled":
       return "Stopped";
     case "interrupted":
-      return end.recovered ? "Interrupted when auracode closed" : "Interrupted";
+      return end.recovered ? "Interrupted when o7 closed" : "Interrupted";
     case "error":
       return "Failed";
     case "other":

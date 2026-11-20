@@ -1,4 +1,4 @@
-//! Databases of the removed auracode accounts were encrypted and carry a durable marker file
+//! Databases of the removed o7 accounts were encrypted and carry a durable marker file
 //! (`<database>.encryption`). This version cannot read them, so a marked database is refused
 //! before any open: it never enters the plaintext recovery path, which would take its ciphertext
 //! for damage and move it aside.

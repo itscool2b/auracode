@@ -8,12 +8,12 @@ in progress keeps its original completion, failure, and cancellation behavior.
 With automatic checkpoints off, sending skips workspace snapshot discovery, file hashing, object
 verification, and checkpoint publication. The workspace still goes through recovery admission so
 an interrupted file restore cannot race a new agent turn. Chats, transcripts, and queued prompts
-remain persisted. These turns have no Aura file-undo baseline; native harness recovery is not a
+remain persisted. These turns have no o7 file-undo baseline; native harness recovery is not a
 universal substitute. Earlier saved checkpoints remain available for Changes and selected-file
 revert, and are never presented as the baseline of a later turn that has no checkpoint.
 
 A sent message's Rewind (since 2026-11-05) opens Changes on the files before that message. Where
-the turn has an Aura checkpoint, that is what it restores: every file, including changes made by
+the turn has an o7 checkpoint, that is what it restores: every file, including changes made by
 commands, with the session stopped. Where it has none, a Claude chat falls back to Claude's own
 file checkpointing, which every Claude session starts with (`CLAUDE_CODE_ENABLE_SDK_FILE_CHECKPOINTING`):
 Claude copies a file just before its edit tools change it, so the cost follows the files it edits,
@@ -24,7 +24,7 @@ confirm stops the session, as files may have changed. Claude keeps these copies 
 resumed session. Other agents' turns without a checkpoint show the reason, where Automatic
 checkpoints are, and Edit this message.
 
-When enabled, Aura saves a checkpoint before dispatching an ordinary queued prompt. This provides
+When enabled, o7 saves a checkpoint before dispatching an ordinary queued prompt. This provides
 consistent Changes and selected-file revert across native harnesses, with a delay before sending.
 The harness still owns model execution and its native tools. A failed capture holds the prompt;
 stopping a capture leaves it unsent. Native steering retains its existing separate lifecycle.
@@ -99,7 +99,7 @@ check cancellation before mutation, then retain ownership through completion or 
 ## Formats and the preference
 
 Checkpoints are private Git objects in the profile. The encrypted capture that account profiles
-used went with auracode's accounts on 16 November 2026. Existing checkpoints of Local profiles
+used went with o7's accounts on 16 November 2026. Existing checkpoints of Local profiles
 remain readable; the opt-in preference is stored in setup preferences and requires no database
 migration.
 

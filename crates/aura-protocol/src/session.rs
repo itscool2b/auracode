@@ -377,7 +377,7 @@ pub struct AuthCommand {
     pub env: Vec<(String, String)>,
 }
 
-/// An agent auracode can start, as the New chat screen shows it: one entry per agent. For an
+/// An agent o7 can start, as the New chat screen shows it: one entry per agent. For an
 /// agent with several connections, every field but `id` and `name` describes the connection a
 /// new session would use now (or the preferred one while none can run).
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -386,7 +386,7 @@ pub struct AgentEntry {
     pub name: String,
     pub description: String,
     pub availability: Availability,
-    /// How auracode starts it, for display.
+    /// How o7 starts it, for display.
     pub launch: String,
     /// The first start downloads the agent's adapter.
     pub needs_download: bool,
@@ -399,11 +399,11 @@ pub struct AgentEntry {
     /// The installed version against its latest known release, computed by detection.
     #[serde(default)]
     pub harness: Option<crate::plugins::HarnessStatus>,
-    /// The ways auracode can start this agent, when it has more than one (Claude Code's own
+    /// The ways o7 can start this agent, when it has more than one (Claude Code's own
     /// protocol or its ACP adapter). `None` for an agent with one connection.
     #[serde(default)]
     pub connections: Option<AgentConnections>,
-    /// A chat with this agent can open in its own interactive interface, in auracode's
+    /// A chat with this agent can open in its own interactive interface, in o7's
     /// terminal (Chat | Terminal).
     #[serde(default)]
     pub terminal: bool,
@@ -421,7 +421,7 @@ pub struct AgentConnections {
     pub options: Vec<AgentConnection>,
 }
 
-/// One way auracode can start an agent.
+/// One way o7 can start an agent.
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct AgentConnection {
     /// The connection's catalog id (`claude-acp`), which saved native sessions record.

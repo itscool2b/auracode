@@ -51,7 +51,7 @@ export const commands = {
 	browserHistoryRemove: (urls: string[]) => typedError<number, AppError>(__TAURI_INVOKE("browser_history_remove", { urls })),
 	browserClear: (data: ClearData) => typedError<null, AppError>(__TAURI_INVOKE("browser_clear", { data })),
 	/**
-	 *  Opens an address outside auracode: a web page in the system's browser, or another program's
+	 *  Opens an address outside o7: a web page in the system's browser, or another program's
 	 *  link a page asked for (`mailto:`, `vscode:`), after the person chose to.
 	 */
 	browserOpenOutside: (url: string) => typedError<null, AppError>(__TAURI_INVOKE("browser_open_outside", { url })),
@@ -147,13 +147,13 @@ export const commands = {
 	 */
 	revealDataDir: () => typedError<null, AppError>(__TAURI_INVOKE("reveal_data_dir")),
 	/**
-	 *  Reviews what deleting all of auracode's data would remove. Changes nothing; checks
-	 *  auracode's worktrees with read-only Git commands.
+	 *  Reviews what deleting all of o7's data would remove. Changes nothing; checks
+	 *  o7's worktrees with read-only Git commands.
 	 */
 	dataCleanupReview: () => typedError<DataCleanupReview, AppError>(__TAURI_INVOKE("data_cleanup_review")),
 	/**
-	 *  Starts the reviewed cleanup and quits auracode. Running agents and terminals stop without a
-	 *  second question: the review said so. Nothing is deleted until auracode has exited.
+	 *  Starts the reviewed cleanup and quits o7. Running agents and terminals stop without a
+	 *  second question: the review said so. Nothing is deleted until o7 has exited.
 	 */
 	dataCleanupApply: (token: string, choice: DataCleanupChoice) => typedError<null, AppError>(__TAURI_INVOKE("data_cleanup_apply", { token, choice })),
 	/**
@@ -170,7 +170,7 @@ export const commands = {
 	 */
 	smokeReport: (report: SmokeReport) => typedError<null, AppError>(__TAURI_INVOKE("smoke_report", { report })),
 	/**
-	 *  Every agent auracode knows, with its cached availability. Never waits: detection runs in the
+	 *  Every agent o7 knows, with its cached availability. Never waits: detection runs in the
 	 *  background, and an agent still being checked reads `checking`.
 	 */
 	agentsList: () => __TAURI_INVOKE<AgentEntry[]>("agents_list"),
@@ -201,7 +201,7 @@ export const commands = {
 	/**  Explicit update action. No updates run as part of detection or release checks. */
 	agentUpdate: (agentId: string) => typedError<null, AppError>(__TAURI_INVOKE("agent_update", { agentId })),
 	/**
-	 *  What the agent's last update printed in this run of auracode: its last lines as plain text,
+	 *  What the agent's last update printed in this run of o7: its last lines as plain text,
 	 *  for the person who asked for the update. Kept in memory only, never stored, logged or sent on.
 	 */
 	agentUpdateOutput: (agentId: string) => typedError<string | null, AppError>(__TAURI_INVOKE("agent_update_output", { agentId })),
@@ -437,7 +437,7 @@ export const commands = {
 	chatCreatePreview: (folderId: string) => typedError<ChatCreatePreview, AppError>(__TAURI_INVOKE("chat_create_preview", { folderId })),
 	/**
 	 *  What a folder the person picked already is: its projects (compared canonical, so a link or
-	 *  another spelling of the same folder finds them) and whether auracode manages it as a worktree.
+	 *  another spelling of the same folder finds them) and whether o7 manages it as a worktree.
 	 */
 	workspaceFolderMatches: (path: string) => typedError<FolderMatches, AppError>(__TAURI_INVOKE("workspace_folder_matches", { path })),
 	chatProjectCreate: (request: ProjectChatCreate) => typedError<WorkspaceChat, AppError>(__TAURI_INVOKE("chat_project_create", { request })),
@@ -593,7 +593,7 @@ export type AccountUsage = {
 };
 
 /**
- *  A sign-in added in auracode, beside the agent's own. Device-local: its token stays in this
+ *  A sign-in added in o7, beside the agent's own. Device-local: its token stays in this
  *  computer's secure storage and never becomes chat metadata.
  */
 export type AgentAccount = {
@@ -620,7 +620,7 @@ export type AgentAccounts = {
 /**  The vendor's own local authentication check. This does not promise a successful paid request. */
 export type AgentAuthStatus = { state: "credentials_present" } | { state: "sign_in_required" } | { state: "unknown"; reason: string } | { state: "unsupported" };
 
-/**  One way auracode can start an agent. */
+/**  One way o7 can start an agent. */
 export type AgentConnection = {
 	/**  The connection's catalog id (`claude-acp`), which saved native sessions record. */
 	id: string,
@@ -648,7 +648,7 @@ export type AgentConnections = {
 };
 
 /**
- *  An agent auracode can start, as the New chat screen shows it: one entry per agent. For an
+ *  An agent o7 can start, as the New chat screen shows it: one entry per agent. For an
  *  agent with several connections, every field but `id` and `name` describes the connection a
  *  new session would use now (or the preferred one while none can run).
  */
@@ -657,7 +657,7 @@ export type AgentEntry = {
 	name: string,
 	description: string,
 	availability: Availability,
-	/**  How auracode starts it, for display. */
+	/**  How o7 starts it, for display. */
 	launch: string,
 	/**  The first start downloads the agent's adapter. */
 	needs_download: boolean,
@@ -668,12 +668,12 @@ export type AgentEntry = {
 	/**  The installed version against its latest known release, computed by detection. */
 	harness?: HarnessStatus | null,
 	/**
-	 *  The ways auracode can start this agent, when it has more than one (Claude Code's own
+	 *  The ways o7 can start this agent, when it has more than one (Claude Code's own
 	 *  protocol or its ACP adapter). `None` for an agent with one connection.
 	 */
 	connections?: AgentConnections | null,
 	/**
-	 *  A chat with this agent can open in its own interactive interface, in auracode's
+	 *  A chat with this agent can open in its own interactive interface, in o7's
 	 *  terminal (Chat | Terminal).
 	 */
 	terminal?: boolean,
@@ -841,16 +841,16 @@ export type AppErrorCode =
  *  The message says which.
  */
 "blob_missing" | 
-/**  auracode is quitting. */
+/**  o7 is quitting. */
 "shutting_down" | 
-/**  Something went wrong inside auracode. */
+/**  Something went wrong inside o7. */
 "internal" | 
 /**  The folder picker could not be shown. */
 "dialog_failed";
 
 /**  Everything the UI needs to know about this launch, from `app_info`. */
 export type AppInfo = {
-	/**  auracode's version (the Cargo workspace version). */
+	/**  o7's version (the Cargo workspace version). */
 	app_version: string,
 	tauri_version: string,
 	/**  `"macos"`, `"windows"`, `"linux"`, or Rust's name for another OS. */
@@ -902,7 +902,7 @@ export type AppearancePreference = "system" | "light" | "dark";
 export type AuraEvent = 
 /**  The session actor started a turn for the queued prompt `prompt_id`. */
 ({ type: "turn_started"; turn_id: string; prompt_id: string | null }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; step?: never; stop_reason?: never; task_id?: never; text?: never; thought_id?: never; usage?: never; windows?: never } | ({ type: "turn_ended"; turn_id: string; stop_reason: StopReason; usage: TokenUsage | null; duration_ms: number | null; 
-/**  Ended by recovery at startup: auracode quit or crashed while the turn ran. */
+/**  Ended by recovery at startup: o7 quit or crashed while the turn ran. */
 recovered: boolean }) & { answer?: never; by?: never; decision?: never; detail?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; request_id?: never; state?: never; step?: never; task_id?: never; text?: never; thought_id?: never; windows?: never } | 
 /**  The user's prompt text, as sent. The session actor emits it; drivers never do. */
 ({ type: "user_message_delta"; message_id: string; text: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; step?: never; stop_reason?: never; task_id?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "steering_status"; message_id: string; state: SteeringState; detail: string | null }) & { answer?: never; by?: never; decision?: never; duration_ms?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; step?: never; stop_reason?: never; task_id?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "message_delta"; message_id: string; text: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; step?: never; stop_reason?: never; task_id?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "message_completed"; message_id: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; step?: never; stop_reason?: never; task_id?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "thought_delta"; thought_id: string; text: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; step?: never; stop_reason?: never; task_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "thought_completed"; thought_id: string; duration_ms: number | null }) & { answer?: never; by?: never; decision?: never; detail?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; step?: never; stop_reason?: never; task_id?: never; text?: never; turn_id?: never; usage?: never; windows?: never } | {
@@ -968,7 +968,7 @@ export type Autonomy = "full_auto" | "auto_edit" | "ask";
  */
 export type AutonomyState = {
 	requested: Autonomy,
-	/**  The agent mode in effect, when auracode knows it. */
+	/**  The agent mode in effect, when o7 knows it. */
 	native_mode: string | null,
 	auto_answer: AutoAnswer,
 	/**  Shown next to the autonomy picker. */
@@ -1003,7 +1003,7 @@ export type BackgroundTask = {
 	tokens: number | null,
 	/**  How long it ran, as the agent reported it. */
 	duration_ms: number | null,
-	/**  When auracode first heard of it. */
+	/**  When o7 first heard of it. */
 	started_at: number | null,
 	ended_at: number | null,
 	/**  What the task was asked to do, cut to 4 KiB. `None` keeps the prompt already known. */
@@ -1101,7 +1101,7 @@ export type BrowserStatus = {
 /**  One tab of a chat's browser. */
 export type BrowserTab = {
 	id: string,
-	/**  `None`: a new tab, which shows auracode's start page instead of a web page. */
+	/**  `None`: a new tab, which shows o7's start page instead of a web page. */
 	url: string | null,
 	title: string,
 	loading: boolean,
@@ -1420,7 +1420,7 @@ export type CloneRecord = {
 	progress: CloneProgress | null,
 	/**  Git's last lines that are not progress, kept for a failed clone. Never logged. */
 	output: string[],
-	/**  auracode removed the unfinished folder it created. */
+	/**  o7 removed the unfinished folder it created. */
 	removed: boolean,
 };
 
@@ -1687,7 +1687,7 @@ export type CoordinatorSnapshot = {
 	brief: string,
 	/**  No worker starts, no routine fires and no report is passed on while this is set. */
 	paused: boolean,
-	/**  Why auracode paused it by itself, if it did. */
+	/**  Why o7 paused it by itself, if it did. */
 	pause_reason: string | null,
 	workers: CoordinatorWorker[],
 	tasks: CoordinatorTask[],
@@ -1768,12 +1768,12 @@ export type DataCleanupItemKind =
 "data" | 
 /**  Window position, web caches, preferences. */
 "app" | 
-/**  An entry auracode made in a data folder it does not own by name. */
+/**  An entry o7 made in a data folder it does not own by name. */
 "entry" | 
 /**  Update downloads and other leftovers in the temporary folder. */
 "temporary";
 
-/**  What "Delete all auracode data" would remove, for the review. */
+/**  What "Delete all o7 data" would remove, for the review. */
 export type DataCleanupReview = {
 	/**  One use, for [`data_cleanup_apply`], within ten minutes. */
 	token: string,
@@ -1785,13 +1785,13 @@ export type DataCleanupReview = {
 	 *  macOS keychain" or "the desktop keyring" (the Secret Service on Linux).
 	 */
 	secure_store: string | null,
-	/**  macOS: the app bundle "move auracode to the Trash" would move; `None` where it cannot. */
+	/**  macOS: the app bundle "move o7 to the Trash" would move; `None` where it cannot. */
 	app_bundle: string | null,
 };
 
 /**  How far the review reaches. */
 export type DataCleanupScope = 
-/**  Everything auracode keeps on this device. */
+/**  Everything o7 keeps on this device. */
 "machine" | 
 /**  Only this launch's own data folder (`AURACODE_DATA_DIR`). */
 "data_folder";
@@ -1975,14 +1975,14 @@ export type FolderMatch = {
  *  letter case where the file system ignores it): Rust compares canonical folders.
  */
 export type FolderMatches = {
-	/**  The folder as auracode stores it: canonical, in its plain spelling. */
+	/**  The folder as o7 stores it: canonical, in its plain spelling. */
 	path: string,
 	/**
 	 *  The project folders it already is: the one whose chat was active most recently first, then
 	 *  the oldest. A folder is in several projects only when it was added to each on purpose.
 	 */
 	matches: FolderMatch[],
-	/**  When it is a worktree auracode manages: a new chat starts from its source instead. */
+	/**  When it is a worktree o7 manages: a new chat starts from its source instead. */
 	worktree: WorktreeOrigin | null,
 };
 
@@ -2009,7 +2009,7 @@ export type FolderState = "ok" | "missing" |
 "not_allowed";
 
 /**
- *  Settings' General page: what new chats start with, and how auracode behaves while agents work
+ *  Settings' General page: what new chats start with, and how o7 behaves while agents work
  *  in the background. Full auto stays the default; an agent's own restrictions still apply.
  */
 export type GeneralPreferences = {
@@ -2023,7 +2023,7 @@ export type GeneralPreferences = {
 	 */
 	default_effort: string | null,
 	default_autonomy: Autonomy,
-	/**  Save an Aura file snapshot before every queued prompt. Off unless explicitly enabled. */
+	/**  Save an o7 file snapshot before every queued prompt. Off unless explicitly enabled. */
 	automatic_checkpoints: boolean,
 	/**  Notify when a background chat finishes, fails or needs you. */
 	notifications: boolean,
@@ -2034,7 +2034,7 @@ export type GeneralPreferences = {
 	sounds: boolean,
 	/**  Keep the computer from idle sleep while an agent works. */
 	keep_awake: boolean,
-	/**  Closing the window keeps auracode running in the tray or menu bar. */
+	/**  Closing the window keeps o7 running in the tray or menu bar. */
 	close_to_tray: boolean,
 	/**
 	 *  Copy each source folder's Git-ignored instruction files (a local `AGENTS.md` or
@@ -2070,7 +2070,7 @@ export type GeneralPreferences = {
 	 */
 	browser_passwords: boolean,
 	/**
-	 *  Look for a newer auracode shortly after start and a few times a day, and show Update when
+	 *  Look for a newer o7 shortly after start and a few times a day, and show Update when
 	 *  there is one (owner, 18 November 2026: "an update button pops up for every merge"). It
 	 *  reads one public file from the project's GitHub releases; downloading and installing still
 	 *  wait for the button. On unless the person turns it off in Settings > General.
@@ -2175,7 +2175,7 @@ export type HistoryPage = {
 
 /**  What held the queued prompts. */
 export type HoldCause = 
-/**  auracode restarted (or reopened the chat) with prompts still queued. */
+/**  o7 restarted (or reopened the chat) with prompts still queued. */
 "restart" | 
 /**  The person stopped the turn or the agent. */
 "stop" | 
@@ -2236,7 +2236,7 @@ export type InstructionsAgentStatus =
 "import" | 
 /**  Reads a link to the source. */
 "link" | 
-/**  Reads a byte-identical copy auracode keeps in sync (or an identical copy it found). */
+/**  Reads a byte-identical copy o7 keeps in sync (or an identical copy it found). */
 "copy" | 
 /**  Reads a copy that was edited by hand or is out of date. */
 "drift" | 
@@ -2336,10 +2336,10 @@ export type InstructionsFileKind = "missing" | "file" |
 "hard_link" | 
 /**
  *  A link that leaves the folder, a linked parent folder, or a link to another kind of file.
- *  auracode never follows it.
+ *  o7 never follows it.
  */
 "outside" | 
-/**  A link whose target does not exist. Agents read nothing there; auracode never writes it. */
+/**  A link whose target does not exist. Agents read nothing there; o7 never writes it. */
 "dangling" | "directory" | 
 /**  Not UTF-8 text. Copies stay byte-identical; editing happens in another editor. */
 "not_text" | 
@@ -2360,7 +2360,7 @@ export type InstructionsLineEnding =
 
 export type InstructionsManaged = {
 	source: string,
-	/**  The copy no longer matches what auracode wrote. */
+	/**  The copy no longer matches what o7 wrote. */
 	edited: boolean,
 	/**  The source changed since the copy was written. */
 	source_changed: boolean,
@@ -2400,7 +2400,7 @@ export type InstructionsReviewFile = {
 	/**  How this file serves its agents afterwards: "Imports AGENTS.md", "Managed copy of AGENTS.md". */
 	how: string | null,
 	notes: string[],
-	/**  The replaced text is backed up in auracode's data folder. */
+	/**  The replaced text is backed up in o7's data folder. */
 	backup: boolean,
 };
 
@@ -2648,7 +2648,7 @@ export type McpCredentials = {
 };
 
 export type McpDefinition = {
-	/**  Stable Aura ID, shared by an all-project definition and its project override. */
+	/**  Stable o7 ID, shared by an all-project definition and its project override. */
 	id: string,
 	name: string,
 	/**  None means all projects. A project UUID means every folder and worktree in that project. */
@@ -2984,7 +2984,7 @@ export type ProjectFolder = {
 	git_remote_url: string | null,
 	git_default_branch: string | null,
 	/**
-	 *  When this folder is a worktree auracode made: the folder it was made from (this device's
+	 *  When this folder is a worktree o7 made: the folder it was made from (this device's
 	 *  path). A new chat never starts in one by itself; it starts from that source.
 	 */
 	worktree_of?: string | null,
@@ -3355,7 +3355,7 @@ export type Salvage =
  *  chat's events, when the chat's page was unreadable), or lost a reference to such a row (a
  *  chat whose folder was lost stays in its project, outside any folder). `tables` names those
  *  tables, in schema order. It is empty when which ones isn't known: part of the schema itself
- *  was unreadable (and may have listed tables auracode doesn't know of), or the record of the
+ *  was unreadable (and may have listed tables o7 doesn't know of), or the record of the
  *  repair could not be read.
  */
 { type: "partial"; tables: string[] } | 
@@ -3515,7 +3515,7 @@ export type SetupAction = { type: "visit"; step: SetupStep } | { type: "motion";
 { type: "browser"; enabled: boolean } | 
 /**  Turns on or off the browser's offer to save sign-ins. */
 { type: "browser_passwords"; enabled: boolean } | 
-/**  Turns on or off looking for a newer auracode by itself. */
+/**  Turns on or off looking for a newer o7 by itself. */
 { type: "automatic_updates"; enabled: boolean } | 
 /**  Turns the coordinated projects experiment on or off. */
 { type: "coordinated_projects"; enabled: boolean } | 
@@ -3628,9 +3628,9 @@ export type SteeringState = "pending" | "accepted" | "rejected" | "unconfirmed";
 export type StopReason = "end_turn" | "max_tokens" | "max_turn_requests" | "refusal" | 
 /**  The agent confirmed a cancel. */
 "cancelled" | 
-/**  auracode ended the turn without the agent: a force stop, a crash, a quit. */
+/**  o7 ended the turn without the agent: a force stop, a crash, a quit. */
 "interrupted" | "error" | 
-/**  A reason auracode does not know (an agent's, or a newer build's). */
+/**  A reason o7 does not know (an agent's, or a newer build's). */
 "other";
 
 export type StorageState = { state: "ok" } | { state: "paused"; reason: PauseReason; since: number } | { state: "failed"; message: string };
@@ -3686,7 +3686,7 @@ export type TaskKind =
 "agent" | 
 /**  A shell command. */
 "command" | 
-/**  A kind auracode does not know (an agent's newer kind, or a newer build's). */
+/**  A kind o7 does not know (an agent's newer kind, or a newer build's). */
 "other";
 
 /**  Where a task is in its life. */
@@ -3736,7 +3736,7 @@ export type TextSizePreference = "compact" | "comfortable";
  *  3 November 2026). It belongs to the profile on this device, like appearance, and works in both
  *  appearances. Claude Code's is the default (owner, 4 November 2026): a profile that never chose
  *  one, or a file from a newer build that names a theme this build lacks, reads as it
- *  ([`fill_defaults`]). A saved choice, Aura included, is kept.
+ *  ([`fill_defaults`]). A saved choice, o7 included, is kept.
  */
 export type ThemePreference = "aura" | "claude" | "codex" | "grok" | "pi" | "antigravity" | "cursor" | "opencode" | "oh_my_pi" | "hermes";
 
@@ -3918,7 +3918,7 @@ export type UpdateStatus = {
 	phase: UpdatePhase,
 	/**  The version running now. */
 	current_version: string,
-	/**  Whether auracode looks for a newer version by itself (Settings, General). */
+	/**  Whether o7 looks for a newer version by itself (Settings, General). */
 	automatic: boolean,
 	/**  The newer version, once a check has found one. */
 	version: string | null,
@@ -4105,7 +4105,7 @@ export type WorktreeChatResult = {
 
 export type WorktreeDestination = "isolated" | "direct";
 
-/**  The branch and source folder of a worktree auracode manages. */
+/**  The branch and source folder of a worktree o7 manages. */
 export type WorktreeOrigin = {
 	branch: string,
 	source: string,

@@ -56,7 +56,7 @@ fn repository(parent: &Path) -> PathBuf {
     repo
 }
 
-/// A worktree made the way auracode makes one: in the data folder, on its own branch, locked.
+/// A worktree made the way o7 makes one: in the data folder, on its own branch, locked.
 fn auracode_worktree(repo: &Path, root: &Path, name: &str, branch: &str) -> PathBuf {
     let path = root
         .join("profiles")
@@ -87,7 +87,7 @@ fn write(path: &Path, text: &str) {
     std::fs::write(path, text).unwrap();
 }
 
-/// A data folder with what auracode keeps: identity, a profile with its database, checkpoints
+/// A data folder with what o7 keeps: identity, a profile with its database, checkpoints
 /// (with a read-only Git object), logs, adapters and the Windows webview profile.
 fn data_folder(root: &Path) {
     write(&root.join("device.json"), "{}");
@@ -109,7 +109,7 @@ fn data_folder(root: &Path) {
     write(&root.join("EBWebView/Default/Cookies"), "cookies");
 }
 
-/// The person's agent homes, with configuration auracode must never touch.
+/// The person's agent homes, with configuration o7 must never touch.
 fn agent_homes(home: &Path) -> Vec<PathBuf> {
     let files = vec![
         home.join(".claude/settings.json"),
@@ -214,7 +214,7 @@ fn a_machine_cleanup_removes_everything_and_touches_no_agent_home_or_repository(
     for file in agents {
         assert_eq!(std::fs::read_to_string(&file).unwrap(), "the person's own");
     }
-    // The repository: its files, its branches (auracode's too) and no stale registration.
+    // The repository: its files, its branches (o7's too) and no stale registration.
     assert_eq!(
         std::fs::read_to_string(repo.join("README.md")).unwrap(),
         "project\n"

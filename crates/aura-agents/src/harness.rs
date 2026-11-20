@@ -35,14 +35,13 @@ pub fn harness_status(facts: &HarnessFacts<'_>) -> HarnessStatus {
     let Some(installed) = version.clone() else {
         return HarnessStatus::Unknown {
             version: None,
-            reason: "This agent does not report a version auracode can compare.".into(),
+            reason: "This agent does not report a version o7 can compare.".into(),
         };
     };
     if facts.installation.is_none() || !facts.has_source {
         return HarnessStatus::Unknown {
             version,
-            reason: "auracode has no release source for this installation. Its vendor updates it."
-                .into(),
+            reason: "o7 has no release source for this installation. Its vendor updates it.".into(),
         };
     }
     if !facts.checks_enabled {
@@ -58,7 +57,7 @@ pub fn harness_status(facts: &HarnessFacts<'_>) -> HarnessStatus {
         return HarnessStatus::Unknown {
             version,
             reason: format!(
-                "{} did not answer. You may be offline; auracode checks again later.",
+                "{} did not answer. You may be offline; o7 checks again later.",
                 latest.source
             ),
         };
@@ -75,7 +74,7 @@ pub fn harness_status(facts: &HarnessFacts<'_>) -> HarnessStatus {
         return HarnessStatus::Unknown {
             version,
             reason: format!(
-                "{} lists OpenCode {newest}, a separate version line. auracode does not check for newer 1.x releases.",
+                "{} lists OpenCode {newest}, a separate version line. o7 does not check for newer 1.x releases.",
                 latest.source
             ),
         };

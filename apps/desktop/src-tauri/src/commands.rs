@@ -160,7 +160,7 @@ fn check_blob_request(sha256: &str, len: u32) -> Result<(), AppError> {
     Ok(())
 }
 
-/// Every agent auracode knows, with its cached availability. Never waits: detection runs in the
+/// Every agent o7 knows, with its cached availability. Never waits: detection runs in the
 /// background, and an agent still being checked reads `checking`.
 #[tauri::command]
 #[specta::specta]
@@ -318,7 +318,7 @@ pub async fn agent_update(state: State<'_, AppState>, agent_id: String) -> Resul
     Ok(state.sessions()?.update_agent(&agent_id).await?)
 }
 
-/// What the agent's last update printed in this run of auracode: its last lines as plain text,
+/// What the agent's last update printed in this run of o7: its last lines as plain text,
 /// for the person who asked for the update. Kept in memory only, never stored, logged or sent on.
 #[tauri::command]
 #[specta::specta]

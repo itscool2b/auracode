@@ -1,6 +1,6 @@
 [package]
 name = "aura-protocol"
-description = "Shared vocabulary between the auracode core and the desktop UI"
+description = "Shared vocabulary between the o7 core and the desktop UI"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

@@ -1,4 +1,4 @@
-// `pnpm host-upgrade` on Linux: replaces the installed auracode AppImage with a local build, and
+// `pnpm host-upgrade` on Linux: replaces the installed o7 AppImage with a local build, and
 // puts the previous build back when the new one does not work.
 //
 // The installed app is one file behind a link, `~/Applications/auracode.AppImage`, which the
@@ -7,7 +7,7 @@
 // The installed app is usually the one running the agent session that built the new one, and an
 // agent's shutdown ends every process it started, so `install --after-exit` starts its waiter
 // under the user's systemd (`systemd-run --user`), which shares nothing with the app, and returns.
-// When the person quits auracode the waiter moves the link, starts auracode, and moves the link
+// When the person quits o7 the waiter moves the link, starts o7, and moves the link
 // back and starts the previous build if the new one does not stay up. `rollback` moves the link
 // back by hand and, with `--restore-database`, restores the databases a newer schema migrated.
 // See docs/developing-in-aura.md.
@@ -50,7 +50,7 @@ const USAGE = `Usage: pnpm --filter @auracode/desktop host-upgrade <command> [op
   install [--appimage <file>] [--after-exit [--wait <minutes>]]
       Copies a local AppImage next to the installed one and points the link at it. The newest
       target/**/release/bundle/appimage/*.AppImage is used by default. --after-exit arms it
-      instead: it runs once auracode quits (default wait 30 minutes).
+      instead: it runs once o7 quits (default wait 30 minutes).
   rollback [--to <file>] [--restore-database]
       Points the link back at the previous build (or --to). --restore-database also restores
       each database a newer build migrated since then, from aura-core's pre-migration backup.
@@ -161,7 +161,7 @@ export function launchEnv(env) {
 /**
  * Which kept build in `dir` a process runs, or undefined. The AppImage runtime's own executable is
  * the build file; the app it starts runs from the image's mount (`/tmp/.mount_…`) with `APPIMAGE`
- * naming the file. Both count: when auracode quits, the runtime can end, and its mount go, while
+ * naming the file. Both count: when o7 quits, the runtime can end, and its mount go, while
  * the app is still shutting down, and a build started then would hand over to that app and exit.
  * `environ` is the process's NUL-separated environment, read only for executables in a mount.
  */
@@ -204,7 +204,7 @@ export const linux = {
   systemd() {
     return spawnSync("systemd-run", ["--user", "--version"], { stdio: "ignore" }).status === 0;
   },
-  /** Starts `program` with `args` outside auracode's process tree; returns how to stop it. */
+  /** Starts `program` with `args` outside o7's process tree; returns how to stop it. */
   detach(name, program, args, env) {
     if (this.systemd()) {
       const unit = `${name}-${Date.now()}`;
@@ -322,7 +322,7 @@ async function healthy(system, file, seconds) {
   return system.running(dirname(file)).some((process) => process.exe === file);
 }
 
-/** Starts the build the link names, outside auracode's tree. */
+/** Starts the build the link names, outside o7's tree. */
 function launch(paths, system, env) {
   system.detach("auracode", paths.link, [], launchEnv(env));
 }
@@ -352,7 +352,7 @@ export async function activate(staged, options, paths, system, log, env) {
   );
   launch(paths, system, env);
   if (await healthy(system, staged, options.healthSeconds)) {
-    log(`auracode is running from ${basename(staged)}.`);
+    log(`o7 is running from ${basename(staged)}.`);
     prune(paths, options.keep, system, log);
     return EXIT.done;
   }
@@ -399,9 +399,7 @@ export async function install(options, paths, system, log, env) {
   }
   const running = system.running(dirname(paths.link));
   if (running.length > 0 && !options.afterExit) {
-    log(
-      "auracode is running. Quit it first, or arm the install with --after-exit; nothing was changed.",
-    );
+    log("o7 is running. Quit it first, or arm the install with --after-exit; nothing was changed.");
     return EXIT.running;
   }
   const staged = stage(source, paths, system);
@@ -440,12 +438,12 @@ export async function install(options, paths, system, log, env) {
   record.handle = handle;
   write();
   log(
-    `Armed: ${basename(staged)} installs when auracode quits (waiting up to ${options.wait} minutes, ${handle.unit ? `unit ${handle.unit}` : `PID ${handle.pid}`}).`,
+    `Armed: ${basename(staged)} installs when o7 quits (waiting up to ${options.wait} minutes, ${handle.unit ? `unit ${handle.unit}` : `PID ${handle.pid}`}).`,
   );
   return EXIT.done;
 }
 
-/** The armed waiter: waits for auracode to quit, then activates the staged build. */
+/** The armed waiter: waits for o7 to quit, then activates the staged build. */
 export async function waiter(options, paths, system, log, env) {
   const armed = armedRecord(paths.stateDir);
   if (!armed) {
@@ -457,13 +455,13 @@ export async function waiter(options, paths, system, log, env) {
     while (system.running(dirname(paths.link)).length > 0) {
       if (system.now().getTime() > deadline) {
         log(
-          `auracode did not quit within ${options.wait} minutes; the armed install is dropped. ${basename(armed.staged)} stays until the next prune.`,
+          `o7 did not quit within ${options.wait} minutes; the armed install is dropped. ${basename(armed.staged)} stays until the next prune.`,
         );
         return EXIT.running;
       }
       await system.sleep(1000);
     }
-    log("auracode quit; installing.");
+    log("o7 quit; installing.");
     return await activate(armed.staged, options, paths, system, log, env);
   } finally {
     rmSync(armedPath(paths.stateDir), { force: true });
@@ -472,7 +470,7 @@ export async function waiter(options, paths, system, log, env) {
 
 export async function rollback(options, paths, system, log, env) {
   if (system.running(dirname(paths.link)).length > 0) {
-    log("auracode is running. Quit it first; nothing was changed.");
+    log("o7 is running. Quit it first; nothing was changed.");
     return EXIT.running;
   }
   const current = linkTarget(paths.link);

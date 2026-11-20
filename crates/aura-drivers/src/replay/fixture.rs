@@ -154,10 +154,10 @@ fn record(mut value: Value) -> Result<FixtureRecord, String> {
         },
         "cmd" => serde_json::from_value(take("cmd")?)
             .map(FixtureRecord::Cmd)
-            .map_err(|error| format!("a command auracode does not know: {error}")),
+            .map_err(|error| format!("a command o7 does not know: {error}")),
         "agent" => serde_json::from_value(take("agent")?)
             .map(FixtureRecord::Agent)
-            .map_err(|error| format!("an agent action auracode does not know: {error}")),
+            .map_err(|error| format!("an agent action o7 does not know: {error}")),
         "note" => {
             let mut note = take("note")?;
             match note.get_mut("start") {

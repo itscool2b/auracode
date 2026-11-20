@@ -205,7 +205,7 @@ export const PROMPTS = {
   auth: "/auth",
   ignoreCancel: "/ignore-cancel",
   restart: `${RESTART_INPUT}\n\n[Image: Pasted image.png]`,
-  atQuit: "/ignore-cancel until auracode quits",
+  atQuit: "/ignore-cancel until o7 quits",
   heldAtQuit: "/echo held at quit",
 } as const;
 
@@ -1621,7 +1621,7 @@ async function agentScenario(
           );
           (reject ?? one("permission-dismiss", card))?.click();
           throw new StepError(
-            `the agent asked to act ("${text(one("permission-title", card))}"); auracode declined`,
+            `the agent asked to act ("${text(one("permission-title", card))}"); o7 declined`,
           );
         }
         return found !== null && found.stopReason !== "" ? found : null;

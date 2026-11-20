@@ -224,7 +224,7 @@ async fn reserved_terminal_and_target_owner_failure_preserve_current_profile() {
     drop(owner);
 }
 
-/// What an auracode account left in the data folder: a profile folder whose `profile.json` says
+/// What an o7 account left in the data folder: a profile folder whose `profile.json` says
 /// `account`, with an encrypted database. Returns its id and every file with its bytes.
 fn account_leftover(root: &DataRoot) -> (String, Vec<(std::path::PathBuf, Vec<u8>)>) {
     let id = aura_core::ids::new_id();
@@ -253,7 +253,7 @@ fn account_leftover(root: &DataRoot) -> (String, Vec<(std::path::PathBuf, Vec<u8
     (id, written)
 }
 
-/// auracode accounts were removed. A data folder whose last-used profile was an account's starts
+/// o7 accounts were removed. A data folder whose last-used profile was an account's starts
 /// in Local (created here, since the account was the only profile), ready for chats; the
 /// account's folder is not offered, cannot be switched to, and is still there byte for byte.
 #[tokio::test]

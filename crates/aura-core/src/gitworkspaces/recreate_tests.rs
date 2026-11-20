@@ -15,13 +15,13 @@ async fn rev(rig: &super::tests::Rig, folder: &Path, reference: &str) -> String 
 #[test]
 fn porcelain_registrations_keep_branch_lock_and_path_per_entry() {
     let parsed = git::parse_registrations(
-        "worktree C:/repo\nHEAD 1111111111111111111111111111111111111111\nbranch refs/heads/main\n\nworktree C:/data/worktrees/abc\nHEAD 2222222222222222222222222222222222222222\nbranch refs/heads/aura/x\nlocked auracode id-1\nprunable gitdir file points to non-existent location\n\nworktree C:/other\nHEAD 3333333333333333333333333333333333333333\ndetached\nlocked\n",
+        "worktree C:/repo\nHEAD 1111111111111111111111111111111111111111\nbranch refs/heads/main\n\nworktree C:/data/worktrees/abc\nHEAD 2222222222222222222222222222222222222222\nbranch refs/heads/aura/x\nlocked o7 id-1\nprunable gitdir file points to non-existent location\n\nworktree C:/other\nHEAD 3333333333333333333333333333333333333333\ndetached\nlocked\n",
     );
     assert_eq!(parsed.len(), 3);
     assert_eq!(parsed[0].branch.as_deref(), Some("refs/heads/main"));
     assert_eq!(parsed[0].locked, None);
     assert_eq!(parsed[1].path, "C:/data/worktrees/abc");
-    assert_eq!(parsed[1].locked.as_deref(), Some("auracode id-1"));
+    assert_eq!(parsed[1].locked.as_deref(), Some("o7 id-1"));
     assert_eq!(parsed[2].branch, None);
     assert_eq!(parsed[2].locked.as_deref(), Some(""));
     let temp = tempfile::tempdir().expect("temp");

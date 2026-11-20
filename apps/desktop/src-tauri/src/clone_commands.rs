@@ -13,10 +13,7 @@ fn error(value: aura_core::cloning::CloneError) -> AppError {
 }
 fn current(webview: &Webview, state: &AppState) -> Result<(), AppError> {
     if state.quit.is_quitting() {
-        return Err(AppError::new(
-            AppErrorCode::ShuttingDown,
-            "auracode is quitting.",
-        ));
+        return Err(AppError::new(AppErrorCode::ShuttingDown, "o7 is quitting."));
     }
     if !state.pages.for_view(webview.label()).is_current() {
         return Err(AppError::new(

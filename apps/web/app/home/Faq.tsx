@@ -8,9 +8,9 @@ const agentList = `${AGENT_NAMES.slice(0, -1).join(", ")} and ${AGENT_NAMES.at(-
 
 const QUESTIONS: readonly { question: string; answer: string; agents?: boolean }[] = [
   {
-    question: "Is auracode free?",
+    question: "Is o7 free?",
     answer:
-      "Yes. The desktop app is free and there is no paid tier. There is no auracode account and nothing to sign up for.",
+      "Yes. The desktop app is free and there is no paid tier. There is no o7 account and nothing to sign up for.",
   },
   {
     question: "Which agents does it run?",
@@ -18,9 +18,9 @@ const QUESTIONS: readonly { question: string; answer: string; agents?: boolean }
     agents: true,
   },
   {
-    question: "Does auracode see my agent logins?",
+    question: "Does o7 see my agent logins?",
     answer:
-      "No. auracode never reads, stores or proxies agent credentials. Each agent signs in through its own flow and keeps its own keys.",
+      "No. o7 never reads, stores or proxies agent credentials. Each agent signs in through its own flow and keeps its own keys.",
   },
   {
     question: "Does it work offline?",
@@ -28,9 +28,9 @@ const QUESTIONS: readonly { question: string; answer: string; agents?: boolean }
       "Yes. Projects, chats and sessions are stored on your computer and the app needs no connection. Your agents may still need one for their own services.",
   },
   {
-    question: "Does auracode sync or upload my work?",
+    question: "Does o7 sync or upload my work?",
     answer:
-      "No. Chats, projects and settings stay on your computer. There is no auracode account, so nothing is uploaded by one. Your agents still send what they need to their own services.",
+      "No. Chats, projects and settings stay on your computer. There is no o7 account, so nothing is uploaded by one. Your agents still send what they need to their own services.",
   },
   {
     question: "Which systems are supported?",

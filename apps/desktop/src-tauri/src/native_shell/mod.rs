@@ -265,7 +265,7 @@ pub fn apply_preferences(app: &tauri::AppHandle, general: &GeneralPreferences) {
     }
 }
 
-/// True only after the tray was successfully installed and while Settings keeps auracode in the
+/// True only after the tray was successfully installed and while Settings keeps o7 in the
 /// tray. Otherwise the window uses the ordinary guarded quit path, never hiding an application
 /// the person asked to close or could not reach again.
 pub fn close_to_tray(app: &tauri::AppHandle) -> bool {
@@ -311,7 +311,7 @@ pub fn shell_take_navigation(app: tauri::AppHandle) -> Option<String> {
 fn install_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
     use tauri::menu::{Menu, MenuItem};
     use tauri::tray::{MouseButton, MouseButtonState, TrayIconBuilder, TrayIconEvent};
-    // The first Linux tray loads the AppIndicator library and panics, ending auracode, when it is
+    // The first Linux tray loads the AppIndicator library and panics, ending o7, when it is
     // missing. The same lookup first, so such a system runs without a tray instead.
     #[cfg(target_os = "linux")]
     if !appindicator_available() {
@@ -320,14 +320,14 @@ fn install_tray(app: &tauri::AppHandle) -> tauri::Result<()> {
         )
         .into());
     }
-    let open = MenuItem::with_id(app, OPEN, "Open auracode", true, None::<&str>)?;
-    let quit = MenuItem::with_id(app, QUIT, "Quit auracode", true, None::<&str>)?;
+    let open = MenuItem::with_id(app, OPEN, "Open o7", true, None::<&str>)?;
+    let quit = MenuItem::with_id(app, QUIT, "Quit o7", true, None::<&str>)?;
     let menu = Menu::with_items(app, &[&open, &quit])?;
     let tray = TrayIconBuilder::with_id(TRAY)
         .icon(tray_icon())
         .icon_as_template(cfg!(target_os = "macos"))
         .menu(&menu)
-        .tooltip("auracode")
+        .tooltip("o7")
         .show_menu_on_left_click(false)
         .on_menu_event(|app, event| match event.id().as_ref() {
             OPEN => crate::window::focus_main(app),
@@ -526,7 +526,7 @@ fn show_notification(app: &tauri::AppHandle, epoch: u64, chat: &str, notice: Not
         .builder()
         .id(id)
         .title(notice.title())
-        .body("Open auracode to view the chat.")
+        .body("Open o7 to view the chat.")
         .extra("chat_id", chat)
         .extra("profile_epoch", epoch)
         .extra("profile_id", profile.id)

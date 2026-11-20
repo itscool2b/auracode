@@ -142,8 +142,8 @@ mod process {
             "4 options: the model switched to fake/mini (fake:mini)",
             "4 options: the model switched back to fake/large (fake:large)",
             "4 autonomy: Full auto: mode dont_ask, answers execute itself",
-            "4 autonomy: Auto-edit: mode accept_edits, auracode does not auto-answer remaining permission requests",
-            "4 autonomy: Ask: mode default, auracode does not auto-answer remaining permission requests",
+            "4 autonomy: Auto-edit: mode accept_edits, o7 does not auto-answer remaining permission requests",
+            "4 autonomy: Ask: mode default, o7 does not auto-answer remaining permission requests",
             "5 cancel: an interrupt while idle left the session ready and sent 0 session/cancel",
             "6 close: the agent exited when stdin closed: steps ClosedStdin, ExitedAfterEof",
             "7 resume: no transcript came back while the session opened",
@@ -274,7 +274,7 @@ mod process {
     }
 
     /// claude-acp and codex-acp keep a session only from its first prompt, so a probe, which
-    /// never prompts, can't continue one: the agent answers the resume as not found, and auracode
+    /// never prompts, can't continue one: the agent answers the resume as not found, and o7
     /// starts a new session and says so. That is the agent's way, not a failed resume.
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn probe_reads_a_refused_resume_of_a_session_never_prompted() {
@@ -311,7 +311,7 @@ mod process {
             "{output}"
         );
         assert!(
-            output.contains("auracode started a new session (fake-")
+            output.contains("o7 started a new session (fake-")
                 && output.contains("and said so: \"Could not continue the earlier session (Resource not found: fake-"),
             "{output}"
         );
@@ -322,8 +322,8 @@ mod process {
 
     /// Hermes 0.22.5 can't switch a session back to its configured model when that model's
     /// provider is `auto`: `auto:<model>` reads as a model of the provider in use. After a restart
-    /// the session runs another model and no longer offers the configured one; auracode says so in
-    /// a notice. The probe reports that as the agent's doing, not as options auracode lost.
+    /// the session runs another model and no longer offers the configured one; o7 says so in
+    /// a notice. The probe reports that as the agent's doing, not as options o7 lost.
     #[tokio::test(flavor = "multi_thread", worker_threads = 4)]
     async fn probe_reads_a_model_the_agent_no_longer_offers_after_the_restart() {
         let machine = Machine::with_fake_hermes();
@@ -363,7 +363,7 @@ mod process {
             "{output}"
         );
         assert!(
-            output.contains("INFO  7 resume: model: the agent no longer offers auto:large and runs fake · auto:large (fake:auto:large); auracode said so: \"The model you chose earlier (auto:large) isn't offered anymore; using fake · auto:large.\""),
+            output.contains("INFO  7 resume: model: the agent no longer offers auto:large and runs fake · auto:large (fake:auto:large); o7 said so: \"The model you chose earlier (auto:large) isn't offered anymore; using fake · auto:large.\""),
             "{output}"
         );
         assert!(headless.shutdown().await.saved);

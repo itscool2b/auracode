@@ -8,7 +8,7 @@
 //!    ending when its last row was written; a running turn whose own `TurnEnded` row was saved (only
 //!    its `EndTurn` was lost) ends as that row says instead, and gets nothing appended.
 //! 3. Every ended turn not compacted yet is compacted.
-//! 4. Every queued prompt is held: auracode never sends a message on its own after a restart.
+//! 4. Every queued prompt is held: o7 never sends a message on its own after a restart.
 //!
 //! The partial answer survives; no tool update is invented. Each chat recovers in one transaction.
 //! Requests are found with SQLite's JSON functions, so no payload is deserialized, and startup

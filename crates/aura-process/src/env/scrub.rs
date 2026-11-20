@@ -16,7 +16,7 @@ use super::{EnvKey, EnvMap};
 /// Why a variable was removed.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum DenyReason {
-    /// Set by the process auracode runs inside (Claude Code's session markers, an Electron app's
+    /// Set by the process o7 runs inside (Claude Code's session markers, an Electron app's
     /// Node mode): a child would think it runs inside that session.
     ParentSessionMarker,
     /// Codex's sandbox markers: a child would think it is sandboxed.

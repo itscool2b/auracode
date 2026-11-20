@@ -59,9 +59,9 @@ pub enum AppErrorCode {
     /// The full output is not available: no longer kept, or not saved yet while the disk is full.
     /// The message says which.
     BlobMissing,
-    /// auracode is quitting.
+    /// o7 is quitting.
     ShuttingDown,
-    /// Something went wrong inside auracode.
+    /// Something went wrong inside o7.
     Internal,
     /// The folder picker could not be shown.
     DialogFailed,
@@ -181,7 +181,7 @@ mod tests {
             (SessionError::TooManySubscriptions, "too_many_subscriptions"),
             (
                 SessionError::FolderBusy {
-                    message: "\u{201c}Fix tests\u{201d} in auracode is working in this folder. Stop it, then try again.".into(),
+                    message: "\u{201c}Fix tests\u{201d} in o7 is working in this folder. Stop it, then try again.".into(),
                     blockers: Default::default(),
                 },
                 "folder_busy",

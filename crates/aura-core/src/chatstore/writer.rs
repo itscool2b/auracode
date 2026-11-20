@@ -45,7 +45,7 @@ use crate::store::{Store, is_damage};
 use crate::time::now_millis;
 
 /// The status a damaged database shows.
-const DAMAGED: &str = "auracode's database is damaged. Restart auracode to repair it; recent messages are kept in a recovery file.";
+const DAMAGED: &str = "o7's database is damaged. Restart o7 to repair it; recent messages are kept in a recovery file.";
 
 /// The writer's limits and timers (appendix A); tests shrink them.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -589,8 +589,7 @@ impl Shared {
         self.paused.store(false, Ordering::Release);
         self.status.send_replace(StorageStatus {
             state: StorageState::Failed {
-                message: "auracode stopped saving because of an internal error. Restart auracode."
-                    .into(),
+                message: "o7 stopped saving because of an internal error. Restart o7.".into(),
             },
             unsaved_bytes: 0,
         });
@@ -626,7 +625,7 @@ impl Shared {
         let mut queue = self.lock();
         if queue.finished.is_some() {
             drop(queue);
-            tracing::warn!(op = %work_name(&work), "auracode's database is closed; an op arrived after shutdown and was dropped");
+            tracing::warn!(op = %work_name(&work), "o7's database is closed; an op arrived after shutdown and was dropped");
             return;
         }
         let ticket = queue.pending.ticket(&work);
@@ -1194,7 +1193,7 @@ impl Writer {
             return Ok(());
         }
         let Some(store) = self.store.as_mut() else {
-            return Err(Failure::Other("auracode's database is closed".into()));
+            return Err(Failure::Other("o7's database is closed".into()));
         };
         let result = commit(
             store,
@@ -1227,9 +1226,7 @@ impl Writer {
         match catch_unwind(AssertUnwindSafe(|| read(conn))) {
             Ok(Ok(value)) => Ok(value),
             Ok(Err(error)) => Err(self.read_error(error)),
-            Err(_) => Err(StoreError::Other(
-                "a database read failed inside auracode".into(),
-            )),
+            Err(_) => Err(StoreError::Other("a database read failed inside o7".into())),
         }
     }
 
@@ -1242,7 +1239,7 @@ impl Writer {
                 StoreError::Damaged(error.to_string())
             }
             Failure::Other(message) => StoreError::Other(message),
-            Failure::Panic => StoreError::Other("a database read failed inside auracode".into()),
+            Failure::Panic => StoreError::Other("a database read failed inside o7".into()),
         }
     }
 
@@ -1521,7 +1518,7 @@ impl Writer {
                     Some(store) => store.acknowledge_recovery(&quarantined),
                     None => Err(CoreError::Io {
                         path: self.files.backups.clone(),
-                        source: io::Error::other("auracode's database is closed"),
+                        source: io::Error::other("o7's database is closed"),
                     }),
                 };
                 let _ = reply.send(acknowledged);
@@ -1549,7 +1546,7 @@ impl Writer {
             Ok(Ok(value)) => Ok(value),
             Ok(Err(error)) => Err(self.read_error(error)),
             Err(_) => Err(StoreError::Other(
-                "a database write failed inside auracode".into(),
+                "a database write failed inside o7".into(),
             )),
         }
     }
@@ -1579,7 +1576,7 @@ impl Writer {
                 Ok(Err(error)) => return Err(self.read_error(error)),
                 Err(_) => {
                     return Err(StoreError::Other(
-                        "recovering this chat failed inside auracode".into(),
+                        "recovering this chat failed inside o7".into(),
                     ));
                 }
             }
@@ -1796,7 +1793,7 @@ impl Writer {
         if !saved_everything {
             tracing::error!(
                 ?lost,
-                "auracode quit before it could save these ops (counts per chat); recovery ends their turns at the next start"
+                "o7 quit before it could save these ops (counts per chat); recovery ends their turns at the next start"
             );
         }
         drop(dropped);

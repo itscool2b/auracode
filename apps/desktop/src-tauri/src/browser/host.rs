@@ -921,7 +921,7 @@ pub(super) fn close(browser: &Arc<Browser>, tab_id: &str) {
     let _ = browser;
 }
 
-/// Every page closes (the profile changes, the plugin turns off, auracode quits). The engine
+/// Every page closes (the profile changes, the plugin turns off, o7 quits). The engine
 /// itself goes with the last page.
 pub(super) fn close_all(browser: &Arc<Browser>) {
     let views: Vec<View> = HOST.with_borrow_mut(|host| {

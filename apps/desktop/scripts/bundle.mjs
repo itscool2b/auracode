@@ -33,7 +33,7 @@ if (versioned >= 0) {
   try {
     version = appVersion(args[versioned + 1]);
   } catch (error) {
-    console.error(`auracode: ${error.message}`);
+    console.error(`o7: ${error.message}`);
     process.exit(1);
   }
   args.splice(versioned, 2, "--config", JSON.stringify({ version }));
@@ -59,7 +59,7 @@ const sysroot = spawnSync(process.env.RUSTC ?? "rustc", ["--print", "sysroot"], 
   stdio: ["ignore", "pipe", "inherit"],
 });
 if (sysroot.status !== 0) {
-  console.error("auracode: could not determine the Rust sysroot for build-path remapping.");
+  console.error("o7: could not determine the Rust sysroot for build-path remapping.");
   process.exit(1);
 }
 const home = homedir();
@@ -80,7 +80,7 @@ if (process.platform === "darwin" && !env.APPLE_SIGNING_IDENTITY) {
   } else if (lookup.status === 1) {
     env.APPLE_SIGNING_IDENTITY = "-";
     console.warn(
-      'auracode: no "auracode Local Signing" identity on this Mac, so the bundle is signed ad hoc and macOS will treat it as a new app. Create the identity once with: pnpm signing create',
+      'o7: no "auracode Local Signing" identity on this Mac, so the bundle is signed ad hoc and macOS will treat it as a new app. Create the identity once with: pnpm signing create',
     );
   } else {
     // Ambiguous: the script has said which identities clash. Signing with either would be a guess.
@@ -102,7 +102,7 @@ try {
 } catch (error) {
   media.cleanup();
   console.error(
-    `auracode: the dictation models are not ready, so the bundle would lack them: ${error.message}`,
+    `o7: the dictation models are not ready, so the bundle would lack them: ${error.message}`,
   );
   process.exit(1);
 }
@@ -114,26 +114,26 @@ const build = spawnSync(process.execPath, [tauriCli, "build", ...media.args], {
 });
 media.cleanup();
 if (build.error) {
-  console.error(`auracode: could not run tauri build: ${build.error.message}`);
+  console.error(`o7: could not run tauri build: ${build.error.message}`);
   process.exit(1);
 }
 if (build.status === 0 && media.appimage) {
   const images = builtImages(imageDir(media.args, media.env, repoRoot), startedAt);
   if (images.length === 0) {
-    console.error("auracode: the build made no AppImage to check.");
+    console.error("o7: the build made no AppImage to check.");
     process.exit(1);
   }
   for (const image of images) {
     try {
       checkImage(image, media.withMedia);
     } catch (error) {
-      console.error(`auracode: ${image}: ${error.message}`);
+      console.error(`o7: ${image}: ${error.message}`);
       process.exit(1);
     }
     console.log(
       media.withMedia
-        ? `auracode: ${image} carries GStreamer's plugins.`
-        : `auracode: ${image} carries no GStreamer plugins: it plays sound and video only with the system's.`,
+        ? `o7: ${image} carries GStreamer's plugins.`
+        : `o7: ${image} carries no GStreamer plugins: it plays sound and video only with the system's.`,
     );
   }
 }

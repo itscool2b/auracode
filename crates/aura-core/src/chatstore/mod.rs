@@ -8,7 +8,7 @@
 //!   that reaches the agents when saving stalls.
 //! - **Disk full.** The failed batch is kept and retried every 5 s while the writer stops taking ops;
 //!   reads are served from saved data through a second channel meanwhile, with what is unsaved
-//!   marked. Nothing is lost unless auracode quits while paused.
+//!   marked. Nothing is lost unless o7 quits while paused.
 //! - **Busy, poison, damage.** Busy past the timeout retries with backoff, then pauses; any other
 //!   error re-runs the batch one op at a time and sends an op that fails again to the dead-letter file;
 //!   damage is recorded for the next open's repair and later ops go to the dead-letter file.
@@ -1098,13 +1098,13 @@ pub struct RecoveryReport {
 /// Why a chat store call failed. Every message is a sentence the UI can show.
 #[derive(Debug, Clone, PartialEq, Eq, thiserror::Error)]
 pub enum StoreError {
-    #[error("The disk is full, so auracode paused saving. Free some space, then try again.")]
+    #[error("The disk is full, so o7 paused saving. Free some space, then try again.")]
     DiskFull,
     #[error("The database is busy.")]
     Busy,
-    #[error("auracode's database is closed.")]
+    #[error("o7's database is closed.")]
     Closed,
-    #[error("auracode's database is damaged: {0}")]
+    #[error("o7's database is damaged: {0}")]
     Damaged(String),
     /// A blob that is not available, and the sentence that says why: "The full output is no longer
     /// available." for a file that is gone, "The full output isn't saved yet because the disk is
@@ -1118,7 +1118,7 @@ pub enum StoreError {
 
 /// The writer thread is gone: nothing more will be saved.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, thiserror::Error)]
-#[error("auracode's database is closed.")]
+#[error("o7's database is closed.")]
 pub struct StoreClosed;
 
 #[cfg(test)]
@@ -2292,7 +2292,7 @@ mod tests {
         })
         .await;
         assert!(
-            matches!(failed.state, StorageState::Failed { message } if message.contains("Restart auracode"))
+            matches!(failed.state, StorageState::Failed { message } if message.contains("Restart o7"))
         );
         send(
             store,
@@ -2616,7 +2616,7 @@ mod tests {
     fn store_errors_read_as_sentences() {
         assert_eq!(
             StoreError::DiskFull.to_string(),
-            "The disk is full, so auracode paused saving. Free some space, then try again."
+            "The disk is full, so o7 paused saving. Free some space, then try again."
         );
         assert_eq!(
             StoreError::BlobMissing(

@@ -198,7 +198,7 @@ export function missingMessage({ missing = [], patchelf = true }) {
     lacks.push(`GStreamer's base and good plugins (missing: ${missing.join(", ")})`);
   if (!patchelf) lacks.push("patchelf, which the bundler's GStreamer step runs");
   return [
-    `auracode: the AppImage would play no sound or video: this machine lacks ${lacks.join(" and ")}.`,
+    `o7: the AppImage would play no sound or video: this machine lacks ${lacks.join(" and ")}.`,
     "Install them, then build again:",
     ...PACKAGES.map(([family, command]) => `  ${`${family}:`.padEnd(16)}${command}`),
     `Or build without them on purpose with ${WITHOUT_MEDIA}: the app then uses the system's plugins where they are, and turns sound and video off where they are not.`,
@@ -218,7 +218,7 @@ export function prepareMedia(args, env, { platform = process.platform, root = "/
   }
   if (taken.withoutMedia) {
     console.warn(
-      `auracode: ${WITHOUT_MEDIA}: this AppImage carries no GStreamer plugins. It plays sound and video only with the system's plugins, and turns them off where they are missing.`,
+      `o7: ${WITHOUT_MEDIA}: this AppImage carries no GStreamer plugins. It plays sound and video only with the system's plugins, and turns them off where they are missing.`,
     );
     return {
       args: [
@@ -246,9 +246,9 @@ export function prepareMedia(args, env, { platform = process.platform, root = "/
   }
   if (!staged.scanner)
     console.warn(
-      "auracode: GStreamer's plugin scanner was not found; the image's GStreamer will load its plugins in its own process when it first scans them.",
+      "o7: GStreamer's plugin scanner was not found; the image's GStreamer will load its plugins in its own process when it first scans them.",
     );
-  console.log(`auracode: the AppImage carries GStreamer's ${staged.staged.join(", ")}.`);
+  console.log(`o7: the AppImage carries GStreamer's ${staged.staged.join(", ")}.`);
   return {
     args: taken.args,
     env: { ...env, GSTREAMER_PLUGINS_DIR: staged.plugins, GSTREAMER_HELPERS_DIR: staged.helpers },

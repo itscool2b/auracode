@@ -103,7 +103,7 @@ impl GitWorkspaces {
         let facts = self.instruction_facts(folder, &[path]).await?;
         if facts.files.get(path) != Some(&GitState::Untracked) {
             return Err(GitError::Message(format!(
-                "{path} is not a new, untracked file, so auracode leaves committing it to you."
+                "{path} is not a new, untracked file, so o7 leaves committing it to you."
             )));
         }
         git.run(folder, git::args(&["add", "--", path]), 4096)

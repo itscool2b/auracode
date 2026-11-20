@@ -7,7 +7,7 @@ import { InfoCard } from "./InfoCard";
 import { dismissRecovery, RecoveryNoticeView } from "./RecoveryNotice";
 
 const NOTICE =
-  "Your database was damaged, so auracode rebuilt it. Nothing was lost; the damaged copy was kept at /data/profiles/local/backups/aura.db.corrupt-1.";
+  "Your database was damaged, so o7 rebuilt it. Nothing was lost; the damaged copy was kept at /data/profiles/local/backups/aura.db.corrupt-1.";
 
 const INFO: AppInfo = {
   app_version: "0.1.0",

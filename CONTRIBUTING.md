@@ -1,6 +1,6 @@
 # Contributing
 
-Thanks for looking. auracode is maintained by one person, so small, focused pull requests are the
+Thanks for looking. o7 is maintained by one person, so small, focused pull requests are the
 ones that get merged. For anything larger than a fix, open an issue first and say what you want to
 change and why.
 
@@ -8,7 +8,7 @@ change and why.
 
 [README.md](README.md#development) lists the prerequisites and how to run the app. A development
 build keeps its data in a folder of its own (`si.auracode.desktop.dev`), so it never touches an
-installed auracode.
+installed o7.
 
 ## Before you open a pull request
 
@@ -45,7 +45,7 @@ own. Say in the description what you ran and what you saw.
 - **The interface follows one visual system.** Read
   [docs/design/visual-language.md](docs/design/visual-language.md) before changing how anything
   looks, and extend the shared components and tokens instead of adding new ones.
-- **Agents run as their vendors ship them.** auracode never reads, stores or proxies an agent's
+- **Agents run as their vendors ship them.** o7 never reads, stores or proxies an agent's
   credentials and never adds hidden prompts.
 - **Plain writing.** Short sentences, no em dashes, no marketing words, in the interface, the
   docs and commit messages alike.
@@ -56,5 +56,5 @@ Do not open a public issue for a vulnerability. [SECURITY.md](SECURITY.md) says 
 
 ## License
 
-auracode is released under the [MIT License](LICENSE). By contributing, you agree that your
+o7 is released under the [MIT License](LICENSE). By contributing, you agree that your
 contribution is released under the same license.

@@ -64,7 +64,7 @@ test("public pages are prerendered to follow the system appearance without JavaS
     // A build without an updater signature says it never updates itself; one with it says it
     // does. Either way, without a publisher's signature the page says how each system treats it.
     const never = /These installers are unsigned and do not update themselves/;
-    const itself = /Once installed, auracode updates itself/;
+    const itself = /Once installed, o7 updates itself/;
     if (release.signed) assert.doesNotMatch(downloads, never);
     else assert.match(downloads, never);
     if (release.publisher_signed === true) {
@@ -80,7 +80,7 @@ test("public pages are prerendered to follow the system appearance without JavaS
     assert.match(downloads, /Not published/);
     assert.doesNotMatch(downloads, /href="[^"]+\.(exe|dmg)"/);
     assert.doesNotMatch(downloads, /These installers are unsigned/);
-    assert.doesNotMatch(downloads, /auracode updates itself/);
+    assert.doesNotMatch(downloads, /o7 updates itself/);
   }
   await access(new URL("images/desktop-light.png", root));
   for (const theme of ["light", "dark"])
@@ -181,9 +181,9 @@ test("the site is for a local app: no account pages, and no page offers one", as
   }
   const home = await readFile(new URL("index.html", root), "utf8");
   assert.match(home, /free/);
-  assert.match(home, /There is no auracode account/);
+  assert.match(home, /There is no o7 account/);
   const privacy = await readFile(new URL("privacy/index.html", root), "utf8");
-  assert.match(privacy, /There is no auracode account, no sign-in and no sync/);
+  assert.match(privacy, /There is no o7 account, no sign-in and no sync/);
 });
 test("third-party notices are emitted and linked from every page footer", async () => {
   const text = await readFile(new URL("third-party-notices.txt", root), "utf8");

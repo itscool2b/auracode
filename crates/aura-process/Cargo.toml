@@ -1,6 +1,6 @@
 [package]
 name = "aura-process"
-description = "Agent processes for auracode: spawning, line framing, shutdown, leftover cleanup, the environment agents start with, and protocol logs"
+description = "Agent processes for o7: spawning, line framing, shutdown, leftover cleanup, the environment agents start with, and protocol logs"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true

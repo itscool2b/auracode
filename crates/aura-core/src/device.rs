@@ -153,7 +153,7 @@ fn device_name_from(raw: Option<&OsStr>) -> String {
     }
 }
 
-/// Every row this machine writes carries the id, so anything but the exact form auracode generates
+/// Every row this machine writes carries the id, so anything but the exact form o7 generates
 /// (lowercase, hyphenated) is treated as a damaged file rather than copied into the database.
 fn is_canonical_uuid(id: &str) -> bool {
     uuid::Uuid::parse_str(id).is_ok_and(|parsed| parsed.hyphenated().to_string() == id)

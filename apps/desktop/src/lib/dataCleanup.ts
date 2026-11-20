@@ -9,7 +9,7 @@ import {
 import { settle } from "./ipc";
 
 /**
- * Settings' "Delete all auracode data": Rust reviews exactly what would go, then starts the cleanup
+ * Settings' "Delete all o7 data": Rust reviews exactly what would go, then starts the cleanup
  * and quits. Everything the review lists is decided in Rust (aura-core's uninstall module); this
  * file only words it.
  */

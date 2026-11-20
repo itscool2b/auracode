@@ -243,7 +243,7 @@ const SESSION: readonly { kind: string; text: string }[] = [
 ];
 
 /**
- * A chat open in its agent's own interface, in auracode's terminal, with Chat one click away. Its
+ * A chat open in its agent's own interface, in o7's terminal, with Chat one click away. Its
  * lines print one after another when its card scrolls into view.
  */
 export function TerminalView() {
@@ -251,7 +251,7 @@ export function TerminalView() {
     <div className="tm">
       <div className="tm-bar">
         <span className="tm-title">
-          Fix the header spacing <span className="tm-project">auracode</span>
+          Fix the header spacing <span className="tm-project">o7</span>
         </span>
         <span className="tm-switch">
           <span>Chat</span>

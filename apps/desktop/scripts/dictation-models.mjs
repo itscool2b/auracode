@@ -1,5 +1,5 @@
 /**
- * The speech models auracode bundles for dictation (docs/local-dictation.md). Each is pinned to a
+ * The speech models o7 bundles for dictation (docs/local-dictation.md). Each is pinned to a
  * Hugging Face revision, a size and a SHA-256, fetched into src-tauri/resources/dictation before a
  * release bundle, and verified there. The files are model weights only: nothing runs from them.
  *

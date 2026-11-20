@@ -69,7 +69,7 @@ export function SiteHeader() {
   return (
     <header className="site-nav">
       <div className="wrap nav-bar">
-        <a className="nav-home" href="/" aria-label="auracode home">
+        <a className="nav-home" href="/" aria-label="o7 home">
           <Wordmark size={17} />
         </a>
         <nav className="nav-links" aria-label="Main">
@@ -100,7 +100,7 @@ export function SiteHeader() {
                 ))}
               </nav>
               <a className="btn btn-primary btn-lg" href="/download">
-                Download auracode
+                Download o7
               </a>
             </div>
           </details>

@@ -32,9 +32,9 @@ export const dictationApi: DictationApi = {
 
 /** What Rust reports for a processor without AVX2; the bar says it before any command runs. */
 export const UNSUPPORTED_MESSAGE =
-  "Dictation needs a processor with AVX2 (Intel from 2013 or AMD from 2015 onward). The rest of auracode works as usual.";
+  "Dictation needs a processor with AVX2 (Intel from 2013 or AMD from 2015 onward). The rest of o7 works as usual.";
 export const MISSING_MESSAGE =
-  "This build of auracode is missing its dictation models. Reinstall auracode to restore them.";
+  "This build of o7 is missing its dictation models. Reinstall o7 to restore them.";
 /** Said after a failure when the words heard before it were kept in the draft. */
 export const KEPT_MESSAGE = "What it heard so far is in your draft.";
 

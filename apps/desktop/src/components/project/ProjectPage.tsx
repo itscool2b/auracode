@@ -1135,7 +1135,7 @@ function Routines({
       <div className="project-section-head">
         <p className="project-lead">
           A prompt the coordinator is sent again and again, for work that never ends: watching pull
-          requests, a daily tidy-up. Routines run only while auracode is open.
+          requests, a daily tidy-up. Routines run only while o7 is open.
         </p>
         <button
           type="button"

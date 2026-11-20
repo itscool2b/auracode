@@ -151,7 +151,7 @@ impl UsageError {
 
 /// The help text `aura-cli help` prints.
 pub const USAGE: &str = "\
-aura-cli: auracode's headless dev tool. It runs agents through a headless session manager on a
+aura-cli: o7's headless dev tool. It runs agents through a headless session manager on a
 temporary profile, with a fresh temporary git repository as the chat folder.
 
 Usage:

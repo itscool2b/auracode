@@ -269,7 +269,7 @@ impl std::fmt::Debug for ChatRuntime {
     }
 }
 
-/// The parts of the chat runtime that reach outside auracode: the login shell, agent probes and
+/// The parts of the chat runtime that reach outside o7: the login shell, agent probes and
 /// adapter installs, real processes, agent drivers. Tests pass their own.
 #[derive(Clone)]
 pub struct Outside {
@@ -305,7 +305,7 @@ impl Outside {
 
     /// The real detector, processes and drivers over `env`: the catalog's agents with their
     /// adapters in `<data root>/adapters` (detection starts in the background once `env`
-    /// resolves), processes registered in `registry`, and the drivers auracode ships (the ACP
+    /// resolves), processes registered in `registry`, and the drivers o7 ships (the ACP
     /// driver and the demo agent's). [`Outside::real`] passes the login shell's resolver; a test
     /// passes a fixed env whose `PATH` finds no agent, so nothing it starts reaches a real one.
     pub fn over_env(
@@ -330,7 +330,7 @@ impl Outside {
     }
 }
 
-/// `<data root>/run`: one leftover registry file per running auracode process.
+/// `<data root>/run`: one leftover registry file per running o7 process.
 pub const RUN_DIR: &str = "run";
 
 /// `<data root>/adapters`: the npm adapters, one folder per package version.
@@ -496,11 +496,11 @@ pub fn sweep_notice(report: &SweepReport) -> Option<String> {
     match report.killed.len() {
         0 => None,
         1 => Some(
-            "auracode stopped 1 agent process left running by an earlier session that ended unexpectedly."
+            "o7 stopped 1 agent process left running by an earlier session that ended unexpectedly."
                 .into(),
         ),
         n => Some(format!(
-            "auracode stopped {n} agent processes left running by an earlier session that ended unexpectedly."
+            "o7 stopped {n} agent processes left running by an earlier session that ended unexpectedly."
         )),
     }
 }
@@ -526,9 +526,9 @@ pub struct Quit {
     phase: Mutex<QuitPhase>,
     store_closed: AtomicBool,
     /// The person already agreed to stop everything (the data cleanup's review): the next quit
-    /// does not ask again. Cleared when auracode keeps running.
+    /// does not ask again. Cleared when o7 keeps running.
     confirmed: AtomicBool,
-    /// Signals since auracode last kept running: the second one exits at once.
+    /// Signals since o7 last kept running: the second one exits at once.
     signals: AtomicU32,
 }
 
@@ -580,7 +580,7 @@ impl Quit {
         self.store_closed.load(Ordering::Acquire)
     }
 
-    /// Counts a signal; returns how many arrived since auracode last kept running, this one
+    /// Counts a signal; returns how many arrived since o7 last kept running, this one
     /// included.
     pub fn count_signal(&self) -> u32 {
         self.signals
@@ -589,7 +589,7 @@ impl Quit {
     }
 
     /// The next quit stops agents and terminals without asking: the person already agreed in a
-    /// review that said so (Settings' "Delete all auracode data").
+    /// review that said so (Settings' "Delete all o7 data").
     pub fn confirm_ahead(&self) {
         self.confirmed.store(true, Ordering::Release);
     }
@@ -604,7 +604,7 @@ impl Quit {
         self.finish();
     }
 
-    /// The user kept auracode open: the flow is over, so a later signal starts a new one instead
+    /// The user kept o7 open: the flow is over, so a later signal starts a new one instead
     /// of counting as the second signal of this one.
     fn keep_running(&self) {
         *lock(&self.phase) = QuitPhase::Running;
@@ -670,7 +670,7 @@ pub struct QuitQuestion {
 }
 
 /// The question to ask before quitting with `storage`, if any: only a paused store with unsaved
-/// data loses something when auracode quits.
+/// data loses something when o7 quits.
 pub fn quit_question(storage: &StorageStatus) -> Option<QuitQuestion> {
     let StorageState::Paused { reason, .. } = &storage.state else {
         return None;
@@ -680,16 +680,16 @@ pub fn quit_question(storage: &StorageStatus) -> Option<QuitQuestion> {
     }
     let message = match reason {
         PauseReason::DiskFull => {
-            "auracode can't save its latest messages because the disk is full. If you quit now, they are lost."
+            "o7 can't save its latest messages because the disk is full. If you quit now, they are lost."
         }
         PauseReason::Busy => {
-            "auracode can't save its latest messages because its database is busy. If you quit now, they are lost."
+            "o7 can't save its latest messages because its database is busy. If you quit now, they are lost."
         }
     };
     Some(QuitQuestion {
         message: message.into(),
         quit: "Quit anyway".into(),
-        keep: "Keep auracode open".into(),
+        keep: "Keep o7 open".into(),
     })
 }
 
@@ -707,7 +707,7 @@ pub fn quit_question_with_work(storage: &StorageStatus, active: usize) -> Option
                 question = Some(QuitQuestion {
                     message: work,
                     quit: "Stop agents and quit".into(),
-                    keep: "Keep auracode open".into(),
+                    keep: "Keep o7 open".into(),
                 })
             }
         }
@@ -718,7 +718,7 @@ pub fn quit_question_with_work(storage: &StorageStatus, active: usize) -> Option
 /// How a quit flow ended.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum QuitOutcome {
-    /// The user kept auracode open; the window is back and the next exit request starts over.
+    /// The user kept o7 open; the window is back and the next exit request starts over.
     Kept,
     /// Everything stopped and the app was asked to exit with the request's code.
     Exited {
@@ -731,7 +731,7 @@ pub enum QuitOutcome {
 
 /// The quit flow first drains owned file/vendor work without closing storage, keeping the app open
 /// on timeout. Once drained: when saving is paused with unsaved data or work is active, ask first,
-/// in the window, which comes forward for it (keeping auracode open ends the quit); then hide the
+/// in the window, which comes forward for it (keeping o7 open ends the quit); then hide the
 /// window, stop every session within 8 s, commit and close the store within 5 s, delete the
 /// registry file, and exit with `code`. The next exit request passes ([`Quit::on_exit_requested`]).
 ///
@@ -781,7 +781,7 @@ pub async fn run_quit(quit: &Quit, host: &impl QuitHost, code: i32) -> QuitOutco
                 question = Some(QuitQuestion {
                     message,
                     quit: "Close terminals and quit".into(),
-                    keep: "Keep auracode open".into(),
+                    keep: "Keep o7 open".into(),
                 })
             }
         }
@@ -795,7 +795,7 @@ pub async fn run_quit(quit: &Quit, host: &impl QuitHost, code: i32) -> QuitOutco
                 question = Some(QuitQuestion {
                     message: message.into(),
                     quit: "Quit anyway".into(),
-                    keep: "Keep auracode open".into(),
+                    keep: "Keep o7 open".into(),
                 })
             }
         }
@@ -806,7 +806,7 @@ pub async fn run_quit(quit: &Quit, host: &impl QuitHost, code: i32) -> QuitOutco
     {
         host.show_window();
         quit.keep_running();
-        tracing::info!("kept auracode open after the quit question");
+        tracing::info!("kept o7 open after the quit question");
         return QuitOutcome::Kept;
     }
     host.hide_window();
@@ -897,7 +897,7 @@ impl QuitHost for AppQuitHost<'_> {
 
     fn terminal_cleanup_blocked(&self) {
         use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
-        self.app.dialog().message("A project terminal's process cleanup could not be confirmed. auracode stayed open and kept its folder protected. Review owned-process recovery before retrying quit.").title("Terminal cleanup needs attention").buttons(MessageDialogButtons::Ok).show(|_|{});
+        self.app.dialog().message("A project terminal's process cleanup could not be confirmed. o7 stayed open and kept its folder protected. Review owned-process recovery before retrying quit.").title("Terminal cleanup needs attention").buttons(MessageDialogButtons::Ok).show(|_|{});
     }
 
     async fn wait_owned_work(&self, deadline: Duration) -> bool {
@@ -906,7 +906,7 @@ impl QuitHost for AppQuitHost<'_> {
 
     fn owned_work_blocked(&self) {
         use tauri_plugin_dialog::{DialogExt, MessageDialogButtons};
-        self.app.dialog().message("A folder operation, configuration copy, or agent update is still finishing. auracode has stayed open to preserve that work. Try quitting again when it finishes.")
+        self.app.dialog().message("A folder operation, configuration copy, or agent update is still finishing. o7 has stayed open to preserve that work. Try quitting again when it finishes.")
             .title("Work is still finishing").buttons(MessageDialogButtons::Ok).show(|_| {});
     }
     async fn flush_drafts(&self) -> bool {
@@ -1042,7 +1042,7 @@ impl QuitHost for AppQuitHost<'_> {
 
 impl AppQuitHost<'_> {
     /// The fallback when the window cannot ask: the system dialog, Keep open first and default, so
-    /// Enter, Esc and closing it all keep auracode open; only the quit button quits.
+    /// Enter, Esc and closing it all keep o7 open; only the quit button quits.
     async fn ask_natively(&self, question: QuitQuestion) -> bool {
         use tauri_plugin_dialog::{DialogExt as _, MessageDialogButtons, MessageDialogKind};
         let (tx, rx) = tokio::sync::oneshot::channel();
@@ -1050,7 +1050,7 @@ impl AppQuitHost<'_> {
         self.app
             .dialog()
             .message(question.message)
-            .title("auracode")
+            .title("o7")
             .kind(MessageDialogKind::Warning)
             .buttons(MessageDialogButtons::OkCancelCustom(
                 question.keep,
@@ -1063,8 +1063,8 @@ impl AppQuitHost<'_> {
         match rx.await {
             Ok(quit) => quit,
             Err(_) => {
-                // The dialog never answered: keeping auracode open loses nothing.
-                tracing::warn!("the quit question was not answered; keeping auracode open");
+                // The dialog never answered: keeping o7 open loses nothing.
+                tracing::warn!("the quit question was not answered; keeping o7 open");
                 false
             }
         }
@@ -1089,7 +1089,7 @@ fn token_of(payload: &str) -> Option<String> {
 
 /// The in-app question's outcome: `None` when it was not sent or the page did not show it within
 /// `within` (not loaded, hung), so the system dialog asks; otherwise the choice, waited for as long
-/// as it takes. An answer channel that closes without a choice keeps auracode open.
+/// as it takes. An answer channel that closes without a choice keeps o7 open.
 pub async fn ask_in_app(
     sent: bool,
     shown: tokio::sync::oneshot::Receiver<()>,
@@ -1106,7 +1106,7 @@ pub async fn ask_in_app(
 }
 
 /// The system dialog's buttons are Keep (first, the default) and the quit label: only that label
-/// quits. Closing the dialog, Esc and Enter keep auracode open.
+/// quits. Closing the dialog, Esc and Enter keep o7 open.
 pub fn native_quit_choice(
     result: &tauri_plugin_dialog::MessageDialogResult,
     quit_label: &str,
@@ -1124,7 +1124,7 @@ pub fn exit_last_resort(quit: &Quit, chats: &ChatRuntime) -> bool {
         return false;
     }
     if !chats.store.shutdown_blocking(EXIT_STORE_DEADLINE) {
-        tracing::warn!("the chat store could not save everything before auracode exited");
+        tracing::warn!("the chat store could not save everything before o7 exited");
     }
     quit.mark_store_closed();
     true
@@ -1146,7 +1146,7 @@ pub trait SignalHost: Send + Sync + 'static {
 
 /// What one signal does: the first starts the quit flow, any later one (the flow is running) kills
 /// every agent, closes the store within 1 s and exits with 128 plus the signal's number. Keeping
-/// auracode open at the flow's question starts the count over. Returns the exit code of a hard
+/// o7 open at the flow's question starts the count over. Returns the exit code of a hard
 /// exit.
 pub fn on_signal(quit: &Quit, host: &impl SignalHost, number: i32) -> Option<i32> {
     if quit.count_signal() == 1 {
@@ -1237,7 +1237,7 @@ impl SignalHost for AppSignals {
             && !state.quit.store_closed()
             && !chats.store.shutdown_blocking(EXIT_STORE_DEADLINE)
         {
-            tracing::warn!("the chat store could not save everything before auracode exited");
+            tracing::warn!("the chat store could not save everything before o7 exited");
         }
     }
 
@@ -1658,14 +1658,14 @@ mod tests {
         assert_eq!(
             sweep_notice(&report).as_deref(),
             Some(
-                "auracode stopped 1 agent process left running by an earlier session that ended unexpectedly."
+                "o7 stopped 1 agent process left running by an earlier session that ended unexpectedly."
             )
         );
         report.killed.push((5002, "claude-agent-acp".into()));
         assert_eq!(
             sweep_notice(&report).as_deref(),
             Some(
-                "auracode stopped 2 agent processes left running by an earlier session that ended unexpectedly."
+                "o7 stopped 2 agent processes left running by an earlier session that ended unexpectedly."
             )
         );
     }
@@ -1696,7 +1696,7 @@ mod tests {
             second
                 .fatal
                 .as_deref()
-                .is_some_and(|fatal| fatal.starts_with("auracode is already running")),
+                .is_some_and(|fatal| fatal.starts_with("o7 is already running")),
             "the chat store holds the profile: {:?}",
             second.fatal
         );
@@ -1967,7 +1967,7 @@ mod tests {
 
     /// The window's own dialog answers when the page shows it in time, however long the choice
     /// takes; a page that never shows it, or a question that could not be sent, falls back to the
-    /// system dialog; a page that goes away mid-question keeps auracode open.
+    /// system dialog; a page that goes away mid-question keeps o7 open.
     #[tokio::test(start_paused = true)]
     async fn the_quit_question_asks_in_the_window_and_falls_back_to_the_system_dialog() {
         use tokio::sync::oneshot;
@@ -1988,7 +1988,7 @@ mod tests {
         answer_tx.send(false).unwrap();
         assert_eq!(ask_in_app(true, shown, answer, within).await, Some(false));
 
-        // Shown, then the page is gone without a choice: keep auracode open.
+        // Shown, then the page is gone without a choice: keep o7 open.
         let (shown_tx, shown) = oneshot::channel();
         let (answer_tx, answer) = oneshot::channel::<bool>();
         shown_tx.send(()).unwrap();
@@ -2018,7 +2018,7 @@ mod tests {
         let quit = "Stop agents and quit";
         assert!(native_quit_choice(&Result::Custom(quit.into()), quit));
         for kept in [
-            Result::Custom("Keep auracode open".into()),
+            Result::Custom("Keep o7 open".into()),
             Result::Cancel,
             Result::Ok,
             Result::Yes,
@@ -2135,7 +2135,7 @@ mod tests {
 
     #[tokio::test]
     async fn quit_asks_when_paused() {
-        // Keep auracode open: the window comes back, nothing stops, and quitting starts over.
+        // Keep o7 open: the window comes back, nothing stops, and quitting starts over.
         let quit = Quit::default();
         assert_eq!(quit.on_exit_requested(), ExitRequest::StartQuit);
         let host = FakeHost::new(paused(PauseReason::DiskFull, 4096), false);
@@ -2144,7 +2144,7 @@ mod tests {
             host.calls(),
             [
                 Call::Ask(
-                    "auracode can't save its latest messages because the disk is full. If you quit now, they are lost."
+                    "o7 can't save its latest messages because the disk is full. If you quit now, they are lost."
                         .into()
                 ),
                 Call::Show,
@@ -2275,7 +2275,7 @@ mod tests {
         );
         let question = quit_question(&paused(PauseReason::DiskFull, 10)).expect("asks");
         assert_eq!(question.quit, "Quit anyway");
-        assert_eq!(question.keep, "Keep auracode open");
+        assert_eq!(question.keep, "Keep o7 open");
     }
 
     /// This instance's leftover registry files in `run`: `<pid>-<start>.json` (spec 3.5).
@@ -2402,7 +2402,7 @@ mod tests {
         );
     }
 
-    /// Keeping auracode open at the quit question ends that flow: the next signal, however much
+    /// Keeping o7 open at the quit question ends that flow: the next signal, however much
     /// later, starts a new one rather than exiting at once and losing the unsaved data the
     /// question protected. A second signal during the new flow still exits at once.
     #[tokio::test]
@@ -2435,7 +2435,7 @@ mod tests {
     const SIGNAL_CHILD: &str = "AURACODE_DESKTOP_TEST_SIGNAL_CHILD";
 
     /// Real signals, in a child copy of the test binary: once the handlers are installed, SIGTERM
-    /// asks for the quit flow; after the user keeps auracode open, SIGHUP asks for it again; and
+    /// asks for the quit flow; after the user keeps o7 open, SIGHUP asks for it again; and
     /// SIGINT during that flow exits with 130 after killing the agents and closing the store. A
     /// child, because a handled SIGINT would stop Ctrl+C from ending the test run itself.
     #[cfg(unix)]
@@ -2479,7 +2479,7 @@ mod tests {
             send("TERM");
             wait_for(1).await;
             assert_eq!(*lock(&host.calls), ["request_exit"]);
-            // The quit question was answered with Keep auracode open.
+            // The quit question was answered with Keep o7 open.
             quit.keep_running();
             send("HUP");
             wait_for(2).await;

@@ -4,13 +4,13 @@
 use serde_json::{Value, json};
 use std::io::{self, BufRead, Read, Write};
 
-const UNAVAILABLE: &str = "auracode's project tools are unavailable: the session's grant expired or the app closed. Tell the person, and go on without them if you can.";
+const UNAVAILABLE: &str = "o7's project tools are unavailable: the session's grant expired or the app closed. Tell the person, and go on without them if you can.";
 
 fn request(mut value: Value) -> Value {
     let result = (|| -> Result<Value, Box<dyn std::error::Error>> {
         let endpoint = std::env::var("AURA_PROJECT_ENDPOINT")?.parse::<std::net::SocketAddr>()?;
         if !endpoint.ip().is_loopback() {
-            return Err("The project service must be local to the auracode app.".into());
+            return Err("The project service must be local to the o7 app.".into());
         }
         value["token"] = Value::String(std::env::var("AURA_PROJECT_TOKEN")?);
         let mut stream =

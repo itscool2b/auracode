@@ -564,8 +564,7 @@ async fn initialize_reply_rows() {
         exit,
         DriverExit::StartFailed(DriverError {
             kind: ErrorKind::ProtocolMismatch,
-            message: "This agent speaks ACP protocol version 2; auracode supports version 1."
-                .into(),
+            message: "This agent speaks ACP protocol version 2; o7 supports version 1.".into(),
             detail: None,
         })
     );
@@ -1181,7 +1180,7 @@ async fn no_matching_mode_falls_back_to_asking_with_a_note() {
             requested: Autonomy::FullAuto,
             native_mode: None,
             auto_answer: AutoAnswer::Never,
-            note: Some("auracode could not switch Codex to a matching mode (it has no modes), so it asks before every action.".into()),
+            note: Some("o7 could not switch Codex to a matching mode (it has no modes), so it asks before every action.".into()),
         }]
     );
 }
@@ -1249,7 +1248,7 @@ async fn set_autonomy_replies_with_the_state_and_a_hand_picked_mode_turns_auto_a
             requested: Autonomy::Ask,
             native_mode: Some("accept_edits".into()),
             auto_answer: AutoAnswer::Never,
-            note: Some("You picked the Accept Edits mode by hand, so auracode asks before every action. Choose an autonomy level to hand control back.".into()),
+            note: Some("You picked the Accept Edits mode by hand, so o7 asks before every action. Choose an autonomy level to hand control back.".into()),
         }]
     );
     // Back to the candidate's mode: restored, with the candidate's own note instead of the hand
@@ -1470,7 +1469,7 @@ fn execute_only() -> AutoAnswer {
 
 fn hand_picked_note(name: &str) -> Option<String> {
     Some(format!(
-        "You picked the {name} mode by hand, so auracode asks before every action. Choose an autonomy level to hand control back."
+        "You picked the {name} mode by hand, so o7 asks before every action. Choose an autonomy level to hand control back."
     ))
 }
 
@@ -1958,7 +1957,7 @@ async fn a_set_autonomy_fallback_is_announced_as_soon_as_it_is_chosen() {
             Autonomy::FullAuto,
             "default",
             AutoAnswer::Never,
-            Some("auracode could not switch Claude Code to a matching mode (no such mode), so it asks before every action.".into())
+            Some("o7 could not switch Claude Code to a matching mode (no such mode), so it asks before every action.".into())
         )
     );
     harness.no_line();
@@ -2606,7 +2605,7 @@ async fn oversized_request_is_answered() {
     assert_eq!(
         reply,
         json!({"jsonrpc": "2.0", "id": 12, "error": {"code": -32603,
-        "message": "auracode can't accept a request of 67 MB; the limit is 64 MiB."}})
+        "message": "o7 can't accept a request of 67 MB; the limit is 64 MiB."}})
     );
 }
 
@@ -2632,7 +2631,7 @@ async fn oversized_response_fails_request() {
         exit,
         DriverExit::StartFailed(DriverError {
             kind: ErrorKind::ProtocolError,
-            message: "auracode dropped a response of 80 MB; the limit is 64 MiB.".into(),
+            message: "o7 dropped a response of 80 MB; the limit is 64 MiB.".into(),
             detail: None,
         })
     );
@@ -3266,7 +3265,7 @@ async fn a_flood_while_configuring_pauses_stdout_and_loses_nothing() {
         .expect("a delta");
     assert!(ready_at < first_delta, "rule 1");
     assert!(transcript(&events).iter().any(|(_, event)| matches!(event,
-        AuraEvent::Notice { message, .. } if message == "auracode could not restore the model you chose earlier (the agent did not answer within 30 seconds).")));
+        AuraEvent::Notice { message, .. } if message == "o7 could not restore the model you chose earlier (the agent did not answer within 30 seconds).")));
     let reply = harness.line().await;
     assert_eq!(reply["id"], "after-the-flood");
     assert_eq!(reply["error"]["code"], -32601);

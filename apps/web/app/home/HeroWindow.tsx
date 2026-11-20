@@ -324,7 +324,7 @@ export function HeroWindow({ state }: { state: HandoffState }) {
           <p className="m-section">Projects</p>
           <p className="m-row m-project-name">
             <Icon name="folder" size={14} />
-            auracode
+            o7
           </p>
           <p className="m-row m-chat is-open">
             <span className="m-row-title">Ship the frame pacing fix</span>

@@ -16,7 +16,7 @@ use crate::installation::provider_namespace;
 pub enum MaintenanceError {
     // One update or detection runs at a time, for every agent: the message must not claim it is
     // this agent's own.
-    #[error("auracode is updating or checking an agent right now. Try again in a moment.")]
+    #[error("o7 is updating or checking an agent right now. Try again in a moment.")]
     AlreadyRunning,
     #[error(
         "The vendor update exited successfully, but the installed binary did not pass its version check."
@@ -101,7 +101,7 @@ pub fn login_command(
     }
 }
 
-/// The vendor command that prints a long-lived sign-in token for an account added in auracode
+/// The vendor command that prints a long-lived sign-in token for an account added in o7
 /// (docs/agent-accounts.md). Only Claude Code has one: `claude setup-token` runs the same browser
 /// sign-in as `/login`, prints a one-year token and saves nothing (Claude Code authentication
 /// docs, "Generate a long-lived token", checked 2026-11-01).

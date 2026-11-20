@@ -23,7 +23,7 @@ export type InstructionsScenario =
   | "recovery"
   | "review";
 
-const SHARED = `# auracode
+const SHARED = `# o7
 
 Rust for every backend piece; React and TypeScript for interfaces.
 
@@ -331,7 +331,7 @@ function globalSnapshot(state: State): InstructionsSnapshot {
                 id,
                 "copy",
                 pi.key,
-                "Reads ~/.pi/agent/AGENTS.md, a copy of ~/.codex/AGENTS.md that auracode keeps in sync.",
+                "Reads ~/.pi/agent/AGENTS.md, a copy of ~/.codex/AGENTS.md that o7 keeps in sync.",
                 { via: codex.key },
               );
         case "opencode":
@@ -339,7 +339,7 @@ function globalSnapshot(state: State): InstructionsSnapshot {
             id,
             "copy",
             opencode.key,
-            "Reads ~/.config/opencode/AGENTS.md, a copy of ~/.codex/AGENTS.md that auracode keeps in sync.",
+            "Reads ~/.config/opencode/AGENTS.md, a copy of ~/.codex/AGENTS.md that o7 keeps in sync.",
             { via: codex.key },
           );
         case "hermes":
@@ -468,7 +468,7 @@ export function createInstructionsFixture(scenario: InstructionsScenario) {
             state.claude,
             "@AGENTS.md\n",
             "Claude Code imports AGENTS.md",
-            ["Its earlier text is backed up in auracode's data folder."],
+            ["Its earlier text is backed up in o7's data folder."],
           ),
         );
         if (change.remove.includes("project:AGENTS.override.md"))
@@ -480,7 +480,7 @@ export function createInstructionsFixture(scenario: InstructionsScenario) {
               state.override,
               null,
               null,
-              ["Backed up in auracode's data folder."],
+              ["Backed up in o7's data folder."],
             ),
           );
         result = {
@@ -553,7 +553,7 @@ export function createInstructionsFixture(scenario: InstructionsScenario) {
                     edited,
                     state.agents,
                     "Managed copy of ~/.codex/AGENTS.md",
-                    ["The edited text is backed up in auracode's data folder."],
+                    ["The edited text is backed up in o7's data folder."],
                   ),
                 ]
               : [

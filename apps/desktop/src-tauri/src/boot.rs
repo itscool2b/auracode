@@ -19,7 +19,7 @@
 //!
 //! One process runs a profile's sessions, so startup takes the profile's owner lock
 //! ([`ProfileOwner`]) between opening the profile and opening its database. A second launch with the
-//! same data folder gets the error screen, saying another auracode runs with that profile.
+//! same data folder gets the error screen, saying another o7 runs with that profile.
 
 use std::path::PathBuf;
 
@@ -126,7 +126,7 @@ fn boot_selected(root: aura_core::Result<DataRoot>, selected: Option<Profile>) -
         Ok(load) => {
             if let DeviceLoad::Recreated { backup, .. } = &load {
                 booted.notices.push(format!(
-                    "This device's identity file was damaged, so auracode created a new one. The old file was kept at {}.",
+                    "This device's identity file was damaged, so o7 created a new one. The old file was kept at {}.",
                     backup.display()
                 ));
             }
@@ -209,9 +209,10 @@ pub(crate) fn boot_next(root: &DataRoot) -> Booted {
     let deadline = Instant::now() + Duration::from_secs(5);
     loop {
         let booted = boot(Ok(root.clone()));
-        let in_use = booted.fatal.as_deref().is_some_and(|fatal| {
-            fatal.starts_with("auracode is already running with the profile in ")
-        });
+        let in_use = booted
+            .fatal
+            .as_deref()
+            .is_some_and(|fatal| fatal.starts_with("o7 is already running with the profile in "));
         if !in_use || Instant::now() >= deadline {
             return booted;
         }
@@ -225,17 +226,17 @@ pub(crate) fn boot_next(root: &DataRoot) -> Booted {
 pub fn recovery_notice(quarantined: &str, salvage: &Salvage) -> String {
     match salvage {
         Salvage::Complete => format!(
-            "Your database was damaged, so auracode rebuilt it. Nothing was lost; the damaged copy was kept at {quarantined}."
+            "Your database was damaged, so o7 rebuilt it. Nothing was lost; the damaged copy was kept at {quarantined}."
         ),
         Salvage::Partial { tables } if !tables.is_empty() => format!(
-            "Your database was damaged, so auracode rebuilt it from what it could still read. Some records could not be read ({}); the damaged copy was kept at {quarantined}.",
+            "Your database was damaged, so o7 rebuilt it from what it could still read. Some records could not be read ({}); the damaged copy was kept at {quarantined}.",
             tables.join(", ")
         ),
         Salvage::Partial { .. } => format!(
-            "Your database was damaged, so auracode rebuilt it from what it could still read. Some records could not be read; the damaged copy was kept at {quarantined}."
+            "Your database was damaged, so o7 rebuilt it from what it could still read. Some records could not be read; the damaged copy was kept at {quarantined}."
         ),
         Salvage::Nothing => format!(
-            "Your database was damaged and nothing in it could be read, so auracode started a fresh one. The damaged copy was kept at {quarantined}."
+            "Your database was damaged and nothing in it could be read, so o7 started a fresh one. The damaged copy was kept at {quarantined}."
         ),
     }
 }
@@ -446,7 +447,7 @@ mod tests {
 
         let booted = boot_next(&root);
         let fatal = booted.fatal.expect("fatal error");
-        assert!(fatal.contains("newer version of auracode"), "{fatal}");
+        assert!(fatal.contains("newer version of o7"), "{fatal}");
         assert!(booted.store.is_none());
         assert_eq!(
             booted.integrity_check, None,
@@ -474,7 +475,7 @@ mod tests {
         let second = boot(Ok(root.clone()));
         let fatal = second.fatal.clone().expect("refused");
         assert!(
-            fatal.starts_with("auracode is already running with the profile in "),
+            fatal.starts_with("o7 is already running with the profile in "),
             "{fatal}"
         );
         assert!(fatal.contains("AURACODE_DATA_DIR"), "{fatal}");

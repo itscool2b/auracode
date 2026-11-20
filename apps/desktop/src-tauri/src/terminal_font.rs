@@ -1,4 +1,4 @@
-//! The font the person's own terminal app draws with, so auracode's terminals look like it (owner,
+//! The font the person's own terminal app draws with, so o7's terminals look like it (owner,
 //! 17 November 2026: the terminal should be "the default terminal of the system itself").
 //!
 //! Read-only and best effort. The terminal is the one the person set as their default (`TERMINAL`,

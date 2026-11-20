@@ -18,7 +18,7 @@ impl SessionManager {
             .await
     }
 
-    /// `claude setup-token` for an account added in auracode: the browser sign-in that prints the
+    /// `claude setup-token` for an account added in o7: the browser sign-in that prints the
     /// token the person pastes into Add account. Like the sign-in, only an explicit Start runs it.
     pub async fn prepare_account_token(&self, agent_id: &str) -> Result<SpawnSpec, SessionError> {
         self.prepare_vendor_terminal(agent_id, "account token", token_command)

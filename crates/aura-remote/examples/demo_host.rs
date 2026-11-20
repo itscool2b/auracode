@@ -275,7 +275,7 @@ impl Backend for Shared {
         self
     }
 
-    // It looks as a new auracode does: Claude Code's theme, following the system.
+    // It looks as a new o7 does: Claude Code's theme, following the system.
     fn look(&self) -> Option<aura_remote::Look> {
         Some(aura_remote::Look {
             theme: "claude".into(),

@@ -30,7 +30,7 @@ fn request_to(
             .ok_or("no endpoint")?
             .parse::<std::net::SocketAddr>()?;
         if !endpoint.ip().is_loopback() {
-            return Err("The browser service must be local to the Aura app.".into());
+            return Err("The browser service must be local to the o7 app.".into());
         }
         let token = token.ok_or("no token")?;
         let mut stream =
@@ -53,7 +53,7 @@ fn request_to(
     })();
     result.unwrap_or_else(|_| {
         json!({
-            "text": "Aura's browser is unavailable: the app cannot be reached, or this session's browser access ended. Ask the person to restart the session in Aura, or work without the browser.",
+            "text": "Aura's browser is unavailable: the app cannot be reached, or this session's browser access ended. Ask the person to restart the session in o7, or work without the browser.",
             "error": true,
         })
     })

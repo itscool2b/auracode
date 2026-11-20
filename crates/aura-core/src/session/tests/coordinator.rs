@@ -114,7 +114,7 @@ async fn a_coordinator_starts_a_worker_and_is_sent_its_report() {
     assert_eq!(snapshot.brief, "Move billing off the old queue.");
     let first = text(coordinator_sent.wait_for(CommandMatch::Prompt).await);
     assert!(first.starts_with("[auracode project event] Project started\n"));
-    assert!(first.contains("You are the coordinator of an auracode project."));
+    assert!(first.contains("You are the coordinator of an o7 project."));
     assert!(first.contains("Move billing off the old queue."));
     // A project has one coordinator.
     assert!(
@@ -193,7 +193,7 @@ async fn a_coordinator_starts_a_worker_and_is_sent_its_report() {
     assert!(
         assignment.starts_with("[auracode project event] Assignment for worker \"api-tests\"\n")
     );
-    assert!(assignment.contains("You are a worker in an auracode project."));
+    assert!(assignment.contains("You are a worker in an o7 project."));
     assert!(assignment.contains("Decisions the person made"));
     assert!(assignment.contains("D-1: TypeScript, not Python."));
     assert!(assignment.contains("Your task on the board is T-1 \"Contract tests\"."));

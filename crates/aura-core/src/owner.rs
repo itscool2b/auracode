@@ -1,4 +1,4 @@
-//! The profile owner: one auracode process runs a profile's sessions.
+//! The profile owner: one o7 process runs a profile's sessions.
 //!
 //! Recovery and sequence numbers assume one writer per chat: a second process that recovered the
 //! first one's live turns would break its numbering and send its transcript to the dead-letter file.
@@ -49,7 +49,7 @@ impl ProfileOwner {
                 tracing::warn!(
                     path = %path.display(),
                     %error,
-                    "this filesystem can't lock files; running without guarding the profile against a second auracode process"
+                    "this filesystem can't lock files; running without guarding the profile against a second o7 process"
                 );
                 Ok(ProfileOwner { path, _file: None })
             }
@@ -115,7 +115,7 @@ mod tests {
         .to_string();
         assert_eq!(
             message,
-            "auracode is already running with the profile in /data/profiles/local. Quit it first, or start this copy with its own AURACODE_DATA_DIR."
+            "o7 is already running with the profile in /data/profiles/local. Quit it first, or start this copy with its own AURACODE_DATA_DIR."
         );
     }
 
