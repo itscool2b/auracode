@@ -162,11 +162,13 @@ fn count_turn(
 ) -> rusqlite::Result<(BTreeMap<Millis, u64>, u64)> {
     let mut calls: HashMap<String, (ToolCall, Millis)> = HashMap::new();
     let mut read = 0u64;
+    // A row that is not JSON (a salvaged one) reads as NULL here instead of failing the turn, and
+    // with it every turn after it.
     {
         let mut stmt = conn.prepare_cached(
             "SELECT payload, created_at FROM events \
-             WHERE turn_id = ?1 AND kind = 'tool_call' \
-             AND json_valid(payload) AND json_extract(payload, '$.kind') = 'edit' ORDER BY seq",
+             WHERE turn_id = ?1 AND kind = 'tool_call' AND json_extract(\
+             CASE WHEN json_valid(payload) THEN payload END, '$.kind') = 'edit' ORDER BY seq",
         )?;
         let mut rows = stmt.query(params![turn_id])?;
         while let Some(row) = rows.next()? {
@@ -190,9 +192,9 @@ fn count_turn(
     let ids = serde_json::to_string(&calls.keys().collect::<Vec<_>>()).unwrap_or_default();
     let mut stmt = conn.prepare_cached(
         "SELECT payload FROM events \
-         WHERE turn_id = ?1 AND kind = 'tool_update' AND json_valid(payload) \
-         AND json_extract(payload, '$.tool_call_id') IN (SELECT value FROM json_each(?2)) \
-         ORDER BY seq",
+         WHERE turn_id = ?1 AND kind = 'tool_update' AND json_extract(\
+         CASE WHEN json_valid(payload) THEN payload END, '$.tool_call_id') \
+         IN (SELECT value FROM json_each(?2)) ORDER BY seq",
     )?;
     let mut rows = stmt.query(params![turn_id, ids])?;
     while let Some(row) = rows.next()? {
@@ -717,6 +719,16 @@ mod tests {
                 ),
             ],
         );
+        // Rows that are not JSON (salvaged ones) are passed over, not a failed count.
+        for (id, seq, kind) in [("bad1", 9, "tool_call"), ("bad2", 10, "tool_update")] {
+            db.conn()
+                .execute(
+                    "INSERT INTO events (id, chat_id, turn_id, seq, kind, payload, created_at, \
+                     device_id) VALUES (?1, ?2, 't1', ?3, ?4, '{not json', 5, 'dev')",
+                    params![id, chat, seq, kind],
+                )
+                .expect("bad row");
+        }
         end(&db, "t1");
         count_all(&db, &attachments);
         assert_eq!(read_all(&db)[0].lines, 3);
