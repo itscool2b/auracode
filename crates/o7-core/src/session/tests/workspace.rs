@@ -1,6 +1,6 @@
 use super::*;
 use o7_protocol::workspace::{
-    ChatMove, ProjectChatCreate, ProjectCreate, ProjectInput, WorkspaceFilter,
+    ChatMove, ChatRole, ProjectChatCreate, ProjectCreate, ProjectInput, RoleModel, WorkspaceFilter,
 };
 
 fn input(name: &str) -> ProjectInput {
@@ -758,4 +758,77 @@ async fn a_differently_spelled_pick_resolves_to_its_project() {
             .is_err()
     );
     let _ = rig.manager.shutdown_all(Duration::from_secs(5)).await;
+}
+
+#[tokio::test]
+async fn a_chats_roles_are_checked_and_kept_as_agents() {
+    let (driver, _handle) = waiting_driver("roles");
+    let rig = rig(vec![driver], WriterConfig::STANDARD, Knobs::STANDARD);
+    let chat = rig
+        .manager
+        .create_chat("mock", &rig.folder)
+        .await
+        .expect("chat");
+    status(&rig, &chat.id, SessionStatus::Ready).await;
+    let role = |agent: &str, model: Option<&str>, effort: Option<&str>| RoleModel {
+        agent: agent.into(),
+        model: model.map(Into::into),
+        effort: effort.map(Into::into),
+    };
+    // A connection is kept as its agent, as the default agent is.
+    let set = rig
+        .manager
+        .chat_set_role(
+            &chat.id,
+            ChatRole::Plan,
+            Some(role("claude-acp", Some("claude-fable-5-2"), Some("high"))),
+        )
+        .await
+        .expect("plan role");
+    assert_eq!(
+        set.roles.plan,
+        Some(role("claude", Some("claude-fable-5-2"), Some("high")))
+    );
+    assert_eq!(set.roles.build, None);
+    // What is not an identifier is refused, and nothing changes.
+    let long_agent = "a".repeat(129);
+    let long_model = "m".repeat(257);
+    for bad in [
+        role("", None, None),
+        role(&long_agent, None, None),
+        role("codex", Some("line\nbreak"), None),
+        role("codex", Some(&long_model), None),
+        role("codex", None, Some("")),
+    ] {
+        assert!(
+            rig.manager
+                .chat_set_role(&chat.id, ChatRole::Build, Some(bad))
+                .await
+                .is_err()
+        );
+    }
+    assert!(
+        rig.manager
+            .chat_set_role("missing", ChatRole::Build, Some(role("codex", None, None)))
+            .await
+            .is_err()
+    );
+    let snapshot = rig
+        .manager
+        .workspace_snapshot(WorkspaceFilter::default())
+        .await
+        .expect("snapshot");
+    let listed = snapshot
+        .chats
+        .iter()
+        .find(|entry| entry.chat.id == chat.id)
+        .expect("listed");
+    assert_eq!(listed.roles.build, None);
+    assert!(listed.roles.plan.is_some());
+    let cleared = rig
+        .manager
+        .chat_set_role(&chat.id, ChatRole::Plan, None)
+        .await
+        .expect("clear");
+    assert_eq!(cleared.roles.plan, None);
 }

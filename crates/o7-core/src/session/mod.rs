@@ -372,9 +372,6 @@ pub(crate) struct Shared {
     pub(crate) browser_bridge: Mutex<Option<Arc<dyn crate::browser_service::BrowserBridge>>>,
     /// Coordinated projects (an experiment): its switch, and what its engine keeps.
     pub(crate) coordination: coordinator::Coordination,
-    /// Settings' choice of agent and model for each kind of work. A coordinated project reads the
-    /// coordinator's and the workers'; the window applies the planning and building ones.
-    pub(crate) role_models: Mutex<crate::onboarding::RoleModels>,
     /// The model catalog each agent connection last reported, kept across restarts, so a chat
     /// whose agent is not running still offers models and thinking levels (and Settings too).
     pub(crate) catalogs: Arc<catalogs::Catalogs>,
@@ -537,7 +534,6 @@ impl SessionManager {
                     browser_tools: Arc::new(AtomicBool::new(true)),
                     browser_bridge: Mutex::new(None),
                     coordination: coordinator::Coordination::default(),
-                    role_models: Mutex::new(crate::onboarding::RoleModels::default()),
                     catalogs,
                     #[cfg(test)]
                     slow_folder: Mutex::new(None),
@@ -1385,15 +1381,6 @@ impl SessionManager {
 
     /// The Browser plugin's switch. Sessions started while it is on get the browser tools; a
     /// running session's tools answer that it is off once it is.
-    /// Settings' agent and model for each kind of work.
-    pub fn set_role_models(&self, roles: crate::onboarding::RoleModels) {
-        *lock(&self.shared().role_models) = roles;
-    }
-
-    pub fn role_models(&self) -> crate::onboarding::RoleModels {
-        lock(&self.shared().role_models).clone()
-    }
-
     pub fn set_browser_tools(&self, enabled: bool) {
         self.shared()
             .browser_tools

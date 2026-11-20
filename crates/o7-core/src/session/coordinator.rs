@@ -431,15 +431,9 @@ impl SessionManager {
         {
             return Err(failed("Choose one of this project's own folders."));
         }
-        let ready = self.ready_agents().await;
-        let role = self.role_for(crate::onboarding::ModelRole::Coordinator, &ready);
         let agent_id = match input.agent_id {
             Some(agent_id) => agent_id,
-            None => match role
-                .as_ref()
-                .map(|role| role.agent.clone())
-                .or(project.default_agent.clone())
-            {
+            None => match project.default_agent.clone() {
                 Some(agent_id) => agent_id,
                 None => self
                     .ready_agents()
@@ -452,7 +446,6 @@ impl SessionManager {
                     })?,
             },
         };
-        let agent_of_chat = o7_agents::agent_of(&agent_id).to_owned();
         let chat = self
             .create_project_chat(
                 ProjectChatCreate {
@@ -477,11 +470,6 @@ impl SessionManager {
             return Err(failed(error));
         }
         let _ = self.chat_rename(&chat_id, "Coordinator").await;
-        // Settings' Coordinator role names a model for its agent. A model that cannot be set
-        // (an agent that has never run reports none yet) leaves the agent's own.
-        if let Some(role) = role.filter(|role| role.agent == agent_of_chat) {
-            let _ = self.apply_role(&chat_id, &role).await;
-        }
         let prompt = format!(
             "{EVENT_PREFIX}Project started\n\n{COORDINATOR_INSTRUCTIONS}\n\nThe person's brief:\n{}\n\nStart now: call project_overview, then say in a few lines how you will split the work, record the plan as tasks, and start the workers that can go. Ask the person only what the brief leaves open and would be costly to get wrong.",
             input.brief.trim()
@@ -842,38 +830,6 @@ impl SessionManager {
         Ok(text)
     }
 
-    /// Settings' choice for a kind of work, when its agent is ready here.
-    fn role_for(
-        &self,
-        role: crate::onboarding::ModelRole,
-        ready: &[o7_protocol::session::AgentEntry],
-    ) -> Option<crate::onboarding::RoleModel> {
-        lock(&self.shared().role_models)
-            .get(role)
-            .filter(|choice| {
-                ready
-                    .iter()
-                    .any(|agent| o7_agents::agent_of(&agent.id) == choice.agent)
-            })
-            .cloned()
-    }
-
-    /// Sets a role's model and thinking level on a chat of the role's agent.
-    async fn apply_role(
-        &self,
-        chat_id: &str,
-        role: &crate::onboarding::RoleModel,
-    ) -> Result<(), String> {
-        if let Some(model) = &role.model {
-            self.choose_model(chat_id, model).await?;
-        }
-        if let Some(effort) = &role.effort {
-            self.choose_option(chat_id, ConfigCategory::Effort, effort)
-                .await?;
-        }
-        Ok(())
-    }
-
     /// Sets a chat's model by its value or name, as the model picker does.
     pub(crate) async fn choose_model(&self, chat_id: &str, asked: &str) -> Result<(), String> {
         self.choose_option(chat_id, ConfigCategory::Model, asked)
@@ -1017,7 +973,13 @@ impl SessionManager {
             )
         })?;
         let ready = self.ready_agents().await;
-        let worker_role = self.role_for(crate::onboarding::ModelRole::Worker, &ready);
+        // The coordinator chat's Build role, when its agent is ready here, is what workers use
+        // unless the coordinator names another agent or model.
+        let worker_role = own.roles.build.clone().filter(|choice| {
+            ready
+                .iter()
+                .any(|agent| o7_agents::agent_of(&agent.id) == choice.agent)
+        });
         let agent_id = match optional_text(arguments, "agent")? {
             Some(asked) => ready
                 .iter()
@@ -1117,7 +1079,7 @@ impl SessionManager {
         };
         let _ = self.chat_rename(&chat_id, &name).await;
         let mut notes = String::new();
-        // The model the coordinator named, else the Worker role's, with the role's thinking level.
+        // The model the coordinator named, else the Build role's, with the role's thinking level.
         let role_effort = worker_role.as_ref().and_then(|role| role.effort.clone());
         let asked = model.is_some();
         if let Some(model) = model.or(worker_role.and_then(|role| role.model))

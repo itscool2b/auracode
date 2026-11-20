@@ -1,9 +1,9 @@
 //! Project organization and device-local folder preflight. No operation moves files on disk.
 
 use o7_protocol::workspace::{
-    ChatCreatePreview, ChatMove, FolderMatch, FolderMatches, ProjectChatCreate, ProjectCreate,
-    ProjectFolder, ProjectInput, ProjectSummary, WorkspaceChat, WorkspaceFilter, WorkspaceSnapshot,
-    WorktreeOrigin,
+    ChatCreatePreview, ChatMove, ChatRole, FolderMatch, FolderMatches, ProjectChatCreate,
+    ProjectCreate, ProjectFolder, ProjectInput, ProjectSummary, RoleModel, WorkspaceChat,
+    WorkspaceFilter, WorkspaceSnapshot, WorktreeOrigin,
 };
 
 use super::*;
@@ -146,6 +146,45 @@ impl SessionManager {
             OrganizationCommand::ArchiveChat {
                 id: chat_id.into(),
                 archived,
+            },
+        )
+        .await
+    }
+
+    /// Names the agent, model and thinking level this chat plans or builds with, or clears it. A
+    /// connection is kept as its agent, as the default agent is. Nothing runs here: the window
+    /// applies the choice through the chat's own model picker, and a hand-over to another agent
+    /// or a coordinator's worker checks then that the agent is ready.
+    pub async fn chat_set_role(
+        &self,
+        chat_id: &str,
+        role: ChatRole,
+        choice: Option<RoleModel>,
+    ) -> Result<WorkspaceChat, SessionError> {
+        let choice = match choice {
+            None => None,
+            Some(choice) => {
+                bounded(&choice.agent, "Agent identifier", 128)?;
+                if let Some(model) = &choice.model {
+                    bounded(model, "Model identifier", 256)?;
+                }
+                if let Some(effort) = &choice.effort {
+                    bounded(effort, "Thinking level", 128)?;
+                }
+                let agent = o7_agents::agent_of(choice.agent.trim());
+                Some(RoleModel {
+                    agent: agent.to_owned(),
+                    model: choice.model.map(|model| model.trim().to_owned()),
+                    effort: choice.effort.map(|effort| effort.trim().to_owned()),
+                })
+            }
+        };
+        self.organize_chat(
+            chat_id,
+            OrganizationCommand::SetChatRole {
+                id: chat_id.into(),
+                role,
+                choice,
             },
         )
         .await
@@ -572,6 +611,7 @@ impl SessionManager {
                     folder_id: record.folder_id,
                     pinned: record.pinned,
                     archived: record.archived,
+                    roles: record.roles,
                 }
             })
             .collect();
