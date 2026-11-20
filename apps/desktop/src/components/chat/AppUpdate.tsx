@@ -32,7 +32,7 @@ export function AppUpdate({
         : phase === "restart_required"
           ? "Restart"
           : "Update";
-  const version = status.version ? `auracode ${status.version}` : "A newer o7";
+  const version = status.version ? `o7 ${status.version}` : "A newer o7";
   return (
     <Popover
       className="app-update"
