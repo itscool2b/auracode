@@ -210,7 +210,11 @@ fn platform_data_dir() -> Option<PathBuf> {
 /// profiles folder. An empty folder, or one holding only what the platform keeps for the app (a
 /// WebView profile), is not.
 pub(crate) fn holds_data(folder: &Path) -> bool {
-    folder.join(DATA_MARKERS[0]).is_file() || folder.join(DATA_MARKERS[1]).is_dir()
+    // `symlink_metadata`: a `profiles` that links to a disk not connected still counts, so the
+    // app reports the broken link instead of starting over in the other folder.
+    DATA_MARKERS
+        .iter()
+        .any(|marker| std::fs::symlink_metadata(folder.join(marker)).is_ok())
 }
 
 /// The window-state plugin's file, kept per bundle identifier in the platform's config folder.

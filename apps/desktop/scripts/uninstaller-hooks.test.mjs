@@ -136,10 +136,16 @@ test("an update from auracode retires auracode's install, and only that", () => 
   has(hooks, "!macro NSIS_HOOK_POSTINSTALL\n  !insertmacro O7_RETIRE_AURACODE\n!macroend");
   // Only the default per-user folder, only with auracode's program in it, never o7's own folder.
   has(retire, `StrCpy $R7 "$LOCALAPPDATA${SEP}auracode"`);
-  has(retire, `\${If} \${FileExists} "$R7${SEP}auracode.exe"\n  \${AndIf} $R7 != $INSTDIR`);
   assert.equal([...retire.matchAll(/RMDir/g)].length, 1, "one folder is deleted");
-  has(retire, "RMDir /r $R7\n");
-  assert.doesNotMatch(retire, /ReadRegStr \$R7/, "the folder never comes from the registry");
+  has(retire, "RMDir /r $R3\n");
+  // What is deleted is the default folder, made full, and only with auracode's program in it,
+  // LOCALAPPDATA known, and o7 neither in it nor under it.
+  const guard = retire.slice(retire.indexOf("${If} $LOCALAPPDATA"), retire.indexOf("RMDir"));
+  has(guard, `\${If} $LOCALAPPDATA != ""\n    \${AndIf} \${FileExists} "$R7${SEP}auracode.exe"`);
+  has(guard, "GetFullPathName $R3 $R7\n      GetFullPathName $R2 $INSTDIR");
+  has(guard, `\${If} $R2 != $R3\n      \${AndIf} $R8 != "$R3${SEP}"`);
+  assert.doesNotMatch(retire, /ReadRegStr \$R[37]/, "the folder never comes from the registry");
+  assert.doesNotMatch(retire, /RMDir[^\n]*\$R5/, "an install found elsewhere keeps its files");
   // Shortcuts: o7's in place of auracode's; a taskbar pin is retargeted, not removed.
   has(
     retire,

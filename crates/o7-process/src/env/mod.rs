@@ -711,6 +711,9 @@ const LAUNCH_CONTEXT_NAMES: &[&str] = &[
 /// them, an agent's shell must not inherit them.
 pub const LAUNCH_SET_ENV: &str = "O7_LAUNCH_SET";
 
+/// The same marker under the app's earlier name: a copy updated from auracode may start with it.
+pub const LEGACY_LAUNCH_SET_ENV: &str = "AURACODE_LAUNCH_SET";
+
 /// Prefix families of launch-context variables (see [`LAUNCH_CONTEXT_NAMES`]), the terminal apps'
 /// own families among them.
 const LAUNCH_CONTEXT_PREFIXES: &[&str] = &[
@@ -751,8 +754,11 @@ pub fn strip_launch_context(vars: &mut EnvMap) -> Vec<String> {
             Some(key.as_os_str().to_string_lossy().into_owned())
         })
         .collect();
-    if let Some(set) = vars.remove(&EnvKey::from(LAUNCH_SET_ENV)) {
-        removed.push(LAUNCH_SET_ENV.to_owned());
+    for marker in [LAUNCH_SET_ENV, LEGACY_LAUNCH_SET_ENV] {
+        let Some(set) = vars.remove(&EnvKey::from(marker)) else {
+            continue;
+        };
+        removed.push(marker.to_owned());
         for name in set
             .to_string_lossy()
             .split(':')

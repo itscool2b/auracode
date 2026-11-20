@@ -162,8 +162,9 @@ pub fn plan(targets: &Targets, git: &GitTool) -> Plan {
             items.push(Item { kind, path, bytes });
         }
     };
-    for (index, dir) in targets.owned_dirs.iter().enumerate() {
-        let kind = if index == 0 && targets.scope == Scope::Machine {
+    for dir in &targets.owned_dirs {
+        // Each data folder is data, the earlier name's too, which can hold a whole history.
+        let kind = if targets.scope == Scope::Machine && targets.data_roots.contains(dir) {
             ItemKind::Data
         } else {
             ItemKind::App
@@ -303,8 +304,12 @@ pub fn temporary_leftovers(temp: &Path) -> Vec<PathBuf> {
         .filter_map(|entry| entry.ok())
         .filter(|entry| {
             let name = entry.file_name().to_string_lossy().into_owned();
-            let updater = (name.starts_with("o7-") || name.starts_with("auracode-"))
-                && name.contains("-updater-");
+            let versioned = |prefix: &str| {
+                name.strip_prefix(prefix)
+                    .is_some_and(|rest| rest.starts_with(|c: char| c.is_ascii_digit()))
+            };
+            let updater =
+                (versioned("o7-") || versioned("auracode-")) && name.contains("-updater-");
             updater || name.starts_with("o7-cli-") || name.starts_with("aura-cli-")
         })
         .map(|entry| entry.path())

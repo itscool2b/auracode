@@ -266,10 +266,13 @@ fn remove_agent_tokens(ids: &[String]) -> usize {
 }
 
 fn environment_root() -> Option<PathBuf> {
-    let value = std::env::var_os(o7_core::paths::DATA_DIR_ENV)?;
-    if value.to_str().is_some_and(|text| text.trim().is_empty()) || value.is_empty() {
-        return None;
-    }
+    let named = |name| {
+        std::env::var_os(name).filter(|value: &std::ffi::OsString| {
+            !value.is_empty() && !value.to_str().is_some_and(|text| text.trim().is_empty())
+        })
+    };
+    // The override under the app's earlier name counts too, as o7_core::paths reads it.
+    named(o7_core::paths::DATA_DIR_ENV).or_else(|| named(o7_core::paths::LEGACY_DATA_DIR_ENV))?;
     o7_core::paths::DataRoot::resolve()
         .ok()
         .map(|root| root.root().to_path_buf())

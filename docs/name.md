@@ -30,17 +30,23 @@ An update from auracode moves to o7 without losing anything:
   `si.auracode.desktop`: o7 uses `codes.o7.desktop` when that holds data, else the old folder when
   that does, else the new one (`o7-core`'s `paths.rs`). The folder is not moved, because every Git
   worktree inside it records its full path, and so does its repository, and agents keep their own
-  history of those folders by path. The app's page settings and its browser's sign-ins stay in the
-  old folder's `EBWebView` with it, and the window opens where it was.
+  history of those folders by path. On Windows and Linux the app's page settings and its browser's
+  sign-ins come along (the WebView is given the old folder, as it was then), and the window opens
+  where it was. On macOS the WebView's store is kept per bundle identifier, so those start over.
 - **The program is replaced.** The update installs o7 beside auracode (a product's name is its
   install folder), and the installer then retires auracode: o7's shortcut takes the place of
   auracode's in the Start menu and on the desktop, a taskbar pin is pointed at o7, and auracode's
-  program, its entry in the list of apps and its installer records go. Only the per-user install in
-  `%LOCALAPPDATA%\auracode` is touched, and never the data (`windows/hooks.nsh`,
-  `O7_RETIRE_AURACODE`). On Linux the `o7` package replaces and conflicts with `auracode`.
-- **Old settings still work.** `AURACODE_DATA_DIR` is still read when `O7_DATA_DIR` is not set, the
-  app still answers the old `--aura-*-helper` modes, and both variable families are kept from
-  agents. The upgrade scripts find the old install, data and kept upgrades the same way.
+  entry in the list of apps and its installer records go. Its program is deleted only from its
+  default folder, `%LOCALAPPDATA%\auracode`, and never when o7 was installed in or under it; an
+  auracode installed elsewhere keeps its files but is no longer listed, so its uninstaller, which
+  would delete the data o7 now uses, is not offered. The data is never touched
+  (`windows/hooks.nsh`, `O7_RETIRE_AURACODE`). On Linux the `o7` package replaces and conflicts
+  with `auracode`.
+- **Old settings still work.** `AURACODE_DATA_DIR` is still read when `O7_DATA_DIR` is not set,
+  worktree commands still get `AURACODE_PORT` beside `O7_PORT` (saved Setup and Run commands name
+  it), the app still answers the old `--aura-*-helper` modes, and both variable families are kept
+  from agents. An agent's own allow list that named the old tools (`mcp__aura_browser__...`) asks
+  once more for the new ones. The upgrade scripts find the old install, data and kept upgrades the same way.
 - **Remote access**: pairings and bot links made at auracode.si were already retired by the move
   to o7.codes (docs/remote-sessions.md).
 

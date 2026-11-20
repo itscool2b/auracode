@@ -119,10 +119,14 @@ impl GitWorkspaces {
     }
 }
 
-/// `O7_PORT`, and `PORT` too for Run.
+/// `O7_PORT`, and `PORT` too for Run. `AURACODE_PORT` too: Setup and Run commands saved before
+/// the app was renamed name it, as the app's own suggestion did then.
 pub(crate) fn port_env(port: u16, run: bool) -> Vec<(std::ffi::OsString, std::ffi::OsString)> {
     let value = std::ffi::OsString::from(port.to_string());
-    let mut env = vec![("O7_PORT".into(), value.clone())];
+    let mut env = vec![
+        ("O7_PORT".into(), value.clone()),
+        ("AURACODE_PORT".into(), value.clone()),
+    ];
     if run {
         env.push(("PORT".into(), value));
     }
@@ -148,7 +152,7 @@ mod tests {
     }
 
     #[test]
-    fn run_gets_port_too_and_others_only_auracode_port() {
+    fn run_gets_port_too_and_others_only_the_app_port_under_both_names() {
         let names = |run| {
             port_env(25_040, run)
                 .into_iter()
@@ -157,7 +161,10 @@ mod tests {
                 })
                 .collect::<Vec<_>>()
         };
-        assert_eq!(names(true), ["O7_PORT=25040", "PORT=25040"]);
-        assert_eq!(names(false), ["O7_PORT=25040"]);
+        assert_eq!(
+            names(true),
+            ["O7_PORT=25040", "AURACODE_PORT=25040", "PORT=25040"]
+        );
+        assert_eq!(names(false), ["O7_PORT=25040", "AURACODE_PORT=25040"]);
     }
 }

@@ -182,7 +182,7 @@ export function backupsSince(profilesDir, sinceMs) {
 export function cleanEnv(env) {
   return Object.fromEntries(
     Object.entries(env).filter(
-      ([name]) => !/^(O7_|AURACODE_|AURA_MCP_|CLAUDECODE$|CLAUDE_CODE_|CLAUDE_PID$)/iu.test(name),
+      ([name]) => !/^(O7_|AURACODE_|AURA_|CLAUDECODE$|CLAUDE_CODE_|CLAUDE_PID$)/iu.test(name),
     ),
   );
 }

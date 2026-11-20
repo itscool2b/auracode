@@ -480,14 +480,19 @@ impl LaunchOptions {
     /// `None` keeps Tauri's default. macOS ignores the setting and keeps WebKit's per-app store.
     ///
     /// A copy updated from auracode keeps its data in the folder auracode used (o7_core::paths),
-    /// which is no longer Tauri's default: its profile stays where it was, `EBWebView` inside
-    /// that folder, so the page's own settings and the browser's sign-ins come along.
+    /// which is no longer Tauri's default. Tauri gave WebView2 that folder itself, and WebView2
+    /// keeps its profile in `EBWebView` inside the folder it is given, so the same folder is given
+    /// again: the profile is the one auracode had, with the page's own settings and the browser's
+    /// sign-ins. (macOS keys WebKit's store by the bundle identifier, so there they start over.)
     pub fn webview_data_dir(&self, data_dir: Option<&Path>) -> Option<PathBuf> {
         let root = data_dir?;
+        if self.own_data_dir {
+            return Some(root.join(WEBVIEW_DATA_FOLDER));
+        }
         let default = root
             .file_name()
             .is_some_and(|name| name == o7_core::paths::APP_IDENTIFIER);
-        (self.own_data_dir || !default).then(|| root.join(WEBVIEW_DATA_FOLDER))
+        (!default).then(|| root.to_path_buf())
     }
 
     /// Whether the window-state plugin restores and saves the window's geometry. It keeps one
@@ -1095,11 +1100,12 @@ mod tests {
         assert!(installed.single_instance());
         let default = Path::new("local").join(o7_core::paths::APP_IDENTIFIER);
         assert_eq!(installed.webview_data_dir(Some(&default)), None);
-        // In the folder auracode used, its profile stays where Tauri had put it then.
+        // In the folder auracode used, WebView2 is given that folder, as Tauri gave it then: the
+        // profile is auracode's, in its `EBWebView`, not a new one one level down.
         let legacy = Path::new("local").join(o7_core::paths::LEGACY_IDENTIFIER);
         assert_eq!(
             installed.webview_data_dir(Some(&legacy)),
-            Some(legacy.join(WEBVIEW_DATA_FOLDER))
+            Some(legacy.clone())
         );
         // The override's earlier name is a folder of the launch's own too.
         let named = options(&[(o7_core::paths::LEGACY_DATA_DIR_ENV, "scratch/data")]);

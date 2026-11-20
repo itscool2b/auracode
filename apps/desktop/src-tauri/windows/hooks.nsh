@@ -110,13 +110,24 @@ Var O7CleanupLater
 ; in place: o7's shortcuts take the place of auracode's, a taskbar pin opens o7, and auracode's
 ; program, its entry in the list of apps and its installer records go.
 ;
-; Only the per-user install in its default folder is touched, and only when auracode.exe is in it:
-; a folder read from the registry is never deleted. auracode's data is not touched either: o7 opens
-; it where it is (o7-core's paths.rs).
+; auracode's program is deleted only in its default per-user folder, only when auracode.exe is in
+; it, and never when o7 was installed in or under that folder: a folder read from the registry is
+; never deleted. An auracode installed elsewhere loses its entry in the list of apps and its
+; shortcuts but keeps its files, so its uninstaller, which would delete the data o7 now uses, is no
+; longer offered. auracode's data is never touched: o7 opens it where it is (o7-core's paths.rs).
 !macro O7_RETIRE_AURACODE
   StrCpy $R7 "$LOCALAPPDATA\auracode"
+  ; Where auracode's entry in the list of apps says it is; the value is quoted.
+  ClearErrors
+  ReadRegStr $R5 HKCU "Software\Microsoft\Windows\CurrentVersion\Uninstall\auracode" "InstallLocation"
+  StrCpy $R4 $R5 1
+  ${If} $R4 == "$\""
+    StrCpy $R5 $R5 "" 1
+    StrCpy $R5 $R5 -1
+  ${EndIf}
+  ClearErrors
   ${If} ${FileExists} "$R7\auracode.exe"
-  ${AndIf} $R7 != $INSTDIR
+  ${OrIf} ${FileExists} "$R5\auracode.exe"
     DetailPrint "Replacing auracode with o7"
     ; The Start menu and the desktop: o7's shortcut where auracode's was.
     ${If} ${FileExists} "$SMPROGRAMS\auracode.lnk"
@@ -148,13 +159,24 @@ Var O7CleanupLater
     ClearErrors
     ReadRegStr $R6 HKCU "Software\Classes\auracode\shell\open\command" ""
     ${If} $R6 == "$\"$R7\auracode.exe$\" $\"%1$\""
+    ${OrIf} $R6 == "$\"$R5\auracode.exe$\" $\"%1$\""
       DeleteRegKey HKCU "Software\Classes\auracode"
     ${EndIf}
     ClearErrors
-    ; Its program. The update closed it before this installer started.
-    RMDir /r $R7
-    ${If} ${FileExists} "$R7\auracode.exe"
-      DetailPrint "auracode's old program could not be removed yet: $R7"
+    ; Its program, in its default folder only. The update closed it before this installer started.
+    ${If} $LOCALAPPDATA != ""
+    ${AndIf} ${FileExists} "$R7\auracode.exe"
+      GetFullPathName $R3 $R7
+      GetFullPathName $R2 $INSTDIR
+      StrLen $R1 "$R3\"
+      StrCpy $R8 $R2 $R1
+      ${If} $R2 != $R3
+      ${AndIf} $R8 != "$R3\"
+        RMDir /r $R3
+        ${If} ${FileExists} "$R3\auracode.exe"
+          DetailPrint "auracode's old program could not be removed yet: $R3"
+        ${EndIf}
+      ${EndIf}
     ${EndIf}
   ${EndIf}
 !macroend
