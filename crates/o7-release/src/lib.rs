@@ -22,9 +22,12 @@ use sha2::{Digest, Sha256};
 const MAX_PLAN: u64 = 64 * 1024;
 const MAX_SIGNATURE: u64 = 4096;
 const MAX_ARTIFACT: u64 = 512 * 1024 * 1024;
-/// Where a GitHub release serves its files: `<this>/<tag>/<file>`. The desktop accepts update
-/// packages from this prefix alone (`apps/desktop/src-tauri/src/updater.rs`).
-const RELEASES: &str = "https://github.com/itscool2b/o7/releases/download";
+/// Where a GitHub release serves its files: `<this>/<tag>/<file>`. The repository is
+/// `itscool2b/o7`, but until 19 November 2026 it was `itscool2b/auracode`, and a copy from then
+/// accepts update packages under that path alone (`apps/desktop/src-tauri/src/updater.rs`). So the
+/// feed names the earlier path, which GitHub redirects to the repository, and copies from after
+/// accept both. Switch to `itscool2b/o7` once no copy from before the rename is in use.
+const RELEASES: &str = "https://github.com/itscool2b/auracode/releases/download";
 
 #[derive(Debug, Clone, Deserialize, Serialize)]
 #[serde(deny_unknown_fields)]

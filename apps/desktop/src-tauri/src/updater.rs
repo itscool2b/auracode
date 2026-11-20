@@ -38,7 +38,15 @@ const CHECK_EVERY: Duration = Duration::from_secs(4 * 60 * 60);
 /// GitHub answers a release asset with at most two redirects; a few more are allowed, not many.
 const MAX_REDIRECTS: usize = 5;
 /// The repository's release assets, and the only hosts GitHub redirects an asset request to.
-const RELEASES: &str = "/itscool2b/o7/releases/download/";
+///
+/// The repository was `itscool2b/auracode` until 19 November 2026, and copies from before accept
+/// packages under that path alone. So the release feed still names it (GitHub redirects it to
+/// `itscool2b/o7`, a redirect within github.com), and this build accepts both. Only the owner can
+/// make a repository under `itscool2b`, and every package's signature is checked anyway.
+const RELEASES: [&str; 2] = [
+    "/itscool2b/o7/releases/download/",
+    "/itscool2b/auracode/releases/download/",
+];
 const ASSET_HOSTS: [&str; 3] = [
     "github.com",
     "objects.githubusercontent.com",
@@ -524,7 +532,8 @@ fn validate_download_url(url: &reqwest::Url, source: &Source) -> Result<(), Upda
 }
 
 /// A package the manifest names must be a file of one of this repository's releases on its
-/// channel: `/itscool2b/o7/releases/download/<tag>/<file>`, the tag starting `v` (stable) or
+/// channel: `/itscool2b/o7/releases/download/<tag>/<file>` (or the repository's earlier path,
+/// [`RELEASES`]), the tag starting `v` (stable) or
 /// `staging-v`, both parts plain names. Nothing else on GitHub, and nothing anywhere else.
 fn validate_channel_url(url: &reqwest::Url, staging: bool) -> Result<(), UpdateError> {
     let outside = || error("The update artifact is outside the trusted release location.");
@@ -538,7 +547,10 @@ fn validate_channel_url(url: &reqwest::Url, staging: bool) -> Result<(), UpdateE
     {
         return Err(outside());
     }
-    let rest = url.path().strip_prefix(RELEASES).ok_or_else(outside)?;
+    let rest = RELEASES
+        .iter()
+        .find_map(|prefix| url.path().strip_prefix(prefix))
+        .ok_or_else(outside)?;
     let (tag, file) = rest.split_once('/').ok_or_else(outside)?;
     let plain = |part: &str| {
         !part.is_empty()
@@ -921,6 +933,9 @@ mod tests {
     fn update_artifacts_are_files_of_this_repositorys_releases_and_nothing_else() {
         let ok = format!("{RELEASE}/v0.1.1570/o7_0.1.1570_x64-setup.exe");
         assert!(validate_channel_url(&ok.parse().unwrap(), false).is_ok());
+        // The repository's earlier path, which the release feed names for copies from before.
+        let earlier = "https://github.com/itscool2b/auracode/releases/download/v0.1.1630/o7_0.1.1630_x64-setup.exe";
+        assert!(validate_channel_url(&earlier.parse().unwrap(), false).is_ok());
         for url in [
             // Another scheme, host, port or a credential.
             "http://github.com/itscool2b/o7/releases/download/v0.1.1/app.exe",

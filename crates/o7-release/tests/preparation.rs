@@ -87,7 +87,7 @@ fn complete_stage_has_exact_target_urls_and_no_private_paths() {
     );
     assert_eq!(
         latest["platforms"]["windows-aarch64-nsis"]["url"],
-        "https://github.com/itscool2b/o7/releases/download/v0.1.0/o7-arm64.exe"
+        "https://github.com/itscool2b/auracode/releases/download/v0.1.0/o7-arm64.exe"
     );
     assert_eq!(
         latest["platforms"]["linux-x86_64"],
@@ -95,7 +95,7 @@ fn complete_stage_has_exact_target_urls_and_no_private_paths() {
     );
     assert_eq!(
         latest["platforms"]["linux-x86_64-rpm"]["url"],
-        "https://github.com/itscool2b/o7/releases/download/v0.1.0/auracode-x86_64.rpm"
+        "https://github.com/itscool2b/auracode/releases/download/v0.1.0/auracode-x86_64.rpm"
     );
     let catalog = fs::read_to_string(stage.join("downloads.json")).unwrap();
     assert!(!catalog.contains(&temp.path().to_string_lossy().to_string()));
@@ -106,7 +106,7 @@ fn complete_stage_has_exact_target_urls_and_no_private_paths() {
     assert_eq!(catalog["release"]["publisher_signed"], false);
     assert_eq!(
         catalog["release"]["checksums_url"],
-        "https://github.com/itscool2b/o7/releases/download/v0.1.0/SHA256SUMS"
+        "https://github.com/itscool2b/auracode/releases/download/v0.1.0/SHA256SUMS"
     );
     assert_eq!(
         catalog["release"]["downloads"][0]["sha256"]

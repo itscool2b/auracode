@@ -42,6 +42,11 @@ An update from auracode moves to o7 without losing anything:
   would delete the data o7 now uses, is not offered. The data is never touched
   (`windows/hooks.nsh`, `O7_RETIRE_AURACODE`). On Linux the `o7` package replaces and conflicts
   with `auracode`.
+- **Updates still reach it.** A copy from before accepts update packages only under
+  `itscool2b/auracode`'s release path. So the release feed keeps naming that path, which GitHub
+  redirects to `itscool2b/o7`, and copies from after accept both (`o7-release`'s `RELEASES`, the
+  updater's `RELEASES`). Switch the feed to `itscool2b/o7` once no copy from before is in use, and
+  never let anyone else take the name `itscool2b/auracode` meanwhile (only the owner can).
 - **Old settings still work.** `AURACODE_DATA_DIR` is still read when `O7_DATA_DIR` is not set,
   worktree commands still get `AURACODE_PORT` beside `O7_PORT` (saved Setup and Run commands name
   it), the app still answers the old `--aura-*-helper` modes, and both variable families are kept
