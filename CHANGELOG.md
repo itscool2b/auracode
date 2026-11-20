@@ -10,6 +10,7 @@ checks the format, and with `--dates` checks each day against the time GitHub sa
 
 ## 2026-11-20
 
+- The Dashboard shows how many lines your agents changed over the past year. Each day is a square that gets brighter the more lines were changed, with the year's total, your busiest month and day, and your longest and current streaks. Pick All or one agent to see only theirs, and point at a square to see that day's count. ([#157](https://github.com/itscool2b/o7/pull/157))
 - o7 has a new front page on GitHub. It shows the logo, the app in light or dark to match your screen, what o7 does, how to install it and how it keeps your work private. The notes for people building o7 moved to their own page. ([#156](https://github.com/itscool2b/o7/pull/156))
 - Plan and build is now part of each chat, and you can watch the agent think. Open the model menu in a chat and choose, under Plan and build, the model it plans with and the agent and model it builds with; Settings no longer has Models by role. While the agent thinks you see its newest thoughts, and afterwards "Thought for 4 s" opens to all of them. Running steps shimmer, each group of steps shows icons for what it did, and plans show their numbered lists again. ([#155](https://github.com/itscool2b/o7/pull/155))
 
