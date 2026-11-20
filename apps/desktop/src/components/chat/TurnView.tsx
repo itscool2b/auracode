@@ -11,6 +11,7 @@ import { CopyAction } from "./CopyAction";
 import { ErrorCard } from "./ErrorCard";
 import { PermissionCard, type PlanBuild } from "./PermissionCard";
 import { QuestionCard } from "./QuestionCard";
+import { ThoughtRow } from "./ThoughtRow";
 import { type BlobProps, ToolBlock } from "./ToolBlock";
 import { UserMessage } from "./UserMessage";
 import { type LiveTail, LiveTailLine } from "./WorkingLine";
@@ -26,7 +27,7 @@ export interface TurnActions extends BlobProps {
     declineOptionId: string,
     note: string,
   ) => Promise<void>;
-  /** A plan card's Accept and build with, when Settings' Building role can take the plan. */
+  /** A plan card's Accept and build with, when the chat's Build with can take the plan. */
   readonly planBuild?: PlanBuild;
   /** The chat's agent, as plan cards name it. */
   readonly agentName?: string;
@@ -167,6 +168,8 @@ export const TurnView = memo(function TurnView({
                   onLoadBlob={actions.onLoadBlob}
                 />
               );
+            case "thought":
+              return <ThoughtRow key={item.key} thought={item} thinking={item.thinking} />;
             case "permission":
               return (
                 <PermissionCard
@@ -258,7 +261,7 @@ export const TurnView = memo(function TurnView({
 function Plan({ entries }: { readonly entries: readonly PlanEntry[] }) {
   return (
     <section aria-label="Plan" data-testid="plan">
-      <ul className="chat-plan">
+      <ul className="chat-checklist">
         {entries.map((entry, index) => (
           <li
             // biome-ignore lint/suspicious/noArrayIndexKey: a plan update replaces the whole list.

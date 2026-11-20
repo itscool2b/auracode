@@ -125,8 +125,8 @@ export function foldedModels<T extends { readonly value: string }>(
  *
  * The menu reads top down (owner, 4 November 2026: "model and thinking mode then harnesses"):
  * search, the model list (the first few and the chosen one, then "More models"; it scrolls on its
- * own once opened), the thinking level, then every agent in a grid that is always in view, and
- * More options. The pill names the model an alias stands for and a chosen thinking level.
+ * own once opened), the thinking level, then every agent in a grid that is always in view, More
+ * options, and the chat's Plan and build. The pill names the model an alias stands for and a chosen thinking level.
  *
  * Keys: Ctrl or Cmd + . opens it on the current model; up and down move within a part, left and
  * right move between parts, Enter chooses, digits set the thinking level, letters jump to agents.
@@ -148,6 +148,7 @@ export function Pickers({
   onChooseAgent,
   onSetControl,
   account = null,
+  roles = null,
   compact = false,
 }: {
   readonly lists: SessionLists | null;
@@ -171,6 +172,8 @@ export function Pickers({
   readonly onSetControl?: (change: SessionControlChange) => void;
   /** The account picker, for an agent that takes added accounts. */
   readonly account?: ReactNode;
+  /** The chat's Plan and build part (RolePicker), the menu's last. */
+  readonly roles?: ReactNode;
   /**
    * Only the agent, model and thinking picker, without its shortcut: a second picker for the same
    * chat (Annotate's note), beside the composer's own.
@@ -486,6 +489,7 @@ export function Pickers({
                 ))}
               </details>
             ) : null}
+            {compact ? null : roles}
           </div>
         </Popover>
       </div>

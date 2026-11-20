@@ -76,6 +76,7 @@ const api: WorkspaceApi = {
   addFolder: fail,
   rename: fail,
   pin: fail,
+  setRole: fail,
   archive: fail,
   move: async (_id, request) => {
     calls.push(request);

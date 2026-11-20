@@ -1,6 +1,19 @@
 import { PanelLeft } from "lucide-react";
-import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
-import type { AppInfo, InstructionsTarget, ProjectSummary, RoleModels } from "../../bindings";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+} from "react";
+import type {
+  AppInfo,
+  ChatRole,
+  InstructionsTarget,
+  ProjectSummary,
+  RoleModel,
+} from "../../bindings";
 import {
   availableUpdates,
   chatsWorking,
@@ -180,8 +193,6 @@ export function ChatsScreen({
   // Coordinated projects, an experiment: read with the default agent, so turning it on or off in
   // Settings shows here when the chats come back into view.
   const [coordination, setCoordination] = useState(false);
-  // Settings' models by role, for the open chat: Planning with Plan, Building with a plan.
-  const [roles, setRoles] = useState<RoleModels | null>(null);
   // The project whose page is open in the chat pane's place.
   const [boardProject, setBoardProject] = useState<string | null>(null);
   const members = useCoordinationMembers(coordinator, coordination);
@@ -193,7 +204,6 @@ export function ChatsScreen({
         if (!live) return;
         setDefaultAgent(saved.preferences.general.default_agent);
         setCoordination(saved.preferences.general.coordinated_projects);
-        setRoles(saved.preferences.general.roles ?? null);
         if (!saved.preferences.general.coordinated_projects) setBoardProject(null);
       },
       () => {
@@ -266,6 +276,18 @@ export function ChatsScreen({
       : null;
   const optionsEntry = organization.data?.chats.find((entry) => entry.chat.id === chatOptions);
   const selectedEntry = organization.data?.chats.find((entry) => entry.chat.id === selected);
+  // The open chat's Plan with or Build with, saved with the chat; a refusal says why in the menu.
+  const listedChat = selectedEntry?.chat.id ?? null;
+  const setRole = useCallback(
+    async (role: ChatRole, choice: RoleModel | null) => {
+      if (!workspace || listedChat === null) return;
+      const outcome = await workspace.perform(() =>
+        workspace.api.setRole(listedChat, role, choice),
+      );
+      if (!outcome.ok) throw new Error(outcome.error);
+    },
+    [workspace, listedChat],
+  );
   const selectedProject =
     organization.data?.projects.find((project) => project.id === selectedEntry?.project_id) ?? null;
   const selectedFolder = selectedProject?.folders.find(
@@ -500,7 +522,8 @@ export function ChatsScreen({
             storage={snapshot.storage}
             agents={snapshot.agents}
             onManageAccounts={onAgents}
-            roles={roles}
+            roles={selectedEntry?.roles ?? null}
+            onSetRole={workspace && listedChat !== null ? setRole : undefined}
           />
         )}
       </main>

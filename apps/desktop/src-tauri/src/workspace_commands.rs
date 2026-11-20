@@ -4,9 +4,9 @@ use std::time::Duration;
 
 use o7_core::session::{StopReport, StopScope};
 use o7_protocol::workspace::{
-    ChatCreatePreview, ChatMove, ChatsStopped, FolderBlockers, FolderMatches, FolderScope,
-    ProjectChatCreate, ProjectCreate, ProjectFolder, ProjectInput, ProjectSummary, WorkspaceChat,
-    WorkspaceFilter, WorkspaceSnapshot,
+    ChatCreatePreview, ChatMove, ChatRole, ChatsStopped, FolderBlockers, FolderMatches,
+    FolderScope, ProjectChatCreate, ProjectCreate, ProjectFolder, ProjectInput, ProjectSummary,
+    RoleModel, WorkspaceChat, WorkspaceFilter, WorkspaceSnapshot,
 };
 use tauri::{State, Webview};
 
@@ -148,6 +148,21 @@ pub async fn chat_pin(
     pinned: bool,
 ) -> Result<WorkspaceChat, AppError> {
     Ok(state.sessions()?.chat_pin(&chat_id, pinned).await?)
+}
+
+/// The agent, model and thinking level a chat plans or builds with, or none to clear it.
+#[tauri::command]
+#[specta::specta]
+pub async fn chat_set_role(
+    state: State<'_, AppState>,
+    chat_id: String,
+    role: ChatRole,
+    choice: Option<RoleModel>,
+) -> Result<WorkspaceChat, AppError> {
+    Ok(state
+        .sessions()?
+        .chat_set_role(&chat_id, role, choice)
+        .await?)
 }
 
 #[tauri::command]

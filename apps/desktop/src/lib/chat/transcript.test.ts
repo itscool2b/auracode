@@ -50,7 +50,7 @@ function keysOf(model: Transcript): string[][] {
   return model.segments.map((segment) => [...segment.itemKeys]);
 }
 
-/** The model's thoughts: never shown, but kept and compacted like every other item. */
+/** The model's thoughts, shown or not: kept and compacted like every other item. */
 function thoughtsOf(model: Transcript) {
   return [...model.items.values()].filter((item) => item.kind === "thought");
 }
@@ -183,7 +183,7 @@ describe("the transcript reducer", () => {
     expect(keysOf(model)).toEqual([[], ["permission:bg.p1"]]);
   });
 
-  it("keeps thoughts in the model but never shows them, so calls around one sit side by side", () => {
+  it("shows a thought with words or a second's time, and keeps a wordless blink in the model only", () => {
     const model = build(
       numbered([
         ["t1", ev.turnStarted("t1")],
@@ -200,10 +200,36 @@ describe("the transcript reducer", () => {
     );
     expect(keysOf(model)[0]).toContain("thought:th1");
     expect(thoughtsOf(model).map((item) => item.key)).toEqual(["thought:th1", "thought:th2"]);
-    expect(shownKinds(model)).toEqual([["user", "tool", "tool", "message"]]);
+    expect(shownKinds(model)).toEqual([["user", "tool", "thought", "tool", "message"]]);
+    // A wordless thought that took a second or more says how long it took.
+    const slow = build(
+      numbered([
+        ["t1", ev.turnStarted("t1")],
+        ["t1", ev.thought("th", "")],
+        ["t1", ev.thoughtDone("th", 3200)],
+        ["t1", ev.message("m", "Done.")],
+        ["t1", ev.turnEnded("t1")],
+      ]),
+    );
+    expect(shownKinds(slow)).toEqual([["thought", "message"]]);
   });
 
-  it("reuses a turn's rendering while only its hidden thoughts change", () => {
+  it("thinks a thought only while it streams in a running turn of a live session", () => {
+    const streaming = numbered([
+      ["t1", ev.turnStarted("t1")],
+      ["t1", ev.thought("th", "")],
+    ]);
+    const thought = (model: Transcript, live: boolean) =>
+      renderTranscript(model, live)[0]?.items.find((item) => item.kind === "thought");
+    // Even before its first word, a thought being thought shows as Thinking.
+    expect(thought(build(streaming), true)).toMatchObject({ thinking: true });
+    // With no process it is not being thought, and without words it has no row.
+    expect(thought(build(streaming), false)).toBeUndefined();
+    const ended = build([...streaming, ...numbered([["t1", ev.turnEnded("t1")]], 2)]);
+    expect(thought(ended, true)).toBeUndefined();
+  });
+
+  it("renders a turn again as its reasoning streams, and reuses it while nothing shown changes", () => {
     const render = renderCache();
     let model = build(
       numbered([
@@ -212,11 +238,17 @@ describe("the transcript reducer", () => {
       ]),
     );
     const before = render(model, true)[0];
-    model = reduce(model, 3, null, ev.thought("th", "Hmm"));
-    model = reduce(model, 4, null, ev.thought("th", ", then"));
     expect(render(model, true)[0]).toBe(before);
-    model = reduce(model, 5, null, ev.message("m", "Done"));
-    expect(render(model, true)[0]).not.toBe(before);
+    model = reduce(model, 3, null, ev.thought("th", "Hmm"));
+    const thinking = render(model, true)[0];
+    expect(thinking).not.toBe(before);
+    model = reduce(model, 4, null, ev.thought("th", ", then"));
+    expect(render(model, true)[0]).not.toBe(thinking);
+    expect(render(model, true)[0]?.items.at(-1)).toMatchObject({
+      kind: "thought",
+      text: "Hmm, then",
+      thinking: true,
+    });
   });
 
   it("is pure: the model it was given stays as it was", () => {
@@ -487,10 +519,10 @@ describe("compacted_equals_live", () => {
     expect(renderTranscript(build(history), false)).toEqual(
       renderTranscript(build(asFrames(live)), false),
     );
-    // The stream's thoughts are never shown, yet compaction keeps each one whole.
+    // The stream's thoughts show as rows, and compaction keeps each one whole.
     expect(thoughtsOf(build(asFrames(live))).length).toBeGreaterThan(0);
     expect(thoughtsOf(build(history))).toEqual(thoughtsOf(build(asFrames(live))));
-    expect(shownKinds(build(history)).flat()).not.toContain("thought");
+    expect(shownKinds(build(history)).flat()).toContain("thought");
 
     if (process.env.O7_UPDATE_GOLDEN === "1") {
       writeFileSync(GOLDEN, `${JSON.stringify(fromLive, null, 2)}\n`);

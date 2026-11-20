@@ -5,7 +5,8 @@ use std::path::PathBuf;
 use o7_protocol::Millis;
 use o7_protocol::session::FolderState;
 use o7_protocol::workspace::{
-    FolderKind, ProjectFolder, ProjectInput, ProjectSummary, WorkspaceFilter,
+    ChatRole, ChatRoles, FolderKind, ProjectFolder, ProjectInput, ProjectSummary, RoleModel,
+    WorkspaceFilter,
 };
 use rusqlite::{Connection, OptionalExtension, params};
 
@@ -47,6 +48,12 @@ pub(crate) enum OrganizationCommand {
     ArchiveChat {
         id: String,
         archived: bool,
+    },
+    /// Sets or clears the model a chat names for one kind of work. Validated by the caller.
+    SetChatRole {
+        id: String,
+        role: ChatRole,
+        choice: Option<RoleModel>,
     },
     MoveChat {
         id: String,
@@ -113,6 +120,14 @@ impl OrganizationCommand {
                 identity,
             } => folder_id.len() + expected_path.as_os_str().len() + identity.bytes(),
             Self::PinChat { id, .. } | Self::ArchiveChat { id, .. } => id.len(),
+            Self::SetChatRole { id, choice, .. } => {
+                id.len()
+                    + choice.as_ref().map_or(0, |choice| {
+                        choice.agent.len()
+                            + choice.model.as_ref().map_or(0, String::len)
+                            + choice.effort.as_ref().map_or(0, String::len)
+                    })
+            }
             Self::MoveChat {
                 id,
                 project_id,
@@ -149,6 +164,7 @@ pub(crate) struct OrganizedChat {
     pub(crate) folder_id: Option<String>,
     pub(crate) pinned: bool,
     pub(crate) archived: bool,
+    pub(crate) roles: ChatRoles,
 }
 
 #[derive(Debug)]
@@ -216,6 +232,25 @@ pub(crate) fn execute(
                 "UPDATE chats SET archived=?2,updated_at=?3,device_id=?4 WHERE id=?1 AND deleted=0",
                 params![id, archived, now, device],
             )?)?;
+            id
+        }
+        OrganizationCommand::SetChatRole { id, role, choice } => {
+            // The chat must exist; a role choice does not reorder the list, so updated_at stays.
+            let _: i64 = conn.query_row(
+                "SELECT 1 FROM chats WHERE id=?1 AND deleted=0",
+                params![id],
+                |row| row.get(0),
+            )?;
+            match choice {
+                Some(choice) => conn.execute(
+                    "INSERT INTO chat_roles (chat_id,role,agent,model,effort,updated_at) VALUES (?1,?2,?3,?4,?5,?6) ON CONFLICT(chat_id,role) DO UPDATE SET agent=excluded.agent,model=excluded.model,effort=excluded.effort,updated_at=excluded.updated_at",
+                    params![id, role.as_str(), choice.agent, choice.model, choice.effort, now],
+                )?,
+                None => conn.execute(
+                    "DELETE FROM chat_roles WHERE chat_id=?1 AND role=?2",
+                    params![id, role.as_str()],
+                )?,
+            };
             id
         }
         OrganizationCommand::MoveChat {
@@ -453,6 +488,8 @@ fn snapshot(
         })?
         .collect::<rusqlite::Result<Vec<_>>>()?;
     let mut chats = Vec::with_capacity(metadata.len());
+    let mut roles =
+        conn.prepare("SELECT role,agent,model,effort FROM chat_roles WHERE chat_id=?1")?;
     for (id, project_id, folder_id, pinned, archived) in metadata {
         let chat = rows::chat(conn, device, &id)?.ok_or(rusqlite::Error::QueryReturnedNoRows)?;
         chats.push(OrganizedChat {
@@ -461,6 +498,7 @@ fn snapshot(
             folder_id,
             pinned,
             archived,
+            roles: chat_roles(&mut roles, &id)?,
         });
     }
     Ok(Organization {
@@ -468,6 +506,32 @@ fn snapshot(
         chats,
         affected_id: None,
     })
+}
+
+/// A chat's role choices. A row naming a role this build does not know is left out.
+fn chat_roles(
+    statement: &mut rusqlite::Statement<'_>,
+    chat_id: &str,
+) -> rusqlite::Result<ChatRoles> {
+    let mut roles = ChatRoles::default();
+    for row in statement.query_map(params![chat_id], |row| {
+        Ok((
+            row.get::<_, String>(0)?,
+            RoleModel {
+                agent: row.get(1)?,
+                model: row.get(2)?,
+                effort: row.get(3)?,
+            },
+        ))
+    })? {
+        let (role, choice) = row?;
+        match role.as_str() {
+            "plan" => roles.set(ChatRole::Plan, Some(choice)),
+            "build" => roles.set(ChatRole::Build, Some(choice)),
+            _ => {}
+        }
+    }
+    Ok(roles)
 }
 
 #[cfg(test)]
@@ -505,6 +569,84 @@ mod tests {
         let count: i64 = db
             .conn()
             .query_row("SELECT COUNT(*) FROM project_folders", [], |row| row.get(0))
+            .unwrap();
+        assert_eq!(count, 1);
+    }
+
+    #[test]
+    fn a_chat_keeps_its_own_roles_and_clearing_one_leaves_the_other() {
+        let db = TestDb::new();
+        let chat = db.chat("/owned/repo");
+        let other = db.chat("/owned/other");
+        let updated = |id: &str| -> i64 {
+            db.conn()
+                .query_row("SELECT updated_at FROM chats WHERE id=?1", [id], |row| {
+                    row.get(0)
+                })
+                .unwrap()
+        };
+        let before = updated(&chat);
+        let set = |id: &str, role, choice| {
+            execute(
+                db.conn(),
+                "dev",
+                50,
+                OrganizationCommand::SetChatRole {
+                    id: id.into(),
+                    role,
+                    choice,
+                },
+            )
+        };
+        let fable = RoleModel {
+            agent: "claude".into(),
+            model: Some("claude-fable-5-2".into()),
+            effort: Some("high".into()),
+        };
+        let codex = RoleModel {
+            agent: "codex".into(),
+            model: None,
+            effort: None,
+        };
+        set(&chat, ChatRole::Plan, Some(fable.clone())).unwrap();
+        set(&chat, ChatRole::Build, Some(codex.clone())).unwrap();
+        // Choosing again replaces the choice instead of adding a second one.
+        let view = set(&chat, ChatRole::Build, Some(codex.clone())).unwrap();
+        let roles_of = |view: &Organization, id: &str| {
+            view.chats
+                .iter()
+                .find(|entry| entry.chat.id == id)
+                .unwrap()
+                .roles
+                .clone()
+        };
+        assert_eq!(
+            roles_of(&view, &chat),
+            ChatRoles {
+                plan: Some(fable.clone()),
+                build: Some(codex),
+            }
+        );
+        // Another chat has none, and a role choice does not move the chat in the list.
+        assert_eq!(roles_of(&view, &other), ChatRoles::default());
+        assert_eq!(updated(&chat), before);
+        let view = set(&chat, ChatRole::Build, None).unwrap();
+        assert_eq!(
+            roles_of(&view, &chat),
+            ChatRoles {
+                plan: Some(fable.clone()),
+                build: None,
+            }
+        );
+        // A chat that does not exist, or was deleted, takes none.
+        assert!(set("missing", ChatRole::Plan, Some(fable.clone())).is_err());
+        db.conn()
+            .execute("UPDATE chats SET deleted=1 WHERE id=?1", [&other])
+            .unwrap();
+        assert!(set(&other, ChatRole::Plan, Some(fable)).is_err());
+        let count: i64 = db
+            .conn()
+            .query_row("SELECT COUNT(*) FROM chat_roles", [], |row| row.get(0))
             .unwrap();
         assert_eq!(count, 1);
     }

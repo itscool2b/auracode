@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import AxeBuilder from "@axe-core/playwright";
 import { chromium, webkit } from "playwright";
+import { choose } from "./choose.mjs";
 
 /**
  * Finished turns fold their work under "Worked for" (owner, 4 November 2026). Checks that reach
@@ -142,11 +143,30 @@ async function workingLifecycle(page, engine, theme) {
       ?.textContent.includes("searching for 1 pattern"),
   );
   assert.match((await group.textContent()) ?? "", /Reading 1 file and searching for 1 pattern/);
-  assert.equal(await group.getAttribute("data-test-count"), "2", "thought split a tool stretch");
+  assert.equal(
+    await group.getAttribute("data-test-count"),
+    "2",
+    "a wordless thought split a tool stretch",
+  );
   assert.equal(await line.count(), 1, "tools duplicated the working line");
-  assert.doesNotMatch(
-    (await page.getByTestId("transcript").textContent()) ?? "",
-    /Thought for|private fixture reasoning|Checking the narrow layout/,
+  // The reasoning before the calls is one folded row; the wordless blink between them has none.
+  const thoughts = page.locator('[data-test-turn-id="next"] [data-test-kind="thought"]');
+  assert.equal(await thoughts.count(), 1);
+  assert.equal(
+    (await thoughts.getByTestId("thought-toggle").textContent())?.trim(),
+    "Thought for 2 s",
+  );
+  assert.equal(await thoughts.getByTestId("thought-body").isVisible(), false);
+  await thoughts.getByTestId("thought-toggle").click();
+  await thoughts
+    .getByTestId("thought-body")
+    .getByText(/sidebar truncates long titles/)
+    .waitFor();
+  await thoughts.getByTestId("thought-toggle").click();
+  await page.waitForFunction(
+    () =>
+      !document.querySelector('[data-test-turn-id="next"] [data-test-kind="thought"] details')
+        ?.open,
   );
   await group.focus();
   await page.evaluate(() => {
@@ -257,6 +277,7 @@ async function workingLifecycle(page, engine, theme) {
     true,
     "footer remounted the working row",
   );
+  // The ended turn's reasoning folds with its calls under Worked for.
   assert.equal(await page.locator('[data-test-kind="thought"]').count(), 0);
   await settled(page);
   const scan = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze();
@@ -810,6 +831,143 @@ async function richAnswer(page, theme) {
     `rich answer, ${theme}`,
   );
 }
+/**
+ * Reasoning as it streams (owner, 19 November 2026: make "it thinking, tool calling, etc."
+ * sexier): a "Thinking" row with a sheen and the newest lines under it stands in for the working
+ * line, then folds to "Thought for 2 s" that opens to the whole reasoning. A running call's words
+ * carry the sheen too. Reduced motion stills both.
+ */
+async function liveReasoning(page) {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto(`${url}/?preview=streaming`);
+  const thought = page.locator('[data-test-kind="thought"]').last();
+  await page.locator('[data-test-kind="thought"][data-thinking]').waitFor();
+  assert.equal((await thought.locator(".chat-thought-label").textContent())?.trim(), "Thinking");
+  assert.notEqual(await thought.locator(".chat-thought-label").getAttribute("data-sheen"), null);
+  await thought
+    .getByTestId("thought-preview")
+    .getByText(/Checking how the composer/)
+    .waitFor();
+  assert.equal(
+    await thought
+      .locator(".chat-thought-label")
+      .evaluate(
+        (node) =>
+          node.getAnimations().filter((animation) => animation.playState === "running").length,
+      ),
+    1,
+    "the Thinking sheen does not move",
+  );
+  // One live indicator: the working line steps aside while the reasoning streams.
+  assert.notEqual(await page.getByTestId("working-line").getAttribute("data-hidden"), null);
+  await page.waitForFunction(
+    () =>
+      document
+        .querySelector('[data-test-kind="thought"]:last-of-type .chat-thought-label')
+        ?.textContent?.trim() === "Thought for 2 s" ||
+      [...document.querySelectorAll('[data-test-kind="thought"] .chat-thought-label')].some(
+        (node) => node.textContent?.trim() === "Thought for 2 s",
+      ),
+  );
+  assert.equal(await page.locator('[data-test-kind="thought"][data-thinking]').count(), 0);
+  assert.equal(await page.getByTestId("thought-preview").count(), 0);
+  // A running call's words carry the sheen until it completes.
+  await page
+    .locator(".chat-tool-label[data-sheen], .chat-tool-group-summary[data-sheen]")
+    .first()
+    .waitFor();
+  // Reduced motion: the words hold still in their own colours. A page of its own, so nothing the
+  // live turn above left running carries over.
+  const quiet = await page.context().newPage();
+  await quiet.emulateMedia({ reducedMotion: "reduce" });
+  await quiet.goto(`${url}/?preview=streaming`);
+  await quiet.locator('[data-test-kind="thought"][data-thinking]').waitFor();
+  const still = quiet.locator('[data-test-kind="thought"][data-thinking] .chat-thought-label');
+  assert.equal(
+    await still.evaluate(
+      (node) =>
+        node.getAnimations().length + (getComputedStyle(node).color === "rgba(0, 0, 0, 0)" ? 1 : 0),
+    ),
+    0,
+    "reduced motion: the Thinking words move or vanish",
+  );
+  await quiet.close();
+}
+
+/**
+ * Plan and build, each chat's own (owner, 19 November 2026: models by role are "a chat by chat
+ * thing not a settings thing"): nothing is chosen at first; Plan with applies when Plan turns on;
+ * Build with takes an agent, then its model and thinking level, and takes an accepted plan.
+ */
+async function planAndBuild(page) {
+  const pill = () => page.getByTestId("picker-current-model").first().textContent();
+  await page.goto(`${url}/?preview=settled&agents=lineup`);
+  await page.waitForFunction(
+    () =>
+      document.querySelector('[data-testid="picker-current-model"]')?.textContent === "Sonnet 5.5",
+  );
+  const menu = page.locator(".chat-model-popover").first();
+  await menu.locator(":scope > summary").click();
+  const part = page.getByTestId("chat-picker-roles");
+  const summary = part.getByTestId("chat-picker-roles-summary");
+  assert.equal(await summary.textContent(), "Same model throughout");
+  await part.locator(":scope > summary").click();
+  // Plan with is one of the chat's own agent's models; its thinking waits for a model.
+  assert.equal(await page.getByLabel("Plan with: agent").count(), 0);
+  assert.equal(await page.getByLabel("Plan with: thinking").count(), 0);
+  await choose(page.getByLabel("Plan with: model"), "fable");
+  await choose(page.getByLabel("Plan with: thinking"), "high");
+  await part.getByText("Plan: Fable 5.1 · High").waitFor();
+  // Build with: no model until an agent is chosen; another model clears the thinking level.
+  assert.equal(await page.getByLabel("Build with: model").count(), 0);
+  await choose(page.getByLabel("Build with: agent"), "codex");
+  await choose(page.getByLabel("Build with: model"), "gpt-5.5-mini");
+  await choose(page.getByLabel("Build with: thinking"), "max");
+  await choose(page.getByLabel("Build with: model"), "gpt-5.5-codex");
+  await page.waitForFunction(
+    () =>
+      document.querySelector('[data-testid="chat-picker-roles-summary"]')?.textContent ===
+      "Plan: Fable 5.1 · High, Build: Codex · GPT-5.5 Codex",
+  );
+  // Choosing what is set already changes nothing in the chat itself: it is still on Sonnet.
+  assert.equal(await pill(), "Sonnet 5.5");
+  await page.keyboard.press("Escape");
+  // Turning Plan on puts the chat on its Plan with.
+  await page.locator(".chat-workflow-popover > summary").first().click();
+  await page
+    .locator(".chat-workflow-popover")
+    .first()
+    .getByRole("button", { name: /^Plan/ })
+    .click();
+  await page.waitForFunction(
+    () =>
+      document.querySelector('[data-testid="picker-current-model"]')?.textContent === "Fable 5.1",
+  );
+  // The chat's model again clears Plan with; Build with stays.
+  await menu.locator(":scope > summary").click();
+  if (!(await part.evaluate((element) => element.open)))
+    await part.locator(":scope > summary").click();
+  await choose(page.getByLabel("Plan with: model"), "");
+  await page.waitForFunction(
+    () =>
+      document.querySelector('[data-testid="chat-picker-roles-summary"]')?.textContent ===
+      "Build: Codex · GPT-5.5 Codex",
+  );
+  assert.equal(await page.getByLabel("Plan with: thinking").count(), 0);
+  await page.keyboard.press("Escape");
+  // A plan accepted with Build with on the chat's own agent switches its model and accepts it.
+  await page.goto(`${url}/?preview=plan&roles=1`);
+  const plan = page.locator('[data-kind="plan-approval"]').first();
+  await plan
+    .getByRole("button", { name: "Accept and build with Claude Code · Opus 5.5 · Medium" })
+    .click();
+  await page.getByText("Plan accepted.").first().waitFor();
+  await page.waitForFunction(
+    () =>
+      document.querySelector('[data-testid="picker-current-model"]')?.textContent === "Opus 5.5",
+  );
+}
+
 async function inspect(engine, launcher) {
   const browser = await launcher.launch({ headless: true });
   const errors = [];
@@ -906,6 +1064,7 @@ async function inspect(engine, launcher) {
         results.push({ theme, mode, violations });
         await page.screenshot({ path: resolve(out, `${engine}-${theme}-${mode}.png`) });
         if (mode === "recorded-thinking") {
+          // Claude kept this reasoning to itself and took under a second: no row.
           assert.equal(await page.locator('[data-test-kind="thought"]').count(), 0);
           assert.doesNotMatch(
             (await page.getByTestId("transcript").textContent()) ?? "",
@@ -1017,7 +1176,7 @@ async function inspect(engine, launcher) {
           });
           assert.deepEqual(
             rendered.map((turn) => turn.items),
-            [["tool:read:completed", "tool:execute:completed", "message"], ["message"]],
+            [["thought", "tool:read:completed", "tool:execute:completed", "message"], ["message"]],
             "native smoke reader lost virtual transcript pieces",
           );
           assert.equal(rendered[1].prompt, "A browser-only verification message");
@@ -1162,7 +1321,7 @@ async function inspect(engine, launcher) {
         { prompt: "/echo Hello from the smoke run", items: ["message"] },
         {
           prompt: "Make the project list easier to scan, and keep the active chat visible.",
-          items: ["tool:read:completed", "tool:execute:completed", "message"],
+          items: ["thought", "tool:read:completed", "tool:execute:completed", "message"],
         },
         {
           prompt: "/permission auto",
@@ -1547,7 +1706,11 @@ async function inspect(engine, launcher) {
     // Unmounting follows the next layout pass; under load WebKit can take longer than a fixed sleep.
     await lastTool.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
     assert.equal(await lastTool.count(), 0, "old tool remained mounted");
-    assert.equal(await page.locator('[data-test-kind="thought"]').count(), 0);
+    // At the top again: the turn's reasoning, folded to its time, before its thousand calls.
+    assert.equal(
+      (await page.locator('[data-test-kind="thought"] .chat-thought-label').textContent())?.trim(),
+      "Thought for 1 s",
+    );
     await page.getByTestId("jump-latest").click();
     await lastTool.waitFor();
     assert.notEqual(
@@ -1997,6 +2160,8 @@ async function inspect(engine, launcher) {
       .getByRole("button", { name: "Accept plan" })
       .click();
     await page.getByText("Plan accepted.").first().waitFor();
+    await planAndBuild(page);
+    await liveReasoning(page);
 
     await page.setViewportSize({ width: 960, height: 640 });
     await page.goto(`${url}/?preview=permission`);

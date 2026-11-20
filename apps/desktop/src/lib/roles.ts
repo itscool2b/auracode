@@ -1,69 +1,56 @@
 import type {
   AgentEntry,
+  ChatRoles,
   ConfigCategory,
+  ConfigChoice,
   ConfigOption,
-  ModelRole,
   RoleModel,
-  RoleModels,
   SessionLists,
 } from "../bindings";
+import { levelName } from "./chat/present";
 
 /**
- * Models by role (owner, 19 November 2026: "different models for different things like fable for
- * planning, gpt 6 astra for implementation or mixing and matching"). Settings > General names an
- * agent, and optionally its model and thinking level, for each kind of work. A role that is not
- * chosen changes nothing.
+ * Plan and build, chosen in each chat (owner, 19 November 2026: models by role are "a chat by
+ * chat thing not a settings thing"). The chat's model menu names, for this chat only:
  *
- * - Planning is applied when Plan is turned on in a chat of that agent.
- * - Building is offered when a plan is accepted, as "Accept and build with": in a chat of the
- *   same agent the model and thinking level change and the plan is accepted; for another agent
- *   the chat is handed to it with the plan.
- * - Coordinator and Workers are read by a coordinated project (Rust, `session/coordinator.rs`).
+ * - Plan with: the model and thinking level of the chat's own agent that turning Plan on
+ *   switches to.
+ * - Build with: the agent, model and thinking level offered when a plan is accepted, as "Accept
+ *   and build with". On the chat's own agent the model and thinking level change and the plan is
+ *   accepted; another agent takes the chat over with the plan. A coordinator's chat also starts
+ *   its workers on it unless it names another (Rust, `session/coordinator.rs`).
+ *
+ * A role that is not chosen changes nothing. Rust stores them with the chat (`chat_roles`).
  */
-export const NO_ROLES: RoleModels = { plan: null, build: null, coordinator: null, worker: null };
+export const NO_ROLES: ChatRoles = { plan: null, build: null };
 
-export const ROLES: readonly {
-  readonly role: ModelRole;
-  readonly title: string;
-  readonly detail: string;
-  /** What the agent select's first entry says: nothing is chosen. */
-  readonly none: string;
-}[] = [
-  {
-    role: "plan",
-    title: "Planning",
-    detail: "Applied when you turn Plan on in a chat of this agent.",
-    none: "The chat's own model",
-  },
-  {
-    role: "build",
-    title: "Building",
-    detail:
-      "Offered when you accept a plan, as Accept and build with. Another agent than the chat's takes the plan over.",
-    none: "The chat's own model",
-  },
-  {
-    role: "coordinator",
-    title: "Coordinator",
-    detail: "A coordinated project's coordinator starts on this (Settings > Experiments).",
-    none: "The project's agent",
-  },
-  {
-    role: "worker",
-    title: "Workers",
-    detail: "A coordinated project's workers run on this unless the coordinator names another.",
-    none: "The coordinator's agent",
-  },
-];
-
-export function roleOf(roles: RoleModels | null | undefined, role: ModelRole): RoleModel | null {
-  return roles?.[role] ?? null;
+/** The model and thinking levels an agent last listed, for a role naming another model. */
+export interface RoleCatalog {
+  readonly models: (agentId: string) => Promise<ConfigChoice[]>;
+  readonly thinking: (agentId: string, model: string | null) => Promise<ConfigChoice[]>;
 }
 
-/** A role as the window names it: "Codex · gpt-6-astra · high". */
-export function roleLabel(role: RoleModel, agents: readonly AgentEntry[] | null): string {
+/** The chat's Plan with, when it is for the agent the chat is on now. */
+export function planRole(
+  roles: ChatRoles | null | undefined,
+  chatAgent: string | null | undefined,
+): RoleModel | null {
+  const role = roles?.plan ?? null;
+  return role && chatAgent && role.agent === chatAgent ? role : null;
+}
+
+/** A role as the window names it: "Codex · GPT-6 Astra · High". */
+export function roleLabel(
+  role: RoleModel,
+  agents: readonly AgentEntry[] | null,
+  models: readonly ConfigChoice[] = [],
+): string {
   const agent = agents?.find((entry) => entry.id === role.agent)?.name ?? role.agent;
-  return [agent, role.model, role.effort].filter(Boolean).join(" · ");
+  const model = role.model
+    ? (models.find((entry) => entry.value === role.model)?.name ?? role.model)
+    : null;
+  const effort = role.effort ? levelName({ value: role.effort, name: role.effort }) : null;
+  return [agent, model, effort].filter(Boolean).join(" · ");
 }
 
 /** The option of a kind a chat offers, with the choice a role asks for, if it offers it. */
@@ -92,17 +79,17 @@ export interface BuildOffer {
 }
 
 /**
- * What accepting a plan can hand it to: the Building role, when it is chosen, its agent is ready
- * here, and it would change something. In a chat already on that agent and model, Accept plan is
- * the whole of it and nothing more is offered.
+ * What accepting a plan can hand it to: the chat's Build with, when it is chosen, its agent is
+ * ready here, and it would change something. In a chat already on that agent and model, Accept
+ * plan is the whole of it and nothing more is offered.
  */
 export function buildOffer(
-  roles: RoleModels | null | undefined,
+  roles: ChatRoles | null | undefined,
   chatAgent: string | null | undefined,
   lists: SessionLists | null,
   agents: readonly AgentEntry[] | null,
 ): BuildOffer | null {
-  const role = roleOf(roles, "build");
+  const role = roles?.build ?? null;
   if (!role || !chatAgent) return null;
   const ready = agents?.some(
     (entry) => entry.id === role.agent && entry.availability.state === "ready",
@@ -115,7 +102,17 @@ export function buildOffer(
     const changes = (model && !model.current) || (effort && !effort.current);
     if (!changes) return null;
   }
-  return { role, sameAgent, label: roleLabel(role, agents) };
+  return {
+    role,
+    sameAgent,
+    label: roleLabel(role, agents, sameAgent ? listedModels(lists) : []),
+  };
+}
+
+/** The models a chat lists now. */
+export function listedModels(lists: SessionLists | null): readonly ConfigChoice[] {
+  const option = lists?.options.find((entry) => entry.category === "model");
+  return option?.kind.type === "select" ? option.kind.choices : [];
 }
 
 /** What the building agent is sent with a plan another agent wrote. */

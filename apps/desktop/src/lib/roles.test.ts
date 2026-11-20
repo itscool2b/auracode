@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
-import type { AgentEntry, RoleModels, SessionLists } from "../bindings";
-import { buildOffer, buildPrompt, NO_ROLES, roleChoice, roleLabel } from "./roles";
+import type { AgentEntry, ChatRoles, SessionLists } from "../bindings";
+import { buildOffer, buildPrompt, NO_ROLES, planRole, roleChoice, roleLabel } from "./roles";
 
 const agent = (id: string, name: string, ready = true) =>
   ({
@@ -48,13 +48,19 @@ const lists = (model: string, effort: string) =>
     ],
   }) as unknown as SessionLists;
 
-const roles = (build: RoleModels["build"]): RoleModels => ({ ...NO_ROLES, build });
+const roles = (build: ChatRoles["build"]): ChatRoles => ({ ...NO_ROLES, build });
 
-describe("models by role", () => {
+describe("a chat's plan and build", () => {
   it("names a role by its agent, model and thinking level", () => {
     expect(roleLabel({ agent: "codex", model: "gpt-6-astra", effort: "high" }, AGENTS)).toBe(
-      "Codex · gpt-6-astra · high",
+      "Codex · gpt-6-astra · High",
     );
+    // A model the agent listed is named as it names it.
+    expect(
+      roleLabel({ agent: "claude", model: "claude-fable-5-2", effort: null }, AGENTS, [
+        { value: "claude-fable-5-2", name: "Fable 5.2", description: null, group: null },
+      ]),
+    ).toBe("Claude Code · Fable 5.2");
     expect(roleLabel({ agent: "codex", model: null, effort: null }, AGENTS)).toBe("Codex");
     expect(roleLabel({ agent: "gone", model: null, effort: null }, null)).toBe("gone");
   });
@@ -100,7 +106,7 @@ describe("models by role", () => {
     const opus = roles({ agent: "claude", model: "claude-opus-5-5", effort: null });
     expect(buildOffer(opus, "claude", lists("claude-fable-5-2", "medium"), AGENTS)).toMatchObject({
       sameAgent: true,
-      label: "Claude Code · claude-opus-5-5",
+      label: "Claude Code · Opus 5.5",
     });
     // Already on it: Accept plan is the whole of it.
     expect(buildOffer(opus, "claude", lists("claude-opus-5-5", "medium"), AGENTS)).toBeNull();
@@ -116,6 +122,16 @@ describe("models by role", () => {
         AGENTS,
       ),
     ).toBeNull();
+  });
+
+  it("plans with its Plan with only while the chat is on that agent", () => {
+    const fable = { agent: "claude", model: "claude-fable-5-2", effort: "high" };
+    expect(planRole({ plan: fable, build: null }, "claude")).toBe(fable);
+    // The chat moved to another agent since: its Plan with was for the old one.
+    expect(planRole({ plan: fable, build: null }, "codex")).toBeNull();
+    expect(planRole(NO_ROLES, "claude")).toBeNull();
+    expect(planRole(null, "claude")).toBeNull();
+    expect(planRole({ plan: fable, build: null }, null)).toBeNull();
   });
 
   it("hands the plan over whole, and says who wrote it", () => {

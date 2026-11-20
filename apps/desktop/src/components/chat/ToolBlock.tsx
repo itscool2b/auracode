@@ -102,14 +102,17 @@ export function ToolPhraseText({
   title,
   kind,
   display,
+  sheen = false,
 }: {
   readonly title: string;
   readonly kind: ToolItem["toolKind"];
   readonly display: ToolDisplayStatus;
+  /** A sheen passes over it while the call runs. */
+  readonly sheen?: boolean;
 }) {
   const phrase = toolPhrase(title, kind, display);
   return (
-    <span className="chat-tool-label">
+    <span className="chat-tool-label" data-sheen={sheen ? "" : undefined}>
       {phrase.verb ? (
         <>
           <span className="chat-tool-verb">{phrase.verb}</span>{" "}
@@ -239,7 +242,7 @@ export function ToolBlock({
               <Icon className="chat-tool-icon" size={14} strokeWidth={1.5} aria-hidden="true" />
             )}
           </span>
-          <ToolPhraseText title={title} kind={tool.toolKind} display={display} />
+          <ToolPhraseText title={title} kind={tool.toolKind} display={display} sheen={running} />
           {delta ? (
             <span
               className="chat-diff-totals chat-tool-delta"

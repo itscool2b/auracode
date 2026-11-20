@@ -432,6 +432,8 @@ export const commands = {
 	projectAddFolder: (projectId: string, path: string) => typedError<ProjectFolder, AppError>(__TAURI_INVOKE("project_add_folder", { projectId, path })),
 	chatRename: (chatId: string, title: string) => typedError<WorkspaceChat, AppError>(__TAURI_INVOKE("chat_rename", { chatId, title })),
 	chatPin: (chatId: string, pinned: boolean) => typedError<WorkspaceChat, AppError>(__TAURI_INVOKE("chat_pin", { chatId, pinned })),
+	/**  The agent, model and thinking level a chat plans or builds with, or none to clear it. */
+	chatSetRole: (chatId: string, role: ChatRole, choice: RoleModel | null) => typedError<WorkspaceChat, AppError>(__TAURI_INVOKE("chat_set_role", { chatId, role, choice })),
 	chatArchive: (chatId: string, archived: boolean) => typedError<WorkspaceChat, AppError>(__TAURI_INVOKE("chat_archive", { chatId, archived })),
 	chatMove: (chatId: string, request: ChatMove) => typedError<WorkspaceChat, AppError>(__TAURI_INVOKE("chat_move", { chatId, request })),
 	chatCreatePreview: (folderId: string) => typedError<ChatCreatePreview, AppError>(__TAURI_INVOKE("chat_create_preview", { folderId })),
@@ -1224,6 +1226,25 @@ export type ChatProcesses = {
 	tasks: BackgroundTask[],
 };
 
+/**
+ *  The kinds of work a chat can name a model for (owner, 19 November 2026: models by role are
+ *  "a chat by chat thing not a settings thing").
+ */
+export type ChatRole = 
+/**  Applied when Plan is turned on in the chat, if the chat is on the role's agent. */
+"plan" | 
+/**
+ *  Offered as "Accept and build with" when a plan is accepted. In a coordinator's chat, the
+ *  workers it starts use it unless it names another agent or model.
+ */
+"build";
+
+/**  A chat's choice for each kind of work. `None`: nothing is chosen, and nothing changes. */
+export type ChatRoles = {
+	plan?: RoleModel | null,
+	build?: RoleModel | null,
+};
+
 export type ChatSearchHit = {
 	id: string,
 	title: string,
@@ -1660,7 +1681,7 @@ export type CoordinatorStart = {
 	project_id: string,
 	/**  The project folder the coordinator works from. */
 	folder_id: string,
-	/**  The agent to coordinate with. `None` takes the Coordinator role's agent, else the project's. */
+	/**  The agent to coordinate with. `None` takes the project's default agent, else the first ready. */
 	agent_id: string | null,
 	brief: string,
 };
@@ -2041,12 +2062,6 @@ export type GeneralPreferences = {
 	 *  project tools at once and keeps what the projects hold.
 	 */
 	coordinated_projects: boolean,
-	/**
-	 *  Which agent and model does which kind of work (owner, 19 November 2026: "different models
-	 *  for different things like fable for planning, gpt 6 astra for implementation or mixing
-	 *  and matching"). Each is unset until chosen, and an unset one changes nothing.
-	 */
-	roles?: RoleModels,
 };
 
 export type GitFileState = {
@@ -2674,17 +2689,6 @@ export type MemoryRevision = {
 	source: string,
 	created_at: number,
 };
-
-/**  The kinds of work a model can be chosen for. */
-export type ModelRole = 
-/**  Planning: applied when Plan is turned on in a chat of this agent. */
-"plan" | 
-/**  Building: offered when a plan is accepted, as "Accept and build with". */
-"build" | 
-/**  A coordinated project's coordinator. */
-"coordinator" | 
-/**  A coordinated project's workers, unless the coordinator names another. */
-"worker";
 
 export type MotionPreference = 
 /**  Full motion still honors the operating system's reduced-motion setting. */
@@ -3335,14 +3339,6 @@ export type RoleModel = {
 	effort: string | null,
 };
 
-/**  The choice for each kind of work. `None`: nothing is chosen, and nothing changes. */
-export type RoleModels = {
-	plan?: RoleModel | null,
-	build?: RoleModel | null,
-	coordinator?: RoleModel | null,
-	worker?: RoleModel | null,
-};
-
 /**  How much of a damaged database made it into the database that replaced it. */
 export type Salvage = 
 /**
@@ -3518,9 +3514,7 @@ export type SetupAction = { type: "visit"; step: SetupStep } | { type: "motion";
 /**  Turns on or off looking for a newer o7 by itself. */
 { type: "automatic_updates"; enabled: boolean } | 
 /**  Turns the coordinated projects experiment on or off. */
-{ type: "coordinated_projects"; enabled: boolean } | 
-/**  Chooses the agent, model and thinking level for one kind of work, or clears the choice. */
-{ type: "role_model"; role: ModelRole; choice: RoleModel | null };
+{ type: "coordinated_projects"; enabled: boolean };
 
 export type SetupCommand = {
 	program: string,
@@ -3994,6 +3988,8 @@ export type WorkspaceChat = {
 	folder_id: string | null,
 	pinned: boolean,
 	archived: boolean,
+	/**  The agent, model and thinking level this chat plans and builds with, where chosen. */
+	roles?: ChatRoles,
 };
 
 export type WorkspaceFilter = {

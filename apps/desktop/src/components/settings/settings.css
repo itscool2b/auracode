@@ -308,16 +308,6 @@ h1 + .settings-group {
   min-width: 0;
 }
 
-/* A role's choices in one row: the agent, then its model and thinking level. */
-.settings-role {
-  display: flex;
-  flex-wrap: wrap;
-  align-items: center;
-  justify-content: flex-end;
-  gap: var(--g-space-8);
-  min-width: 0;
-}
-
 .settings-agent-mark {
   display: inline-flex;
   flex: none;

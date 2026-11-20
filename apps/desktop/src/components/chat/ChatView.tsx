@@ -10,11 +10,12 @@ import {
 } from "react";
 import type {
   AgentEntry,
+  ChatRole,
+  ChatRoles,
   ChatSummary,
   ManagedWorktree,
   PendingHandoff,
   RoleModel,
-  RoleModels,
   SessionControlChange,
   StorageStatus,
   WorktreeRecreatePreview,
@@ -38,7 +39,8 @@ import { sameFolder } from "../../lib/gitWorkspace";
 import { useMediaQuery } from "../../lib/hooks";
 import { inTauri } from "../../lib/ipc";
 import { editorName } from "../../lib/projectTools";
-import { buildOffer, buildPrompt, roleChoice, roleOf } from "../../lib/roles";
+import { buildOffer, buildPrompt, planRole, type RoleCatalog, roleChoice } from "../../lib/roles";
+import { generalApi } from "../../lib/setup";
 import type { TerminalPanels } from "../../lib/terminalPanel";
 import { runLabel } from "../../lib/worktreeRun";
 import { type AnnotationTarget, BrowserPanel } from "../browser/BrowserPanel";
@@ -63,6 +65,7 @@ import { ProjectToolsDialog } from "./ProjectToolsDialog";
 import { QuestionCard } from "./QuestionCard";
 import { QueueList } from "./QueueList";
 import { RecreateWorktreeDialog } from "./RecreateWorktreeDialog";
+import { RolePicker } from "./RolePicker";
 import { TaskPanel } from "./TaskPanel";
 import { TerminalChat } from "./TerminalChat";
 import { TerminalPanel } from "./TerminalPanel";
@@ -104,6 +107,8 @@ export function ChatView({
   now,
   onManageAccounts,
   roles = null,
+  onSetRole,
+  roleCatalog = generalApi,
 }: {
   readonly chatId: string;
   readonly transport: Transport;
@@ -126,8 +131,12 @@ export function ChatView({
   readonly now?: () => number;
   /** Opens the Agents page, where accounts are added, chosen for new chats and removed. */
   readonly onManageAccounts?: () => void;
-  /** Settings' models by role: Planning applies with Plan, Building takes an accepted plan. */
-  readonly roles?: RoleModels | null;
+  /** This chat's Plan with and Build with (lib/roles.ts), as the workspace has them. */
+  readonly roles?: ChatRoles | null;
+  /** Saves one of them; none: the chat has no Plan and build part (New chat, a fixture). */
+  readonly onSetRole?: (role: ChatRole, choice: RoleModel | null) => Promise<void>;
+  /** What a role's other agent last listed: its models and thinking levels. */
+  readonly roleCatalog?: RoleCatalog;
 }) {
   const [store] = useState(() => new ChatStore(chatId, transport, now ? { now } : {}));
   // New chat's first message (type first): sent once as the chat opens, as its message box would
@@ -735,7 +744,7 @@ export function ChatView({
   const offerLabel = offer?.label ?? null;
   const conversation = transport.conversation;
   /**
-   * Accept and build with: Settings' Building role takes the accepted plan. In a chat of the same
+   * Accept and build with: the chat's Build with takes the accepted plan. In a chat of the same
    * agent its model and thinking level are set and the plan is accepted. For another agent the
    * planner is stopped, the chat is handed over with the app's own handoff, and the builder is
    * sent the plan as written.
@@ -748,7 +757,7 @@ export function ChatView({
       const now = buildOffer(roles, chatAgentId, store.getSnapshot().lists, agents);
       if (!now)
         throw new Error(
-          "Your Building model is not available now. Accept plan continues with this chat's agent.",
+          "Your Build with model is not available now. Accept plan continues with this chat's agent.",
         );
       if (now.sameAgent) {
         await applyRole(now.role);
@@ -795,20 +804,39 @@ export function ChatView({
     () => (offerLabel === null ? undefined : { label: offerLabel, run: buildPlan }),
     [offerLabel, buildPlan],
   );
-  /** Turning Plan on in a chat of the Planning role's agent puts the chat on that role. */
-  const planRole = roleOf(roles, "plan");
+  /** Turning Plan on puts the chat on its Plan with, when that is for the chat's agent. */
+  const plan = planRole(roles, chatAgentId);
   const setControl = useCallback(
     async (change: SessionControlChange) => {
       await store.setControl(change);
-      if (
-        change.type === "workflow" &&
-        change.value === "plan" &&
-        planRole &&
-        planRole.agent === chatAgentId
-      )
-        await applyRole(planRole);
+      if (change.type === "workflow" && change.value === "plan" && plan) await applyRole(plan);
     },
-    [store, planRole, chatAgentId, applyRole],
+    [store, plan, applyRole],
+  );
+  /** A Plan with chosen while the chat plans already applies at once. */
+  const setRole = useCallback(
+    async (role: ChatRole, choice: RoleModel | null) => {
+      if (!onSetRole) return;
+      await onSetRole(role, choice);
+      const planning = store.getSnapshot().lists?.controls?.workflow?.effective === "plan";
+      if (role === "plan" && choice && planning && choice.agent === chatAgentId)
+        await applyRole(choice);
+    },
+    [onSetRole, store, chatAgentId, applyRole],
+  );
+  const rolePicker = useMemo(
+    () =>
+      onSetRole ? (
+        <RolePicker
+          roles={roles}
+          agentId={chatAgentId ?? null}
+          agentName={chatAgentName}
+          agents={agents}
+          catalog={roleCatalog}
+          onSet={setRole}
+        />
+      ) : null,
+    [onSetRole, roles, agents, chatAgentId, chatAgentName, roleCatalog, setRole],
   );
 
   const actions = useMemo<TurnActions>(
@@ -931,6 +959,7 @@ export function ChatView({
         onSetControl={transport.setControl ? (change) => void setControl(change) : undefined}
         onSetAutonomy={(autonomy) => void store.setAutonomy(autonomy)}
         onSetOption={(optionId, value) => void store.setOption(optionId, value)}
+        roles={rolePicker}
         account={
           transport.accounts && state.chat && takesAccounts(state.chat.agent_id) ? (
             <AccountPicker
@@ -970,6 +999,7 @@ export function ChatView({
       pendingRequests.length,
       store,
       setControl,
+      rolePicker,
     ],
   );
 

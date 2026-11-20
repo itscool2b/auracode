@@ -75,6 +75,64 @@ pub struct WorkspaceChat {
     pub folder_id: Option<String>,
     pub pinned: bool,
     pub archived: bool,
+    /// The agent, model and thinking level this chat plans and builds with, where chosen.
+    #[serde(default)]
+    pub roles: ChatRoles,
+}
+
+/// An agent, and optionally its model and thinking level, chosen for one kind of work.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct RoleModel {
+    pub agent: String,
+    /// `None` leaves the agent's own choice.
+    pub model: Option<String>,
+    pub effort: Option<String>,
+}
+
+/// The kinds of work a chat can name a model for (owner, 19 November 2026: models by role are
+/// "a chat by chat thing not a settings thing").
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum ChatRole {
+    /// Applied when Plan is turned on in the chat, if the chat is on the role's agent.
+    Plan,
+    /// Offered as "Accept and build with" when a plan is accepted. In a coordinator's chat, the
+    /// workers it starts use it unless it names another agent or model.
+    Build,
+}
+
+impl ChatRole {
+    pub fn as_str(self) -> &'static str {
+        match self {
+            Self::Plan => "plan",
+            Self::Build => "build",
+        }
+    }
+}
+
+/// A chat's choice for each kind of work. `None`: nothing is chosen, and nothing changes.
+#[derive(Debug, Clone, Default, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct ChatRoles {
+    #[serde(default)]
+    pub plan: Option<RoleModel>,
+    #[serde(default)]
+    pub build: Option<RoleModel>,
+}
+
+impl ChatRoles {
+    pub fn get(&self, role: ChatRole) -> Option<&RoleModel> {
+        match role {
+            ChatRole::Plan => self.plan.as_ref(),
+            ChatRole::Build => self.build.as_ref(),
+        }
+    }
+
+    pub fn set(&mut self, role: ChatRole, choice: Option<RoleModel>) {
+        match role {
+            ChatRole::Plan => self.plan = choice,
+            ChatRole::Build => self.build = choice,
+        }
+    }
 }
 
 /// Complete editable project values. `None` clears an optional field on update.

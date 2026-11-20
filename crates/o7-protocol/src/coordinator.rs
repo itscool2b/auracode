@@ -182,7 +182,7 @@ pub struct CoordinatorStart {
     pub project_id: String,
     /// The project folder the coordinator works from.
     pub folder_id: String,
-    /// The agent to coordinate with. `None` takes the Coordinator role's agent, else the project's.
+    /// The agent to coordinate with. `None` takes the project's default agent, else the first ready.
     pub agent_id: Option<String>,
     pub brief: String,
 }

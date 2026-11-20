@@ -42,13 +42,17 @@ export function chatActivity(state: ChatState): OrbState {
 }
 
 /**
- * Whether a running turn's newest shown output is text still streaming in. The text is then the
- * live part of the turn, so the working line steps aside until it ends.
+ * Whether a running turn's newest shown output is text still streaming in: an answer, or the
+ * reasoning's "Thinking" row. That is then the live part of the turn, so the working line steps
+ * aside until it ends.
  */
 export function streamingText(segment: RenderedSegment | undefined): boolean {
   if (segment === undefined || segment.end !== null) return false;
   const newest = segment.items.at(-1);
-  return newest?.kind === "message" && !newest.completed;
+  return (
+    (newest?.kind === "message" && !newest.completed) ||
+    (newest?.kind === "thought" && newest.thinking)
+  );
 }
 
 /** The kind of a turn's latest call, which the working line's words lean towards. */

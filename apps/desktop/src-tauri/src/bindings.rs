@@ -279,6 +279,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             crate::workspace_commands::project_add_folder,
             crate::workspace_commands::chat_rename,
             crate::workspace_commands::chat_pin,
+            crate::workspace_commands::chat_set_role,
             crate::workspace_commands::chat_archive,
             crate::workspace_commands::chat_move,
             crate::workspace_commands::chat_create_preview,

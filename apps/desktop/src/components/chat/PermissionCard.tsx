@@ -4,7 +4,7 @@ import { permissionResolutionLabel } from "../../lib/chat/present";
 import type { PermissionItem } from "../../lib/chat/transcript";
 import { type PlanApproval, PlanCard, planApproval } from "./PlanCard";
 
-/** Handing an accepted plan to Settings' Building role (lib/roles.ts). */
+/** Handing an accepted plan to the chat's Build with (lib/roles.ts). */
 export interface PlanBuild {
   /** The role as the button names it: "Codex · gpt-6-astra". */
   readonly label: string;
@@ -73,7 +73,7 @@ export function PermissionCard({
     declineOptionId: string,
     note: string,
   ) => Promise<void>;
-  /** A plan card's Accept and build with: Settings' Building role takes the accepted plan. */
+  /** A plan card's Accept and build with: the chat's Build with takes the accepted plan. */
   readonly planBuild?: PlanBuild;
 } & BlobProps) {
   const { request: ask, resolution } = item;

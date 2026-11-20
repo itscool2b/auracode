@@ -1245,7 +1245,7 @@ describe("turns and the transcript", () => {
     ]);
   });
 
-  it("shows no reasoning and gathers the calls between the agent's words into one stretch", async () => {
+  it("shows reasoning as its own row, and gathers the calls between it and the agent's words", async () => {
     const page = historyPage(
       "c1",
       items(
@@ -1274,16 +1274,22 @@ describe("turns and the transcript", () => {
     const html = renderToStaticMarkup(
       <Transcript state={state} live={true} actions={ACTIONS} onLoadEarlier={noop} />,
     );
-    expect(html).not.toMatch(/Thought for|Thinking|did not share its reasoning/);
-    expect(html).not.toContain('data-test-kind="thought"');
-    expect(html).not.toContain("Now look for its callers.");
-    // Three calls split by two thoughts form one stretch; the call after the answer is its own.
+    // The wordless blink has no row; the others fold to their time, or "Thought" without one.
+    expect(
+      [...html.matchAll(/class="chat-thought-label">([^<]*)</g)].map((match) => match[1]),
+    ).toEqual(["Thought for 1 s", "Thought"]);
+    expect(html).not.toContain("Thinking");
+    // Their words are there to open, never as a live preview once the turn ended.
+    expect(html).toContain("Now look for its callers.");
+    expect(html).not.toContain('data-testid="thought-preview"');
+    // A thought with words ends a stretch: one call, then two, then the call after the answer.
     expect(
       [...html.matchAll(/data-testid="tool-group" data-test-count="(\d+)"/g)].map(
         (match) => match[1],
       ),
-    ).toEqual(["3", "1"]);
-    expect(html).toContain("Read 2 files and searched for 1 pattern");
+    ).toEqual(["1", "2", "1"]);
+    // A stretch leads with its kinds, as their icons.
+    expect(html).toContain('class="chat-tool-group-kinds"');
     // A single call reads as its own line, past tense once done; settled stretches stay closed.
     expect(html).toMatch(
       /class="chat-tool-verb">Ran<\/span> <span class="chat-tool-object" data-literal="">pnpm test</,
@@ -1306,10 +1312,12 @@ describe("turns and the transcript", () => {
     const html = renderToStaticMarkup(
       <Transcript state={thinking} live={true} actions={ACTIONS} onLoadEarlier={noop} />,
     );
-    expect(html).toContain('data-testid="working-line"');
-    expect(html).not.toContain("data-hidden");
+    // Reasoning streaming in is the live row: "Thinking" with its newest words under it, and the
+    // working line aside until it ends.
+    expect(html).toMatch(/data-testid="working-line" data-hidden=""/);
     expect(html).toContain("is working");
-    expect(html).not.toMatch(/Thinking|Checking the narrow layout/);
+    expect(html).toMatch(/class="chat-thought-label" data-sheen="">Thinking</);
+    expect(html).toMatch(/data-testid="thought-preview"><p>Checking the narrow layout</);
     // No second live row below it, and no footer yet.
     expect(html).not.toContain('class="chat-now"');
     expect(html).not.toContain('data-testid="turn-footer"');

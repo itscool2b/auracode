@@ -3,7 +3,9 @@ import type { RenderedItem, RenderedSegment } from "./transcript";
 /**
  * A finished turn's work, folded under one "Worked for" row so the final answer stands alone
  * (owner, 4 November 2026, after Codex): every item between the person's message and the agent's
- * final answer, the interim messages, tool calls, answered cards and notices among them.
+ * final answer, the interim messages, reasoning, tool calls, answered cards and notices among them.
+ * Reasoning alone is no work to fold: its own row is folded already, so a turn that only thought
+ * before answering shows "Thought for 4 s" over the answer, not a fold around it.
  *
  * A turn folds only when it ended normally on an answer, after some work, and nothing in that
  * work must stay in view: no error, no request still waiting for an answer, and no message of the
@@ -19,7 +21,7 @@ export interface WorkFold {
   /** The first item of the final answer: the fold ends just before it. */
   readonly to: number;
   /**
-   * The tool calls folded, or everything folded when there are none: "12 steps". `null` for a
+   * The tool calls folded, or everything but reasoning when there are none: "12 steps". `null` for a
    * cut turn, whose loaded part would undercount.
    */
   readonly steps: number | null;
@@ -43,9 +45,10 @@ export function workFold(segment: RenderedSegment): WorkFold | null {
   const answer = items.slice(to);
   if (!answer.some((item) => item.kind === "message" && item.text.trim() !== "")) return null;
   const work = items.slice(from, to);
-  if (!work.some((item) => item.kind !== "message") || work.some(staysInView)) return null;
-  const tools = work.filter((item) => item.kind === "tool").length;
-  return { from, to, steps: segment.partial ? null : tools || work.length };
+  const steps = work.filter((item) => item.kind !== "thought");
+  if (!steps.some((item) => item.kind !== "message") || work.some(staysInView)) return null;
+  const tools = steps.filter((item) => item.kind === "tool").length;
+  return { from, to, steps: segment.partial ? null : tools || steps.length };
 }
 
 const CHANGES: ReadonlySet<string> = new Set(["edit", "delete", "move"]);
