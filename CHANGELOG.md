@@ -8,6 +8,10 @@ request adds its own line in the same pull request; see "Changelog" in
 [docs/developing-in-o7.md](docs/developing-in-o7.md). `node .github/scripts/check-changelog.mjs`
 checks the format, and with `--dates` checks each day against the time GitHub says it merged.
 
+## 2026-11-20
+
+- Plan and build is now part of each chat, and you can watch the agent think. Open the model menu in a chat and choose, under Plan and build, the model it plans with and the agent and model it builds with; Settings no longer has Models by role. While the agent thinks you see its newest thoughts, and afterwards "Thought for 4 s" opens to all of them. Running steps shimmer, each group of steps shows icons for what it did, and plans show their numbered lists again. ([#155](https://github.com/itscool2b/o7/pull/155))
+
 ## 2026-11-19
 
 - o7 installs as o7. This update replaces the auracode program with o7: the Start menu, desktop and taskbar open o7, and auracode leaves your list of apps. Your chats, projects, settings and sign-ins stay exactly where they were, and the code lives at github.com/itscool2b/o7. ([#154](https://github.com/itscool2b/o7/pull/154))

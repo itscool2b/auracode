@@ -29,7 +29,7 @@ The one detailed first-hand account (a three-day run in September 2026) found wh
 | Task board | To do, Doing, Review, Done. Tasks are numbered (`T-12`), carry notes, tags, the worker and a link to the pull request. Drag between columns, or use the task's dialog. |
 | Reports from workers | When a worker's turn ends, however it ended, its report (what it filed with `project_report`, else its last message) is sent to the coordinator as an event. A report stays queued until its send succeeded, so quitting or a full queue loses none. |
 | Schedules | Routines: a prompt the coordinator is sent every 5 minutes to every week. Watching pull requests or CI is a routine whose prompt says to check them, as Cursor's own timed subscription does. |
-| Per-role model | A worker runs on the agent and model the coordinator names for it, else Settings' Workers role, else the coordinator's agent; the coordinator starts on Settings' Coordinator role ([model-roles.md](model-roles.md)). |
+| Per-role model | A worker runs on the agent and model the coordinator names for it, else the coordinator chat's Build with (its model menu's Plan and build), else the coordinator's agent; the coordinator starts on the agent chosen for it, else the project's ([model-roles.md](model-roles.md)). |
 | Cloud machines | None. Everything runs on this computer, in the agents already installed, and only while o7 is open. |
 | Slack, Linear, Sentry and webhook triggers | None. |
 | Teammates, shared boards, agent-to-agent chat between people | None: one person, one device. |

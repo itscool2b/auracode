@@ -794,7 +794,7 @@ function renderSegment(segment: Segment, items: readonly Item[], live: boolean):
 /**
  * `renderTranscript` that reuses each rendered segment whose segment and shown items did not
  * change, so a frame re-renders only the turn it touched (a memoized turn view compares by
- * identity). A segment the reducer copied for a hidden thought's delta keeps its rendering.
+ * identity). A thought with no row (see `shownThought`) leaves its segment's rendering as it was.
  */
 export function renderCache(): (model: Transcript, live: boolean) => RenderedSegment[] {
   type Cached = {

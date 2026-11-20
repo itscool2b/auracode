@@ -7,8 +7,8 @@
  * Every agent line starts on a 24px gutter: icons, chevrons and the live mark centre on x 12 and the
  * words start at x 24, so a live line handing over to the next keeps the mark and the words in place.
  * Nothing streamed ever moves: rows only append, a new row fades in and rises 2px once, and text
- * arriving inside a message simply appears. The agent's reasoning is never shown (the working line
- * stands in for it), and a running turn's tail keeps its place until the footer takes it.
+ * arriving inside a message simply appears. The agent's reasoning is a quiet row of its own, folded
+ * once done, and a running turn's tail keeps its place until the footer takes it.
  */
 
 /* ---------- Transcript column (6.4) ---------- */
@@ -309,8 +309,8 @@
 }
 
 /*
- * The working line (owner, 2 November 2026): the agent's reasoning is never shown. While a turn
- * runs and no text streams, its tail holds one quiet line instead: a neutral dot breathing in the
+ * The working line (owner, 2 November 2026). While a turn runs and neither text nor reasoning
+ * streams, its tail holds one quiet line: a neutral dot breathing in the
  * gutter (never a glow), a playful verb that crossfades to the next
  * every few seconds with a sheen passing over it, and the elapsed time at the line's end. It is
  * live agent state, so it alone keeps moving, like the composer's rim; streamed text fades it out
