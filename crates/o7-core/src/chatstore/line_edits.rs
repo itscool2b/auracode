@@ -8,31 +8,36 @@
 //!   it added, so a rewritten line is one edit and a new file is its length. Failed and unfinished
 //!   calls count nothing, nor do files changed by commands, nor subagents' edits (their steps carry
 //!   no input).
-//! - **When.** A turn is counted once it has ended, the next time the Dashboard asks, a pass of turns
-//!   at a time so the writer is never held for long ([`count_pass`]). Its calls are folded as
-//!   compaction folds them, so a turn counts the same before and after compaction, and an event cut
-//!   to fit the event budget is read whole from its blob.
+//! - **When.** A turn is counted once it has ended, the next time the Dashboard asks, the newest
+//!   first. Counting reads on a read-only connection of its own ([`count_pass`]), never on the
+//!   writer: one turn can hold hundreds of megabytes of tool events (a long command's streamed
+//!   output), and the writer carries every live chat. Only edit calls and their updates are read
+//!   (SQLite picks them out), folded as compaction folds them, so a turn counts the same before
+//!   and after compaction, and an edit cut to fit the event budget is read whole from its blob.
+//!   What a pass counted is saved through the writer in one short transaction ([`save`]).
 //! - **What is kept.** `line_edits` holds the turn, its chat, its agent, the quarter hour and the
 //!   count: no paths and no text. Deleted chats and projects drop out of [`read`].
 
 use std::collections::{BTreeMap, HashMap};
+use std::path::Path;
+use std::time::Duration;
 
 use o7_protocol::activity::LineEditBucket;
 use o7_protocol::{Millis, O7Event, ToolCall, ToolContent, ToolKind, ToolStatus, Truncation};
-use rusqlite::{Connection, params};
+use rusqlite::{Connection, OpenFlags, params};
 use serde_json::Value;
 
-use super::compact::{apply_update, default_tool};
+use super::compact::apply_update;
 use super::files::Attachments;
 
 /// Edits are kept by the quarter hour they were made in: every time zone's day starts on one.
 pub(crate) const BUCKET_MS: Millis = 15 * 60 * 1000;
 
 /// One pass counts at most this many turns...
-const PASS_TURNS: usize = 32;
+const PASS_TURNS: usize = 8;
 
-/// ...and stops once it has read this much.
-const PASS_BYTES: u64 = 16 * 1024 * 1024;
+/// ...and stops once it has read this much of their edits.
+const PASS_BYTES: u64 = 32 * 1024 * 1024;
 
 /// The longest changed stretch, on either side, compared line by line (as the chat's diff does);
 /// a longer one counts as the larger side.
@@ -41,45 +46,90 @@ const MAX_DIFF_LINES: usize = 2000;
 /// A blob larger than this is not read for counting: its call counts what its row kept.
 const MAX_BLOB_READ: u64 = 16 * 1024 * 1024;
 
-/// Counts the edits of up to one pass of ended turns not counted yet, in the caller's
-/// transaction. Returns whether ended turns still wait to be counted.
+/// An ended turn not counted yet.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Uncounted {
+    pub(crate) turn_id: String,
+    pub(crate) chat_id: String,
+    pub(crate) agent: String,
+}
+
+/// A counted turn: the lines its edits changed, by quarter hour (none for a turn without edits).
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub(crate) struct Counted {
+    pub(crate) turn: Uncounted,
+    pub(crate) buckets: BTreeMap<Millis, u64>,
+}
+
+/// Counts one pass of the newest ended turns not counted yet, on a read-only connection to the
+/// profile's database, off the writer. Returns what it counted and whether turns still wait.
 pub(crate) fn count_pass(
+    db: &Path,
+    attachments: &Attachments,
+) -> rusqlite::Result<(Vec<Counted>, bool)> {
+    let conn = Connection::open_with_flags(
+        db,
+        OpenFlags::SQLITE_OPEN_READ_ONLY | OpenFlags::SQLITE_OPEN_NO_MUTEX,
+    )?;
+    conn.busy_timeout(Duration::from_secs(5))?;
+    count_with(&conn, attachments)
+}
+
+/// [`count_pass`] on a connection.
+pub(crate) fn count_with(
     conn: &Connection,
     attachments: &Attachments,
-    now: Millis,
-) -> rusqlite::Result<bool> {
-    let turns: Vec<(String, String, String)> = conn
+) -> rusqlite::Result<(Vec<Counted>, bool)> {
+    let turns: Vec<Uncounted> = conn
         .prepare_cached(
             "SELECT t.id, t.chat_id, COALESCE(t.source_agent, s.agent_id, c.active_agent, '') \
              FROM turns t JOIN chats c ON c.id = t.chat_id \
              LEFT JOIN agent_sessions s ON s.id = t.agent_session_id \
              WHERE t.edits_counted_at IS NULL AND t.status <> 'running' \
-             ORDER BY t.started_at LIMIT ?1",
+             ORDER BY t.started_at DESC LIMIT ?1",
         )?
         .query_map(params![PASS_TURNS as i64 + 1], |row| {
-            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+            Ok(Uncounted {
+                turn_id: row.get(0)?,
+                chat_id: row.get(1)?,
+                agent: row.get(2)?,
+            })
         })?
         .collect::<rusqlite::Result<_>>()?;
+    let more = turns.len() > PASS_TURNS;
+    let mut counted = Vec::new();
+    let mut read = 0u64;
+    for turn in turns.into_iter().take(PASS_TURNS) {
+        if read >= PASS_BYTES {
+            return Ok((counted, true));
+        }
+        let (buckets, bytes) = count_turn(conn, attachments, &turn.turn_id)?;
+        read = read.saturating_add(bytes);
+        counted.push(Counted { turn, buckets });
+    }
+    Ok((counted, more))
+}
+
+/// Saves what a pass counted, in the caller's transaction. A turn is saved once: one that was
+/// counted meanwhile (by another pass) keeps the figures it has.
+pub(crate) fn save(conn: &Connection, counted: &[Counted], now: Millis) -> rusqlite::Result<()> {
+    let mut mark = conn.prepare_cached(
+        "UPDATE turns SET edits_counted_at = ?2 WHERE id = ?1 AND edits_counted_at IS NULL",
+    )?;
     let mut insert = conn.prepare_cached(
         "INSERT INTO line_edits (turn_id, chat_id, agent, at, lines) VALUES (?1, ?2, ?3, ?4, ?5) \
          ON CONFLICT (turn_id, at) DO UPDATE SET lines = excluded.lines",
     )?;
-    let mut counted =
-        conn.prepare_cached("UPDATE turns SET edits_counted_at = ?2 WHERE id = ?1")?;
-    let mut read = 0u64;
-    for (turn_id, chat_id, agent) in turns.iter().take(PASS_TURNS) {
-        if read >= PASS_BYTES {
-            return Ok(true);
+    for Counted { turn, buckets } in counted {
+        if mark.execute(params![turn.turn_id, now])? == 0 {
+            continue;
         }
-        let (buckets, bytes) = count_turn(conn, attachments, turn_id)?;
-        read = read.saturating_add(bytes);
         for (at, lines) in buckets {
-            let lines = i64::try_from(lines).unwrap_or(i64::MAX);
-            insert.execute(params![turn_id, chat_id, agent, at, lines])?;
+            let lines = i64::try_from(*lines).unwrap_or(i64::MAX);
+            insert.execute(params![turn.turn_id, turn.chat_id, turn.agent, at, lines])?;
         }
-        counted.execute(params![turn_id, now])?;
     }
-    Ok(turns.len() > PASS_TURNS)
+    Ok(())
 }
 
 /// Every agent's line edits since `since`, by quarter hour, oldest first. Chats and projects that
@@ -103,47 +153,61 @@ pub(crate) fn read(conn: &Connection, since: Millis) -> rusqlite::Result<Vec<Lin
     .collect()
 }
 
-/// The lines one turn's completed edits changed, by quarter hour, and how many bytes it read.
+/// The lines one turn's completed edits changed, by quarter hour, and how many bytes it read. Only
+/// the turn's edit calls and their updates are read: SQLite picks them out of the turn's events.
 fn count_turn(
     conn: &Connection,
     attachments: &Attachments,
     turn_id: &str,
 ) -> rusqlite::Result<(BTreeMap<Millis, u64>, u64)> {
-    let mut stmt = conn.prepare_cached(
-        "SELECT payload, created_at FROM events \
-         WHERE turn_id = ?1 AND kind IN ('tool_call', 'tool_update') ORDER BY seq",
-    )?;
-    let mut rows = stmt.query(params![turn_id])?;
-    // Ids this turn minted; an update to one whose call is missing gets a call, as compaction's.
-    let minted = format!("{turn_id}.");
     let mut calls: HashMap<String, (ToolCall, Millis)> = HashMap::new();
     let mut read = 0u64;
-    while let Some(row) = rows.next()? {
-        let payload: String = row.get(0)?;
-        let at: Millis = row.get(1)?;
-        read = read.saturating_add(payload.len() as u64);
-        let Ok(event) = serde_json::from_str::<O7Event>(&payload) else {
-            continue;
-        };
-        match whole(event, attachments, &mut read) {
-            O7Event::ToolCall(call) => {
+    {
+        let mut stmt = conn.prepare_cached(
+            "SELECT payload, created_at FROM events \
+             WHERE turn_id = ?1 AND kind = 'tool_call' \
+             AND json_valid(payload) AND json_extract(payload, '$.kind') = 'edit' ORDER BY seq",
+        )?;
+        let mut rows = stmt.query(params![turn_id])?;
+        while let Some(row) = rows.next()? {
+            let payload: String = row.get(0)?;
+            let at: Millis = row.get(1)?;
+            read = read.saturating_add(payload.len() as u64);
+            let Ok(event) = serde_json::from_str::<O7Event>(&payload) else {
+                continue;
+            };
+            if let O7Event::ToolCall(call) = whole(event, attachments, &mut read) {
                 let first = calls
                     .get(&call.tool_call_id)
                     .map_or(at, |(_, first)| *first);
                 calls.insert(call.tool_call_id.clone(), (call, first));
             }
-            O7Event::ToolUpdate(update) => {
-                let id = update.tool_call_id.clone();
-                let known = match calls.remove(&id) {
-                    Some(known) => Some(known),
-                    None if id.starts_with(&minted) => Some((default_tool(&id), at)),
-                    None => None,
-                };
-                if let Some((call, first)) = known {
-                    calls.insert(id, (apply_update(call, update), first));
-                }
-            }
-            _ => {}
+        }
+    }
+    if calls.is_empty() {
+        return Ok((BTreeMap::new(), read));
+    }
+    let ids = serde_json::to_string(&calls.keys().collect::<Vec<_>>()).unwrap_or_default();
+    let mut stmt = conn.prepare_cached(
+        "SELECT payload FROM events \
+         WHERE turn_id = ?1 AND kind = 'tool_update' AND json_valid(payload) \
+         AND json_extract(payload, '$.tool_call_id') IN (SELECT value FROM json_each(?2)) \
+         ORDER BY seq",
+    )?;
+    let mut rows = stmt.query(params![turn_id, ids])?;
+    while let Some(row) = rows.next()? {
+        let payload: String = row.get(0)?;
+        read = read.saturating_add(payload.len() as u64);
+        let Ok(event) = serde_json::from_str::<O7Event>(&payload) else {
+            continue;
+        };
+        if let O7Event::ToolUpdate(update) = whole(event, attachments, &mut read)
+            && let Some((call, first)) = calls.remove(&update.tool_call_id)
+        {
+            calls.insert(
+                update.tool_call_id.clone(),
+                (apply_update(call, update), first),
+            );
         }
     }
     let mut buckets = BTreeMap::new();
@@ -426,8 +490,15 @@ mod tests {
         (dir, attachments)
     }
 
+    /// Counts one pass and saves it, as the store does; returns whether turns still wait.
+    fn pass(db: &TestDb, attachments: &Attachments, now: Millis) -> bool {
+        let (counted, more) = count_with(db.conn(), attachments).expect("count");
+        save(db.conn(), &counted, now).expect("save");
+        more
+    }
+
     fn count_all(db: &TestDb, attachments: &Attachments) {
-        while count_pass(db.conn(), attachments, 99).expect("count") {}
+        while pass(db, attachments, 99) {}
     }
 
     #[test]
@@ -536,10 +607,10 @@ mod tests {
             ],
         );
         // A running turn waits.
-        assert!(!count_pass(db.conn(), &attachments, 7).expect("count"));
+        assert!(!pass(&db, &attachments, 7));
         assert!(read_all(&db).is_empty());
         end(&db, "t1");
-        assert!(!count_pass(db.conn(), &attachments, 7).expect("count"));
+        assert!(!pass(&db, &attachments, 7));
         let quarter = start - start.rem_euclid(BUCKET_MS);
         assert_eq!(
             read_all(&db),
@@ -557,7 +628,7 @@ mod tests {
             ]
         );
         // Counted once: a later pass leaves the figures as they are.
-        assert!(!count_pass(db.conn(), &attachments, 8).expect("count"));
+        assert!(!pass(&db, &attachments, 8));
         assert_eq!(read_all(&db).len(), 2);
         let counted: Option<i64> = db
             .conn()
@@ -665,8 +736,8 @@ mod tests {
             db.turn(&chat, &turn, ordinal, ordinal);
             end(&db, &turn);
         }
-        assert!(count_pass(db.conn(), &attachments, 1).expect("first"));
-        assert!(!count_pass(db.conn(), &attachments, 2).expect("second"));
+        assert!(pass(&db, &attachments, 1));
+        assert!(!pass(&db, &attachments, 2));
         let waiting: i64 = db
             .conn()
             .query_row(
@@ -676,6 +747,58 @@ mod tests {
             )
             .expect("waiting");
         assert_eq!(waiting, 0);
+    }
+
+    #[test]
+    fn a_turn_counted_by_two_passes_is_saved_once() {
+        let db = TestDb::new();
+        let (_dir, attachments) = attachments();
+        let chat = db.chat("/work");
+        db.turn(&chat, "t1", 1, 0);
+        let write = call(
+            "t1.w",
+            "Write",
+            ToolStatus::Completed,
+            json!({"file_path":"a","content":"1\n2\n"}),
+        );
+        db.append(&chat, &[at(0, "t1", 1, &O7Event::ToolCall(write))]);
+        end(&db, "t1");
+        let (first, _) = count_with(db.conn(), &attachments).expect("first");
+        let (second, _) = count_with(db.conn(), &attachments).expect("second");
+        assert_eq!(first, second);
+        save(db.conn(), &first, 1).expect("save");
+        save(db.conn(), &second, 2).expect("save again");
+        assert_eq!(read_all(&db)[0].lines, 2);
+        let counted: Option<i64> = db
+            .conn()
+            .query_row(
+                "SELECT edits_counted_at FROM turns WHERE id = 't1'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("counted");
+        assert_eq!(counted, Some(1));
+    }
+
+    #[test]
+    fn the_newest_turns_are_counted_first() {
+        let db = TestDb::new();
+        let (_dir, attachments) = attachments();
+        let chat = db.chat("/work");
+        for ordinal in 1..=(PASS_TURNS as u32 + 1) {
+            let turn = format!("t{ordinal}");
+            db.turn(&chat, &turn, ordinal, ordinal);
+            db.conn()
+                .execute(
+                    "UPDATE turns SET status = 'completed', started_at = ?2 WHERE id = ?1",
+                    params![turn, i64::from(ordinal)],
+                )
+                .expect("end");
+        }
+        let (counted, more) = count_with(db.conn(), &attachments).expect("count");
+        assert!(more);
+        assert_eq!(counted[0].turn.turn_id, format!("t{}", PASS_TURNS + 1));
+        assert!(counted.iter().all(|turn| turn.turn.turn_id != "t1"));
     }
 
     fn read_all(db: &TestDb) -> Vec<LineEditBucket> {

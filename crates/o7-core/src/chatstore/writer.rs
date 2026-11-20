@@ -200,9 +200,10 @@ pub(crate) enum Request {
         include_archived: bool,
         reply: oneshot::Sender<Result<o7_protocol::search::SearchResults, StoreError>>,
     },
-    /// Counts one pass of ended turns' line edits; answers whether turns still wait.
-    CountLineEdits {
-        reply: oneshot::Sender<Result<bool, StoreError>>,
+    /// Saves the line edits a pass counted off the writer ([`super::line_edits::save`]).
+    SaveLineEdits {
+        counted: Vec<super::line_edits::Counted>,
+        reply: oneshot::Sender<Result<(), StoreError>>,
     },
     ReadLineEdits {
         since: o7_protocol::Millis,
@@ -730,7 +731,7 @@ fn work_name(work: &Work) -> &'static str {
         Work::Request(Request::Conversation { .. }) => "conversation",
         Work::Request(Request::Chats { .. }) => "chats",
         Work::Request(Request::Search { .. }) => "search",
-        Work::Request(Request::CountLineEdits { .. }) => "count_line_edits",
+        Work::Request(Request::SaveLineEdits { .. }) => "save_line_edits",
         Work::Request(Request::ReadLineEdits { .. }) => "read_line_edits",
         Work::Request(Request::LoadChat { .. }) => "load_chat",
         Work::Request(Request::ExportMarkdown { .. }) => "export_markdown",
@@ -1424,13 +1425,12 @@ impl Writer {
                 let _ = reply
                     .send(self.read(|conn| super::search::execute(conn, &query, include_archived)));
             }
-            Request::CountLineEdits { reply } => {
-                let attachments = self.files.attachments.clone();
+            Request::SaveLineEdits { counted, reply } => {
                 let now = now_millis();
                 let result = if matches!(self.mode, Mode::Damaged) {
                     Err(StoreError::Damaged(DAMAGED.into()))
                 } else {
-                    self.write_tx(|conn| super::line_edits::count_pass(conn, &attachments, now))
+                    self.write_tx(|conn| super::line_edits::save(conn, &counted, now))
                 };
                 let _ = reply.send(result);
             }
