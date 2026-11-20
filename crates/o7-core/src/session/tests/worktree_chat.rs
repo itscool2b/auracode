@@ -1166,7 +1166,11 @@ async fn run_starts_the_saved_command_in_the_worktree_with_its_kept_ports() {
     let port = std::ffi::OsString::from(info.port.to_string());
     assert_eq!(
         plan.spec.launch.set_env,
-        [("O7_PORT".into(), port.clone()), ("PORT".into(), port)]
+        [
+            ("O7_PORT".into(), port.clone()),
+            ("AURACODE_PORT".into(), port.clone()),
+            ("PORT".into(), port)
+        ]
     );
     assert_eq!(canonical(&plan.spec.folder), canonical(&preview.path));
     // Like a project terminal, Run holds the worktree: folder operations wait until it stops.
