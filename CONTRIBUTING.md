@@ -6,7 +6,7 @@ change and why.
 
 ## Setting up
 
-[README.md](README.md#development) lists the prerequisites and how to run the app. A development
+[docs/development.md](docs/development.md) lists the prerequisites and how to run the app. A development
 build keeps its data in a folder of its own (`codes.o7.desktop.dev`), so it never touches an
 installed o7.
 
