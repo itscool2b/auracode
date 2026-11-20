@@ -57,7 +57,7 @@ export function PlanCard({
   /** Declines the plan with a note for the agent; resolves once the note is on its way. */
   readonly onAddToPlan?: (declineOptionId: string, note: string) => Promise<void>;
   /**
-   * Settings' Building role, when accepting can hand the plan to it (lib/roles.ts): its name,
+   * The chat's Build with, when accepting can hand the plan to it (lib/roles.ts): its name,
    * and the hand-over, which resolves once the builder has the plan.
    */
   readonly build?: { readonly label: string; readonly onBuild: () => Promise<void> };
@@ -232,7 +232,7 @@ export function PlanCard({
           </div>
           <p className="chat-plan-hint">
             {build
-              ? `Accept and build hands the plan to ${build.label}, your Building model. Accept plan lets ${agentName} implement it.`
+              ? `Accept and build hands the plan to ${build.label}, this chat's Build with. Accept plan lets ${agentName} implement it.`
               : `Accepting lets ${agentName} start implementing.`}
             {onAddToPlan ? " Adding sends your note, and it keeps planning with it." : ""}
           </p>

@@ -1,9 +1,11 @@
 import {
   type ChatMove,
+  type ChatRole,
   commands,
   type ProjectChatCreate,
   type ProjectCreate,
   type ProjectInput,
+  type RoleModel,
   type WorkspaceSnapshot,
 } from "../bindings";
 import { errorMessage } from "./errors";
@@ -17,6 +19,9 @@ export const workspaceApi = {
   addFolder: (id: string, path: string) => settle(commands.projectAddFolder(id, path)),
   rename: (id: string, title: string) => settle(commands.chatRename(id, title)),
   pin: (id: string, pinned: boolean) => settle(commands.chatPin(id, pinned)),
+  /** A chat's Plan with or Build with, or none to clear it. */
+  setRole: (id: string, role: ChatRole, choice: RoleModel | null) =>
+    settle(commands.chatSetRole(id, role, choice)),
   archive: (id: string, archived: boolean) => settle(commands.chatArchive(id, archived)),
   move: (id: string, request: ChatMove) => settle(commands.chatMove(id, request)),
   preview: (folderId: string) => settle(commands.chatCreatePreview(folderId)),

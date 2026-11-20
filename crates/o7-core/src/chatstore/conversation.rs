@@ -379,6 +379,8 @@ fn apply_change(
         .unwrap_or(&apply.source_chat);
     if apply.destination_chat.is_some() {
         conn.execute("INSERT INTO chats (id,project_id,folder_id,title,title_source,active_agent,created_at,updated_at,device_id,agent_host) SELECT ?2,project_id,folder_id,COALESCE(title,'Chat') || ' (fork)','manual',?3,?4,?4,?5,agent_host FROM chats WHERE id=?1 AND deleted=0", params![apply.source_chat,destination,apply.target_agent,now,device])?;
+        // A fork plans and builds with what the chat it came from chose.
+        conn.execute("INSERT INTO chat_roles (chat_id,role,agent,model,effort,updated_at) SELECT ?2,role,agent,model,effort,?3 FROM chat_roles WHERE chat_id=?1", params![apply.source_chat,destination,now])?;
     } else {
         conn.execute(
             "UPDATE chats SET active_agent=?2,updated_at=?3,device_id=?4 WHERE id=?1 AND deleted=0",
@@ -469,6 +471,7 @@ mod image_tests {
         for (chat, hash) in [(&source.id, &owned), (&other.id, &foreign)] {
             store.conn().execute("INSERT INTO composer_attachments(id,chat_id,sha256,display_name,mime,byte_length,created_at) VALUES(?1,?2,?3,'Agent image','image/png',20,1)",params![crate::ids::new_id(),chat,hash]).unwrap();
         }
+        store.conn().execute("INSERT INTO chat_roles(chat_id,role,agent,model,effort,updated_at) VALUES(?1,'build','claude','claude-fable-5-2','high',1)", params![source.id]).unwrap();
         let destination = crate::ids::new_id();
         apply_change(
             store.conn(),
@@ -506,5 +509,21 @@ mod image_tests {
             .collect::<rusqlite::Result<_>>()
             .unwrap();
         assert_eq!(hashes, vec![owned]);
+        let role: (String, String, Option<String>) = store
+            .conn()
+            .query_row(
+                "SELECT role,agent,model FROM chat_roles WHERE chat_id=?1",
+                [&destination],
+                |row| Ok((row.get(0)?, row.get(1)?, row.get(2)?)),
+            )
+            .unwrap();
+        assert_eq!(
+            role,
+            (
+                "build".into(),
+                "claude".into(),
+                Some("claude-fable-5-2".into())
+            )
+        );
     }
 }

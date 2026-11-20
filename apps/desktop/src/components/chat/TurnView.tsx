@@ -26,7 +26,7 @@ export interface TurnActions extends BlobProps {
     declineOptionId: string,
     note: string,
   ) => Promise<void>;
-  /** A plan card's Accept and build with, when Settings' Building role can take the plan. */
+  /** A plan card's Accept and build with, when the chat's Build with can take the plan. */
   readonly planBuild?: PlanBuild;
   /** The chat's agent, as plan cards name it. */
   readonly agentName?: string;

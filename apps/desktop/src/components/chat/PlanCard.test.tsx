@@ -64,7 +64,7 @@ describe("a plan waiting for review", () => {
     expect(html).toContain("Accepting lets Claude Code start implementing.");
   });
 
-  it("offers the Building model first when one can take the plan, and keeps Accept plan", () => {
+  it("offers the chat's Build with first when it can take the plan, and keeps Accept plan", () => {
     const html = renderToStaticMarkup(
       <PermissionCard
         item={item(request())}
@@ -82,7 +82,7 @@ describe("a plan waiting for review", () => {
     expect(html).toMatch(/class="g-button g-button-primary"[^>]*data-testid="plan-build"/);
     expect(html).toMatch(/class="g-button"[^>]*data-testid="permission-option"[^>]*>Accept plan/);
     expect(html).toContain(
-      "Accept and build hands the plan to Codex · gpt-6-astra, your Building model. Accept plan lets Claude Code implement it.",
+      "Accept and build hands the plan to Codex · gpt-6-astra, this chat's Build with. Accept plan lets Claude Code implement it.",
     );
     // An answered plan offers nothing more.
     const answered = renderToStaticMarkup(

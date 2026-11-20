@@ -53,6 +53,7 @@ export function createCustomizeFixture() {
     addFolder: unsupported,
     rename: unsupported,
     pin: unsupported,
+    setRole: unsupported,
     archive: unsupported,
     move: unsupported,
     preview: unsupported,

@@ -1,6 +1,6 @@
 import { PanelLeft } from "lucide-react";
 import { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from "react";
-import type { AppInfo, InstructionsTarget, ProjectSummary, RoleModels } from "../../bindings";
+import type { AppInfo, InstructionsTarget, ProjectSummary } from "../../bindings";
 import {
   availableUpdates,
   chatsWorking,
@@ -180,8 +180,6 @@ export function ChatsScreen({
   // Coordinated projects, an experiment: read with the default agent, so turning it on or off in
   // Settings shows here when the chats come back into view.
   const [coordination, setCoordination] = useState(false);
-  // Settings' models by role, for the open chat: Planning with Plan, Building with a plan.
-  const [roles, setRoles] = useState<RoleModels | null>(null);
   // The project whose page is open in the chat pane's place.
   const [boardProject, setBoardProject] = useState<string | null>(null);
   const members = useCoordinationMembers(coordinator, coordination);
@@ -193,7 +191,6 @@ export function ChatsScreen({
         if (!live) return;
         setDefaultAgent(saved.preferences.general.default_agent);
         setCoordination(saved.preferences.general.coordinated_projects);
-        setRoles(saved.preferences.general.roles ?? null);
         if (!saved.preferences.general.coordinated_projects) setBoardProject(null);
       },
       () => {
@@ -500,7 +497,17 @@ export function ChatsScreen({
             storage={snapshot.storage}
             agents={snapshot.agents}
             onManageAccounts={onAgents}
-            roles={roles}
+            roles={selectedEntry?.roles ?? null}
+            onSetRole={
+              workspace && selectedEntry
+                ? async (role, choice) => {
+                    const outcome = await workspace.perform(() =>
+                      workspace.api.setRole(selectedEntry.chat.id, role, choice),
+                    );
+                    if (!outcome.ok) throw new Error(outcome.error);
+                  }
+                : undefined
+            }
           />
         )}
       </main>

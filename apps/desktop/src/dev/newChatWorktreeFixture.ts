@@ -104,6 +104,7 @@ export function newChatFixture(scenario: NewChatScenario): {
     addFolder: unsupported,
     rename: unsupported,
     pin: unsupported,
+    setRole: unsupported,
     archive: unsupported,
     move: unsupported,
     preview: async () => ({ folder: structuredClone(folder), busy_chats: [] }),

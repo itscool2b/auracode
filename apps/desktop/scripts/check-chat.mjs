@@ -8,6 +8,7 @@ import { fileURLToPath } from "node:url";
 import { parseArgs } from "node:util";
 import AxeBuilder from "@axe-core/playwright";
 import { chromium, webkit } from "playwright";
+import { choose } from "./choose.mjs";
 
 /**
  * Finished turns fold their work under "Worked for" (owner, 4 November 2026). Checks that reach
@@ -810,6 +811,80 @@ async function richAnswer(page, theme) {
     `rich answer, ${theme}`,
   );
 }
+/**
+ * Plan and build, each chat's own (owner, 19 November 2026: models by role are "a chat by chat
+ * thing not a settings thing"): nothing is chosen at first; Plan with applies when Plan turns on;
+ * Build with takes an agent, then its model and thinking level, and takes an accepted plan.
+ */
+async function planAndBuild(page) {
+  const pill = () => page.getByTestId("picker-current-model").first().textContent();
+  await page.goto(`${url}/?preview=settled&agents=lineup`);
+  await page.waitForFunction(
+    () =>
+      document.querySelector('[data-testid="picker-current-model"]')?.textContent === "Sonnet 5.5",
+  );
+  const menu = page.locator(".chat-model-popover").first();
+  await menu.locator(":scope > summary").click();
+  const part = page.getByTestId("chat-picker-roles");
+  const summary = part.getByTestId("chat-picker-roles-summary");
+  assert.equal(await summary.textContent(), "Same model throughout");
+  await part.locator(":scope > summary").click();
+  // Plan with is one of the chat's own agent's models; its thinking waits for a model.
+  assert.equal(await page.getByLabel("Plan with: agent").count(), 0);
+  assert.equal(await page.getByLabel("Plan with: thinking").count(), 0);
+  await choose(page.getByLabel("Plan with: model"), "fable");
+  await choose(page.getByLabel("Plan with: thinking"), "high");
+  await part.getByText("Plan: Fable 5.1 · High").waitFor();
+  // Build with: no model until an agent is chosen; another model clears the thinking level.
+  assert.equal(await page.getByLabel("Build with: model").count(), 0);
+  await choose(page.getByLabel("Build with: agent"), "codex");
+  await choose(page.getByLabel("Build with: model"), "gpt-5.5-mini");
+  await choose(page.getByLabel("Build with: thinking"), "max");
+  await choose(page.getByLabel("Build with: model"), "gpt-5.5-codex");
+  await page.waitForFunction(
+    () =>
+      document.querySelector('[data-testid="chat-picker-roles-summary"]')?.textContent ===
+      "Plan: Fable 5.1 · High, Build: Codex · GPT-5.5 Codex",
+  );
+  // Choosing what is set already changes nothing in the chat itself: it is still on Sonnet.
+  assert.equal(await pill(), "Sonnet 5.5");
+  await page.keyboard.press("Escape");
+  // Turning Plan on puts the chat on its Plan with.
+  await page.locator(".chat-workflow-popover > summary").first().click();
+  await page
+    .locator(".chat-workflow-popover")
+    .first()
+    .getByRole("button", { name: /^Plan/ })
+    .click();
+  await page.waitForFunction(
+    () =>
+      document.querySelector('[data-testid="picker-current-model"]')?.textContent === "Fable 5.1",
+  );
+  // The chat's model again clears Plan with; Build with stays.
+  await menu.locator(":scope > summary").click();
+  if (!(await part.evaluate((element) => element.open)))
+    await part.locator(":scope > summary").click();
+  await choose(page.getByLabel("Plan with: model"), "");
+  await page.waitForFunction(
+    () =>
+      document.querySelector('[data-testid="chat-picker-roles-summary"]')?.textContent ===
+      "Build: Codex · GPT-5.5 Codex",
+  );
+  assert.equal(await page.getByLabel("Plan with: thinking").count(), 0);
+  await page.keyboard.press("Escape");
+  // A plan accepted with Build with on the chat's own agent switches its model and accepts it.
+  await page.goto(`${url}/?preview=plan&roles=1`);
+  const plan = page.locator('[data-kind="plan-approval"]').first();
+  await plan
+    .getByRole("button", { name: "Accept and build with Claude Code · Opus 5.5 · Medium" })
+    .click();
+  await page.getByText("Plan accepted.").first().waitFor();
+  await page.waitForFunction(
+    () =>
+      document.querySelector('[data-testid="picker-current-model"]')?.textContent === "Opus 5.5",
+  );
+}
+
 async function inspect(engine, launcher) {
   const browser = await launcher.launch({ headless: true });
   const errors = [];
@@ -1997,6 +2072,7 @@ async function inspect(engine, launcher) {
       .getByRole("button", { name: "Accept plan" })
       .click();
     await page.getByText("Plan accepted.").first().waitFor();
+    await planAndBuild(page);
 
     await page.setViewportSize({ width: 960, height: 640 });
     await page.goto(`${url}/?preview=permission`);

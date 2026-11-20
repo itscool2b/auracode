@@ -6,6 +6,7 @@ import thinking from "../../../../crates/o7-drivers/tests/fixtures/claude/record
 import type {
   AgentEntry,
   Capabilities,
+  ChatRoles,
   EventBatch,
   O7Event,
   QueuedPrompt,
@@ -32,6 +33,8 @@ import {
   numbered,
   sessionInfo,
 } from "../lib/chat/testing";
+import type { RoleCatalog } from "../lib/roles";
+import { NO_ROLES } from "../lib/roles";
 import { TerminalPanels } from "../lib/terminalPanel";
 import { createAccountsFixture } from "./accountsFixture";
 import { MISSING_FOLDER, missingWorktreeGit } from "./missingWorktreeFixture";
@@ -181,6 +184,46 @@ const LINEUP: readonly AgentEntry[] = [
 ];
 const CHAT_AGENTS: readonly AgentEntry[] =
   new URLSearchParams(location.search).get("agents") === "lineup" ? LINEUP : [AGENT];
+
+/** What the Plan and build part lists for another agent: Claude's preview models, a few of Codex's. */
+const ROLE_CATALOG: RoleCatalog = {
+  models: async (agentId) =>
+    agentId === "claude"
+      ? PREVIEW_MODELS.map(([value, name, description]) => ({
+          value,
+          name,
+          description,
+          group: null,
+        }))
+      : agentId === "codex"
+        ? [
+            { value: "gpt-5.5-codex", name: "GPT-5.5 Codex", description: null, group: null },
+            { value: "gpt-5.5-mini", name: "GPT-5.5 Mini", description: null, group: null },
+          ]
+        : [],
+  thinking: async (agentId) =>
+    agentId === "claude" || agentId === "codex"
+      ? ["low", "medium", "high", "max"].map((value) => ({
+          value,
+          name: value,
+          description: null,
+          group: null,
+        }))
+      : [],
+};
+
+/** `roles=1`: the chat plans on Fable at high and builds on Opus (Codex with `agents=lineup`). */
+function previewRoles(): ChatRoles {
+  const params = new URLSearchParams(location.search);
+  if (!params.has("roles")) return NO_ROLES;
+  return {
+    plan: { agent: "claude", model: "fable", effort: "high" },
+    build:
+      params.get("agents") === "lineup"
+        ? { agent: "codex", model: "gpt-5.5-codex", effort: null }
+        : { agent: "claude", model: "opus", effort: "medium" },
+  };
+}
 
 /** Driver golden events receive only the actor's turn boundaries needed by the real chat store. */
 function recorded(source: { events: readonly { type: string; data: unknown }[] }): O7Event[] {
@@ -895,6 +938,7 @@ function Preview() {
     return () => void terminals.dispose();
   }, [mode, terminals]);
   const scenario = NEW_CHAT_SCENARIOS[mode] ?? null;
+  const [roles, setRoles] = useState<ChatRoles>(previewRoles);
   const [palette, setPalette] = useState(false);
   const [chatCommands, setChatCommands] = useState<readonly PaletteCommand[]>([]);
   const [collapsed, setCollapsed] = useState(false);
@@ -1423,6 +1467,9 @@ function Preview() {
             storage={null}
             agents={CHAT_AGENTS}
             now={now}
+            roles={roles}
+            roleCatalog={ROLE_CATALOG}
+            onSetRole={async (role, choice) => setRoles((value) => ({ ...value, [role]: choice }))}
           />
         )}
       </main>

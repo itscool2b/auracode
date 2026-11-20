@@ -149,6 +149,7 @@ export function mountHeaderLabelsPreview(container: HTMLElement): void {
     addFolder: unavailable,
     rename: unavailable,
     pin: unavailable,
+    setRole: unavailable,
     archive: unavailable,
     move: unavailable,
     preview: unavailable,
