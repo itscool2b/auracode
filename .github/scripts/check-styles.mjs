@@ -11,6 +11,10 @@
  *   each platform grades so text reads the same weight everywhere;
  * - transition and animation times that are not --g-dur-* tokens (0ms and 0s pass).
  *
+ * It also fails, in the app, the website and the shared styles, on a token that nothing defines:
+ * `var(--g-space-10)` with no such step makes the browser drop the whole declaration, silently
+ * (the Update pill lost its padding that way, 19 November 2026).
+ *
  * Custom property definitions are not checked: a value given a name is a token by definition. The
  * allowlist below holds the few justified exceptions, each with its reason.
  *
@@ -217,6 +221,57 @@ export function lintEyebrowsIn(root) {
     );
 }
 
+/*
+ * A custom property that nothing defines. `var(--x)` with no fallback is then invalid at the
+ * moment the browser computes the value, and the whole declaration falls back to nothing: a
+ * padding of two tokens loses both when one of them is misspelt. A reference with a fallback
+ * (`var(--x, 0px)`) is a deliberate "may be unset" and passes.
+ */
+const DEFINITION = /(--[a-zA-Z0-9_-]+)\s*:/g;
+const NAMED_IN_SCRIPT = /["'`](--[a-zA-Z0-9_-]+)["'`]/g;
+const BARE_REFERENCE = /var\(\s*(--[a-zA-Z0-9_-]+)\s*\)/g;
+
+/** The custom properties a stylesheet defines, or a script names (an inline style, setProperty). */
+export function definedIn(text, isStylesheet) {
+  const source = isStylesheet ? stripComments(text) : text;
+  const pattern = isStylesheet ? DEFINITION : NAMED_IN_SCRIPT;
+  return [...source.matchAll(pattern)].map((match) => match[1]);
+}
+
+/** The references in one stylesheet to a custom property outside `defined`. */
+export function lintUndefined(css, file, defined) {
+  const found = [];
+  stripComments(css)
+    .split("\n")
+    .forEach((line, index) => {
+      for (const [, name] of line.matchAll(BARE_REFERENCE)) {
+        if (defined.has(name)) continue;
+        found.push({
+          file,
+          line: index + 1,
+          declaration: line.trim(),
+          problem: `${name} is defined nowhere, so this declaration is dropped`,
+        });
+      }
+    });
+  return found;
+}
+
+/** Every reference to an undefined custom property in the app, the website and the shared styles. */
+export function lintUndefinedIn(root) {
+  const files = ["apps/desktop/src", "apps/web/app", "packages/ui/src"]
+    .map((folder) => resolve(root, folder))
+    .filter((folder) => existsSync(folder))
+    .flatMap((folder) => sources(folder, [".css", ".ts", ".tsx"]))
+    .map((path) => ({ path, text: readFileSync(path, "utf8"), css: path.endsWith(".css") }));
+  const defined = new Set(files.flatMap(({ text, css }) => definedIn(text, css)));
+  return files
+    .filter(({ css }) => css)
+    .flatMap(({ path, text }) =>
+      lintUndefined(text, relative(root, path).split(sep).join("/"), defined),
+    );
+}
+
 if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {
   const root = resolve(process.argv[2] ?? process.cwd());
   try {
@@ -241,6 +296,18 @@ if (process.argv[1] && resolve(process.argv[1]) === fileURLToPath(import.meta.ur
       }
       console.error(
         `${eyebrows.length} eyebrow(s) found. Headings stand on their own: no label above a heading or section (docs/design/visual-language.md).`,
+      );
+      process.exitCode = 1;
+    }
+    const unset = lintUndefinedIn(root);
+    if (unset.length === 0) {
+      console.log("Every token a stylesheet uses is defined.");
+    } else {
+      for (const { file, line, declaration, problem } of unset) {
+        console.error(`${file}:${line}: ${problem}\n    ${declaration}`);
+      }
+      console.error(
+        `${unset.length} reference(s) to a token that does not exist. Use a step the scale has (packages/ui/src/graphite/tokens.css), or give the reference a fallback if it may be unset on purpose.`,
       );
       process.exitCode = 1;
     }

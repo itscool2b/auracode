@@ -110,6 +110,24 @@ try {
         await open("available");
         await pill.waitFor();
         assert.equal((await pill.textContent())?.trim(), "Update");
+        // The word sits inside the pill with room each side, clear of the bell: a token that did
+        // not exist once dropped the pill's padding, and the word ran to its edge.
+        const room = await page.evaluate(() => {
+          const edges = (selector) => document.querySelector(selector).getBoundingClientRect();
+          const [around, arrow, word, bell] = [
+            edges(".app-update-pill"),
+            edges(".app-update-pill > svg"),
+            edges(".app-update-word"),
+            edges('[data-testid="notifications-bell"]'),
+          ];
+          return {
+            left: arrow.left - around.left,
+            right: around.right - word.right,
+            clear: bell.left - around.right,
+          };
+        });
+        assert.ok(room.left >= 8 && room.right >= 8, `the pill's padding: ${JSON.stringify(room)}`);
+        assert.ok(room.clear >= 0, `the pill runs under the bell: ${JSON.stringify(room)}`);
         assert.equal(await calls(page), "", "showing the pill asks for nothing");
         await pill.click();
         await panel.getByRole("heading", { name: "auracode 0.1.1571" }).waitFor();
