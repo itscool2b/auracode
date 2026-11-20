@@ -43,8 +43,8 @@ describe("a tool call's input", () => {
         block: true,
       },
     ]);
-    const command = "cargo test -p aura-core --lib \\\n  onboarding";
-    expect(toolInput(tool("Bash", { command }, [], "cargo test -p aura-core …"))).toEqual([
+    const command = "cargo test -p o7-core --lib \\\n  onboarding";
+    expect(toolInput(tool("Bash", { command }, [], "cargo test -p o7-core …"))).toEqual([
       { key: "command", value: command, block: true },
     ]);
   });

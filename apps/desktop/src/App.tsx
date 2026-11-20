@@ -1,4 +1,4 @@
-import type { AgentBrandId, OrbState } from "@auracode/ui";
+import type { AgentBrandId, OrbState } from "@o7/ui";
 import { MotionConfig } from "motion/react";
 import { useEffect, useRef, useState } from "react";
 import type { AppInfo, InstructionsTarget, StressConfig } from "./bindings";

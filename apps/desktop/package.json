@@ -1,5 +1,5 @@
 {
-  "name": "@auracode/desktop",
+  "name": "@o7/desktop",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -23,7 +23,7 @@
     "icons": "node scripts/app-icons.mjs"
   },
   "dependencies": {
-    "@auracode/ui": "workspace:*",
+    "@o7/ui": "workspace:*",
     "@tanstack/react-virtual": "3.14.22",
     "@tauri-apps/api": "2.12.4",
     "@xterm/addon-fit": "0.11.0",

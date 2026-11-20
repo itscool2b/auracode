@@ -1,4 +1,4 @@
-import { getBrand, monogram, type OrbState, orbPosterBackground } from "@auracode/ui";
+import { getBrand, monogram, type OrbState, orbPosterBackground } from "@o7/ui";
 import {
   ArrowUp,
   ChevronRight,

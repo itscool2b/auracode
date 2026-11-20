@@ -17,19 +17,17 @@ mod end_to_end {
     use std::sync::{Arc, Mutex, PoisonError};
     use std::time::{Duration, Instant};
 
-    use aura_core::paths::DataRoot;
-    use aura_core::session::{FrameSink, SessionManager, SinkGone};
-    use aura_process::{
-        EnvKey, EnvMap, EnvResolver, EnvSource, ResolvedEnv, find_exe, process_env,
-    };
-    use aura_protocol::session::{Availability, HistoryItem, HistoryPage};
-    use aura_protocol::{
-        AuraEvent, Autonomy, EventBatch, NoticeLevel, ResolvedBy, SessionStatus, StopReason,
-        ToolKind, ToolStatus,
-    };
-    use auracode_desktop::boot::{Booted, boot};
-    use auracode_desktop::sessions::{
+    use o7_core::paths::DataRoot;
+    use o7_core::session::{FrameSink, SessionManager, SinkGone};
+    use o7_desktop::boot::{Booted, boot};
+    use o7_desktop::sessions::{
         ChatRuntime, Outside, QUIT_SESSIONS_DEADLINE, QUIT_STORE_DEADLINE, RUN_DIR, start_chats,
+    };
+    use o7_process::{EnvKey, EnvMap, EnvResolver, EnvSource, ResolvedEnv, find_exe, process_env};
+    use o7_protocol::session::{Availability, HistoryItem, HistoryPage};
+    use o7_protocol::{
+        Autonomy, EventBatch, NoticeLevel, O7Event, ResolvedBy, SessionStatus, StopReason,
+        ToolKind, ToolStatus,
     };
     use tokio::runtime::Handle;
 
@@ -260,7 +258,7 @@ mod end_to_end {
         let mut open = false;
         for item in items {
             match &item.event {
-                AuraEvent::TurnStarted { turn_id, prompt_id } => {
+                O7Event::TurnStarted { turn_id, prompt_id } => {
                     open = true;
                     turns.push(Turn {
                         turn_id: turn_id.clone(),
@@ -271,7 +269,7 @@ mod end_to_end {
                         stop: None,
                     });
                 }
-                AuraEvent::TurnEnded {
+                O7Event::TurnEnded {
                     turn_id,
                     stop_reason,
                     ..
@@ -284,9 +282,9 @@ mod end_to_end {
                 event if open => {
                     let turn = turns.last_mut().expect("a turn");
                     match event {
-                        AuraEvent::UserMessageDelta { text, .. } => turn.user.push_str(text),
-                        AuraEvent::MessageDelta { text, .. } => turn.reply.push_str(text),
-                        AuraEvent::ToolCall(call) => turn.tools.push(call.kind),
+                        O7Event::UserMessageDelta { text, .. } => turn.user.push_str(text),
+                        O7Event::MessageDelta { text, .. } => turn.reply.push_str(text),
+                        O7Event::ToolCall(call) => turn.tools.push(call.kind),
                         _ => {}
                     }
                 }
@@ -328,7 +326,7 @@ mod end_to_end {
     }
 
     /// Waits until the live frames hold an event that `found` picks.
-    async fn wait_for_event(view: &View, what: &str, found: impl Fn(&AuraEvent) -> bool) {
+    async fn wait_for_event(view: &View, what: &str, found: impl Fn(&O7Event) -> bool) {
         let deadline = Instant::now() + STEP;
         while !view.items().iter().any(|item| found(&item.event)) {
             assert!(
@@ -376,8 +374,8 @@ mod end_to_end {
         let mut start = None;
         for item in items {
             match &item.event {
-                AuraEvent::TurnStarted { turn_id, .. } => start = Some((turn_id.clone(), item.seq)),
-                AuraEvent::TurnEnded { .. } => {
+                O7Event::TurnStarted { turn_id, .. } => start = Some((turn_id.clone(), item.seq)),
+                O7Event::TurnEnded { .. } => {
                     let (turn_id, from) = start.take().expect("a turn ends after it starts");
                     spans.push((turn_id, from, item.seq));
                 }
@@ -573,7 +571,7 @@ mod end_to_end {
             .await
             .expect("the prompt is taken");
         wait_for_event(&chat.view, "the agent's first words", |event| {
-            matches!(event, AuraEvent::MessageDelta { .. })
+            matches!(event, O7Event::MessageDelta { .. })
         })
         .await;
         chats
@@ -605,7 +603,7 @@ mod end_to_end {
         assert_eq!(stored[0].stop, Some(StopReason::Interrupted));
         assert!(page.items.iter().any(|item| matches!(
             &item.event,
-            AuraEvent::Notice { level: NoticeLevel::Warning, message }
+            O7Event::Notice { level: NoticeLevel::Warning, message }
                 if message == "Force stopped: o7 ended the agent's processes."
         )));
         assert_eq!(stored, turns(&chat.view.items()), "stored and live agree");
@@ -639,7 +637,7 @@ mod end_to_end {
             .expect("the second prompt is taken");
         wait_for_ended_turns(&chat.view, 2).await;
         wait_for_event(&chat.view, "the background permission request", |event| {
-            matches!(event, AuraEvent::PermissionRequested(_))
+            matches!(event, O7Event::PermissionRequested(_))
         })
         .await;
         wait_for_status(&chats.manager, &chat.id, SessionStatus::Ready).await;
@@ -655,30 +653,30 @@ mod end_to_end {
         let update = page
             .items
             .iter()
-            .find(|item| matches!(&item.event, AuraEvent::ToolUpdate(update) if update.tool_call_id.ends_with(".watch")))
+            .find(|item| matches!(&item.event, O7Event::ToolUpdate(update) if update.tool_call_id.ends_with(".watch")))
             .expect("the late tool update is stored");
         let request = page
             .items
             .iter()
-            .find(|item| matches!(item.event, AuraEvent::PermissionRequested(_)))
+            .find(|item| matches!(item.event, O7Event::PermissionRequested(_)))
             .expect("the background request is stored");
         assert_eq!(update.turn_id, None, "the late update is untagged");
         assert_eq!(request.turn_id, None, "the background request is untagged");
         assert!(
-            matches!(&update.event, AuraEvent::ToolUpdate(update) if update.status == Some(ToolStatus::Completed))
+            matches!(&update.event, O7Event::ToolUpdate(update) if update.status == Some(ToolStatus::Completed))
         );
         assert!(
             update.seq > spans[0].2 && request.seq > spans[0].2,
             "background output follows its originating turn, untagged: {update:?} in {spans:?}"
         );
         assert_tagged(&page, &[update.seq, request.seq]);
-        let AuraEvent::PermissionRequested(asked) = &request.event else {
+        let O7Event::PermissionRequested(asked) = &request.event else {
             unreachable!("found as a permission request");
         };
         assert!(
             !page.items.iter().any(|item| matches!(
                 &item.event,
-                AuraEvent::PermissionResolved { request_id, .. } if *request_id == asked.request_id
+                O7Event::PermissionResolved { request_id, .. } if *request_id == asked.request_id
             )),
             "the background card survives the second turn's end"
         );
@@ -690,14 +688,14 @@ mod end_to_end {
             .await
             .expect("the answer");
         wait_for_event(&chat.view, "the watcher's notice", |event| {
-            matches!(event, AuraEvent::Notice { message, .. } if message == "The watcher wrote its cache.")
+            matches!(event, O7Event::Notice { message, .. } if message == "The watcher wrote its cache.")
         })
         .await;
         let page = history(&chats, &chat.id).await;
         assert!(page.items.iter().any(|item| item.turn_id.is_none()
             && matches!(
                 &item.event,
-                AuraEvent::PermissionResolved { request_id, by: ResolvedBy::User, .. }
+                O7Event::PermissionResolved { request_id, by: ResolvedBy::User, .. }
                     if *request_id == asked.request_id
             )));
         assert_eq!(

@@ -130,10 +130,10 @@ is no longer needed.
 
 ## Verification
 
-- `cargo test -p auracode-desktop --lib dictation`: capture, conversion, voice detection, live
+- `cargo test -p o7-desktop --lib dictation`: capture, conversion, voice detection, live
   agreement, settling, the finishing window, zeroing, operation ownership and the model pins (16
   tests). The opt-in `bundled_models_transcribe_fixture_audio_live` runs the bundled models over
-  every 16 kHz mono WAV in `AURACODE_DICTATION_FIXTURE_DIR` as the microphone would deliver it, and
+  every 16 kHz mono WAV in `O7_DICTATION_FIXTURE_DIR` as the microphone would deliver it, and
   prints the live updates, timing and final text (`-- --ignored --nocapture`).
 - `vitest run src/lib/dictation.test.ts`: the controller (live text, the bounded waveform, finishing,
   cancelling, late results, kept words, failures) and insertion at the selection.

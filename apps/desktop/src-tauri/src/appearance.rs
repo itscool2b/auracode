@@ -1,6 +1,6 @@
 //! The active profile controls native menus and window materials as well as the web UI.
 
-use aura_core::onboarding::AppearancePreference;
+use o7_core::onboarding::AppearancePreference;
 use tauri::{AppHandle, Manager, Theme};
 
 use crate::state::AppState;

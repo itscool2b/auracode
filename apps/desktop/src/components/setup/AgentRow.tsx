@@ -1,4 +1,4 @@
-import { AgentMark, StatusDot } from "@auracode/ui/graphite";
+import { AgentMark, StatusDot } from "@o7/ui/graphite";
 import { ArrowUpRight, Check, Ellipsis } from "lucide-react";
 import {
   type CSSProperties,

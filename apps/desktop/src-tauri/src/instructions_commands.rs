@@ -8,8 +8,8 @@ use std::{
     sync::{Arc, Mutex},
 };
 
-use aura_config::instructions::{self, ApplyResult, Change, Prepared, Review, Snapshot, Target};
-use aura_protocol::worktree_setup::WorktreeSetup;
+use o7_config::instructions::{self, ApplyResult, Change, Prepared, Review, Snapshot, Target};
+use o7_protocol::worktree_setup::WorktreeSetup;
 use tauri::State;
 
 use crate::{
@@ -43,7 +43,7 @@ impl InstructionsService {
     }
 }
 
-fn config_error(error: aura_config::Error) -> AppError {
+fn config_error(error: o7_config::Error) -> AppError {
     AppError::new(AppErrorCode::InvalidArgument, error.to_string())
 }
 
@@ -149,9 +149,9 @@ pub async fn instructions_apply(
     let pending = service
         .lock()
         .remove(&id)
-        .ok_or_else(|| config_error(aura_config::Error::Stale))?;
+        .ok_or_else(|| config_error(o7_config::Error::Stale))?;
     if !pending.generation.is_current() || pending.prepared.is_expired() {
-        return Err(config_error(aura_config::Error::Stale));
+        return Err(config_error(o7_config::Error::Stale));
     }
     let gate = Arc::clone(&library.mutation);
     // Apply outlives the webview that asked: the task owns the gate and the transaction.

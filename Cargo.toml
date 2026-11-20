@@ -14,18 +14,18 @@ edition = "2024"
 rust-version = "1.95"
 authors = ["itscool2b"]
 license = "MIT"
-repository = "https://github.com/itscool2b/auracode"
+repository = "https://github.com/itscool2b/o7"
 publish = false
 
 [workspace.dependencies]
 # internal
-aura-protocol = { path = "crates/aura-protocol" }
-aura-process = { path = "crates/aura-process" }
-aura-agents = { path = "crates/aura-agents" }
-aura-core = { path = "crates/aura-core" }
-aura-drivers = { path = "crates/aura-drivers" }
-aura-config = { path = "crates/aura-config" }
-aura-remote = { path = "crates/aura-remote" }
+o7-protocol = { path = "crates/o7-protocol" }
+o7-process = { path = "crates/o7-process" }
+o7-agents = { path = "crates/o7-agents" }
+o7-core = { path = "crates/o7-core" }
+o7-drivers = { path = "crates/o7-drivers" }
+o7-config = { path = "crates/o7-config" }
+o7-remote = { path = "crates/o7-remote" }
 
 # async + errors + logging
 # `signal`: the desktop's quit flow listens for SIGTERM, SIGINT and SIGHUP.

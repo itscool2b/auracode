@@ -1,4 +1,4 @@
-import { LOGO_EYE_PATHS, LOGO_OUTLINE_PATH, LOGO_VIEWBOX } from "@auracode/ui/graphite";
+import { LOGO_EYE_PATHS, LOGO_OUTLINE_PATH, LOGO_VIEWBOX } from "@o7/ui/graphite";
 import { type RefObject, useEffect, useId, useRef } from "react";
 
 const REDUCED = "(prefers-reduced-motion: reduce)";

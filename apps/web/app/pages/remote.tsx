@@ -1,4 +1,4 @@
-import { AgentMark, Logo, PixelLoader, StatusDot } from "@auracode/ui/graphite";
+import { AgentMark, Logo, PixelLoader, StatusDot } from "@o7/ui/graphite";
 import {
   type FormEvent,
   memo,
@@ -37,7 +37,7 @@ import { Markdown } from "../remote/markdown";
 import { ChatPickers } from "../remote/pickers";
 import { keepsPairings } from "../remote/storage";
 // The desktop's themes, one per agent: the page wears the one its computer wears.
-import "@auracode/ui/themes.css";
+import "@o7/ui/themes.css";
 import "../styles/remote.css";
 
 export const meta = () => [

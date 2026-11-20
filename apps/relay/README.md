@@ -9,7 +9,7 @@ It is TypeScript where the other Workers are Rust: Durable Object WebSocket hibe
 there, and this Worker only forwards. Every decision about who may do what is made on the computer.
 
 ```powershell
-corepack pnpm --filter @auracode/relay worker:test    # the relay in the Workers runtime
-corepack pnpm --filter @auracode/relay worker:e2e     # relay, service, remote page and a bot
-corepack pnpm --filter @auracode/relay exec wrangler deploy --env production
+corepack pnpm --filter @o7/relay worker:test    # the relay in the Workers runtime
+corepack pnpm --filter @o7/relay worker:e2e     # relay, service, remote page and a bot
+corepack pnpm --filter @o7/relay exec wrangler deploy --env production
 ```

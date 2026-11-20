@@ -3,12 +3,12 @@ use crate::{
     error::{AppError, AppErrorCode},
     state::AppState,
 };
-use aura_core::cloning::Clones;
-use aura_protocol::setup_actions::{CloneCheck, CloneInput, CloneRecord, CloneRecovery};
+use o7_core::cloning::Clones;
+use o7_protocol::setup_actions::{CloneCheck, CloneInput, CloneRecord, CloneRecovery};
 use std::sync::Arc;
 use tauri::{State, Webview};
 
-fn error(value: aura_core::cloning::CloneError) -> AppError {
+fn error(value: o7_core::cloning::CloneError) -> AppError {
     AppError::new(AppErrorCode::InvalidArgument, value.to_string())
 }
 fn current(webview: &Webview, state: &AppState) -> Result<(), AppError> {

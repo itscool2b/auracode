@@ -3,7 +3,7 @@
 //! question while saving is paused and its signals, and the answers of the folder picker and "Show
 //! log".
 //!
-//! Everything here is glue over aura-core's [`SessionManager`]. The parts with decisions in them are
+//! Everything here is glue over o7-core's [`SessionManager`]. The parts with decisions in them are
 //! written against small seams ([`QuitHost`], [`SignalHost`], [`Outside`], plain closures), so their
 //! tests drive them with fakes instead of a running app.
 //!
@@ -32,21 +32,21 @@ use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
-use aura_agents::Detector;
-use aura_core::chatstore::ChatStore;
-use aura_core::profile::Profile;
-use aura_core::session::{
+use o7_agents::Detector;
+use o7_core::chatstore::ChatStore;
+use o7_core::profile::Profile;
+use o7_core::session::{
     FrameSink, ManagerDeps, ManagerLimits, SessionManager, SessionTimings, ShutdownSummary,
     SinkGone, StatusSink,
 };
-use aura_drivers::driver::DriverFactory;
-use aura_drivers::factory::StandardDriverFactory;
-use aura_process::{
+use o7_drivers::driver::DriverFactory;
+use o7_drivers::factory::StandardDriverFactory;
+use o7_process::{
     EnvResolver, EnvResolverConfig, LeftoverRegistry, LogFactory, ProcessSpawner, Redactor,
     RetentionPolicy, Spawner, SweepReport, sweep_stale,
 };
-use aura_protocol::EventBatch;
-use aura_protocol::session::{ChatStatusUpdate, PauseReason, StorageState, StorageStatus};
+use o7_protocol::EventBatch;
+use o7_protocol::session::{ChatStatusUpdate, PauseReason, StorageState, StorageStatus};
 use tauri::ipc::Channel;
 use tauri::webview::PageLoadEvent;
 use tokio::runtime::Handle;
@@ -440,9 +440,9 @@ pub(crate) fn start_profile_chats(
         }
     });
     let worktrees =
-        aura_core::gitworkspaces::GitWorkspaces::new(&profile, env.clone(), registry.clone());
+        o7_core::gitworkspaces::GitWorkspaces::new(&profile, env.clone(), registry.clone());
     let checkpoints =
-        aura_core::checkpoints::Checkpoints::new(&profile, env.clone(), registry.clone());
+        o7_core::checkpoints::Checkpoints::new(&profile, env.clone(), registry.clone());
     let manager = SessionManager::new(ManagerDeps {
         worktrees: Some(worktrees),
         checkpoints: Some(checkpoints),
@@ -461,11 +461,11 @@ pub(crate) fn start_profile_chats(
     });
     // Added agent accounts keep their tokens in secure storage and their names in a plain file.
     let tokens = crate::agent_account_commands::ProfileTokens::open()
-        .map(|tokens| Arc::new(tokens) as Arc<dyn aura_core::agent_accounts::TokenVault>);
+        .map(|tokens| Arc::new(tokens) as Arc<dyn o7_core::agent_accounts::TokenVault>);
     // Usage percentages and reset times only.
     manager.persist_agent_usage(&profile.dir.join("agent-usage.json"));
     manager.set_agent_accounts(Some(Arc::new(
-        aura_core::agent_accounts::AgentAccountsStore::open(&profile.dir, tokens),
+        o7_core::agent_accounts::AgentAccountsStore::open(&profile.dir, tokens),
     )));
     Some(ChatRuntime {
         store,
@@ -911,7 +911,7 @@ impl QuitHost for AppQuitHost<'_> {
     }
     async fn flush_drafts(&self) -> bool {
         use tauri::{Emitter as _, Listener as _};
-        let token = aura_core::ids::new_id();
+        let token = o7_core::ids::new_id();
         let expected = token.clone();
         let (reply, answer) = tokio::sync::oneshot::channel();
         let reply = Mutex::new(Some(reply));
@@ -970,7 +970,7 @@ impl QuitHost for AppQuitHost<'_> {
         use tauri::{Emitter as _, Listener as _};
         // The window comes forward and asks with its own dark dialog, Keep open focused.
         crate::window::focus_main(self.app);
-        let token = aura_core::ids::new_id();
+        let token = o7_core::ids::new_id();
         let (shown_tx, shown) = tokio::sync::oneshot::channel();
         let (answer_tx, answer) = tokio::sync::oneshot::channel();
         let shown_tx = Mutex::new(Some(shown_tx));
@@ -1333,11 +1333,11 @@ pub fn is_plain_id(id: &str) -> bool {
 #[cfg(test)]
 pub(crate) mod testing {
     use super::*;
-    use aura_agents::FixedAgent;
-    use aura_drivers::testing::ScriptedDriverFactory;
-    use aura_process::testing::FakeSpawner;
-    use aura_process::{EnvMap, EnvSource, ResolvedEnv};
-    use aura_protocol::session::Availability;
+    use o7_agents::FixedAgent;
+    use o7_drivers::testing::ScriptedDriverFactory;
+    use o7_process::testing::FakeSpawner;
+    use o7_process::{EnvMap, EnvSource, ResolvedEnv};
+    use o7_protocol::session::Availability;
 
     /// Nothing that reaches outside: a fixed env, the demo agent through a fixed detector, fake
     /// processes, no drivers.
@@ -1357,7 +1357,7 @@ pub(crate) mod testing {
             warnings: Vec::new(),
             resolved_at_ms: 0,
         });
-        let mock = aura_agents::get("mock").expect("the demo agent").clone();
+        let mock = o7_agents::get("mock").expect("the demo agent").clone();
         let detector = Detector::fixed(vec![FixedAgent::new(
             mock,
             Availability::Ready {
@@ -1385,8 +1385,8 @@ pub(crate) mod testing {
 mod tests {
     use std::sync::atomic::AtomicUsize;
 
-    use aura_core::paths::DataRoot;
-    use aura_core::store::OpenOutcome;
+    use o7_core::paths::DataRoot;
+    use o7_core::store::OpenOutcome;
     use tauri::ipc::InvokeResponseBody;
 
     use super::*;
@@ -1396,8 +1396,8 @@ mod tests {
         EventBatch {
             chat_id: chat.into(),
             seq_start: seq,
-            events: vec![aura_protocol::AuraEvent::Notice {
-                level: aura_protocol::NoticeLevel::Info,
+            events: vec![o7_protocol::O7Event::Notice {
+                level: o7_protocol::NoticeLevel::Info,
                 message: format!("frame {seq}"),
             }],
         }
@@ -1453,7 +1453,7 @@ mod tests {
             StatusChannelSink::new(recording(&seen, &fail), "main", pages.for_status("main"));
         let update = ChatStatusUpdate {
             chat_id: "c1".into(),
-            status: aura_protocol::SessionStatus::Ready,
+            status: o7_protocol::SessionStatus::Ready,
             needs_attention: false,
             title: None,
             updated_at: 1,
@@ -1512,7 +1512,7 @@ mod tests {
             |label: &str| ChannelSink::new(recording(&seen, &fail), label, pages.for_view(label));
         let update = ChatStatusUpdate {
             chat_id: "c1".into(),
-            status: aura_protocol::SessionStatus::Stopped,
+            status: o7_protocol::SessionStatus::Stopped,
             needs_attention: false,
             title: None,
             updated_at: 0,
@@ -1711,7 +1711,7 @@ mod tests {
 
     #[tokio::test]
     async fn a_failed_startup_starts_no_chats() {
-        let mut booted = boot(Err(aura_core::CoreError::NoDataDir));
+        let mut booted = boot(Err(o7_core::CoreError::NoDataDir));
         assert!(testing::start(&mut booted).is_none());
         assert!(booted.fatal.is_some());
     }
@@ -2432,7 +2432,7 @@ mod tests {
 
     /// Marks the re-executed copy of the test binary that receives real signals.
     #[cfg(unix)]
-    const SIGNAL_CHILD: &str = "AURACODE_DESKTOP_TEST_SIGNAL_CHILD";
+    const SIGNAL_CHILD: &str = "O7_DESKTOP_TEST_SIGNAL_CHILD";
 
     /// Real signals, in a child copy of the test binary: once the handlers are installed, SIGTERM
     /// asks for the quit flow; after the user keeps o7 open, SIGHUP asks for it again; and

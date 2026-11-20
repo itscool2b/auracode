@@ -90,7 +90,7 @@ describe("the settled turn", () => {
     expect(shown).toContain("Thought for 6s");
     expect(shown).toContain("Read 2 files, searched 1 pattern");
     expect(shown).toContain("Edited 2 files");
-    expect(shown).toContain("Ran pnpm --filter @auracode/ui test pacing 19 passed");
+    expect(shown).toContain("Ran pnpm --filter @o7/ui test pacing 19 passed");
     expect(shown).toContain("Plan complete 3 of 3 steps");
   });
 
@@ -123,7 +123,7 @@ describe("the streaming turn", () => {
     const shown = text(html);
     // The open command is one block whose header is its row: said once, and opening it moves
     // nothing. Its output unfolds under the row while it runs.
-    expect(shown.match(/Running pnpm --filter @auracode\/ui test pacing/g)).toHaveLength(1);
+    expect(shown.match(/Running pnpm --filter @o7\/ui test pacing/g)).toHaveLength(1);
     expect(shown).toContain("vitest run pacing");
     expect(html).toContain('class="o-call o-cmd" data-open=""');
     // The agent's live mark is in the command's gutter, not on a line of its own.

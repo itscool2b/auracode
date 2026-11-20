@@ -1,4 +1,4 @@
-import { AGENT_BRANDS, type AgentBrandId } from "@auracode/ui";
+import { AGENT_BRANDS, type AgentBrandId } from "@o7/ui";
 import { type CSSProperties, useState } from "react";
 import { NewChatView } from "./Scenes";
 import { AGENTS, SpriteMark } from "./Sprite";

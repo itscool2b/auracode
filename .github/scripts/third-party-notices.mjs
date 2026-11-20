@@ -193,7 +193,7 @@ export function collect() {
         { cwd: root, encoding: "utf8", maxBuffer: 64 * 1024 * 1024, windowsHide: true },
       ),
     );
-    for (const pkg of runtimePackages(metadata, "auracode-desktop")) {
+    for (const pkg of runtimePackages(metadata, "o7-desktop")) {
       const directory = dirname(pkg.manifest_path);
       const source = `https://crates.io/api/v1/crates/${pkg.name}/${pkg.version}/download`;
       let files = installedFiles(directory, source);

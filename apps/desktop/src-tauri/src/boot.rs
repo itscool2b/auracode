@@ -1,19 +1,19 @@
 //! The startup sequence: data root, device identity, active profile, the profile's owner lock,
 //! profile database.
 //!
-//! [`boot`] never fails and never panics. Repairs aura-core made on the way (a recreated device
+//! [`boot`] never fails and never panics. Repairs o7-core made on the way (a recreated device
 //! identity, a quarantined database, a migration) become notices; the first step that cannot
 //! complete becomes the fatal error the UI shows on its error screen, with the data path, instead
 //! of the app crashing before a window exists.
 //!
-//! The data root is aura-core's [`DataRoot::resolve`] and nothing else ([`startup`]): the folder in
-//! `AURACODE_DATA_DIR`, or `si.auracode.desktop` in the local app data folder
-//! (`si.auracode.desktop.dev` for a development build, so a build from a working copy never opens
+//! The data root is o7-core's [`DataRoot::resolve`] and nothing else ([`startup`]): the folder in
+//! `O7_DATA_DIR`, or `codes.o7.desktop` in the local app data folder
+//! (`codes.o7.desktop.dev` for a development build, so a build from a working copy never opens
 //! the installed app's data). The CLI resolves the same one, so both always open the same profile.
 //! Tauri's path API is not consulted: its `app_data_dir()` is Roaming AppData on Windows, which
 //! managed machines copy between PCs, and `device.json` and the databases must never travel. Its
 //! `app_local_data_dir()` is an installed build's default root, because tauri.conf.json's
-//! identifier is aura-core's `APP_IDENTIFIER` (`config_checks.rs` holds them together), so the
+//! identifier is o7-core's `APP_IDENTIFIER` (`config_checks.rs` holds them together), so the
 //! WebView data Tauri keeps there on Windows and Linux sits beside ours. Any other folder gets the
 //! WebView data inside it (`LaunchOptions::webview_data_dir`).
 //!
@@ -23,11 +23,11 @@
 
 use std::path::PathBuf;
 
-use aura_core::device::{DeviceIdentity, DeviceLoad};
-use aura_core::owner::ProfileOwner;
-use aura_core::paths::DataRoot;
-use aura_core::profile::{Profile, ProfileMeta, Profiles};
-use aura_core::store::{OpenOutcome, Salvage, Store};
+use o7_core::device::{DeviceIdentity, DeviceLoad};
+use o7_core::owner::ProfileOwner;
+use o7_core::paths::DataRoot;
+use o7_core::profile::{Profile, ProfileMeta, Profiles};
+use o7_core::store::{OpenOutcome, Salvage, Store};
 use serde::Serialize;
 
 use crate::integrity;
@@ -44,7 +44,7 @@ pub struct DbInfo {
 /// A database repair whose notice the user has not dismissed yet.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Recovery {
-    /// Where aura-core moved the damaged database, exactly as
+    /// Where o7-core moved the damaged database, exactly as
     /// [`OpenOutcome::RecoveredFromCorruption`] reported it: the only path the shell ever hands
     /// back to [`Store::acknowledge_recovery`]. The page cannot name one.
     pub quarantined: String,
@@ -59,7 +59,7 @@ pub struct Booted {
     pub data_dir: Option<PathBuf>,
     pub device: Option<DeviceIdentity>,
     pub profile: Option<ProfileMeta>,
-    /// The active profile's folder (`ProfileMeta` and this make an `aura_core::profile::Profile`).
+    /// The active profile's folder (`ProfileMeta` and this make an `o7_core::profile::Profile`).
     pub profile_dir: Option<PathBuf>,
     pub store: Option<Store>,
     /// This process owns the profile's sessions while this lives. Taken before the store opened;
@@ -81,13 +81,13 @@ pub struct Booted {
     pub fatal: Option<String>,
 }
 
-/// Runs the startup sequence on the data root aura-core resolves: the one the app uses.
+/// Runs the startup sequence on the data root o7-core resolves: the one the app uses.
 pub fn startup() -> Booted {
     boot(DataRoot::resolve())
 }
 
 /// Runs the startup sequence on `root`.
-pub fn boot(root: aura_core::Result<DataRoot>) -> Booted {
+pub fn boot(root: o7_core::Result<DataRoot>) -> Booted {
     boot_selected(root, None)
 }
 
@@ -97,7 +97,7 @@ pub(crate) fn boot_profile(root: DataRoot, profile: Profile) -> Booted {
     boot_selected(Ok(root), Some(profile))
 }
 
-fn boot_selected(root: aura_core::Result<DataRoot>, selected: Option<Profile>) -> Booted {
+fn boot_selected(root: o7_core::Result<DataRoot>, selected: Option<Profile>) -> Booted {
     let preparing = selected.is_some();
     let mut booted = Booted {
         data_dir: None,
@@ -154,8 +154,8 @@ fn boot_selected(root: aura_core::Result<DataRoot>, selected: Option<Profile>) -
         Ok((store, info)) => {
             if preparing && info.unclean_shutdown {
                 match store.check_integrity() {
-                    Ok(aura_core::store::Integrity::Ok) => {}
-                    Ok(aura_core::store::Integrity::Damaged { .. }) => {
+                    Ok(o7_core::store::Integrity::Ok) => {}
+                    Ok(o7_core::store::Integrity::Damaged { .. }) => {
                         booted.fatal = Some("The selected profile needs database recovery. Existing data was preserved.".into());
                         return booted;
                     }
@@ -221,7 +221,7 @@ pub(crate) fn boot_next(root: &DataRoot) -> Booted {
     }
 }
 
-/// The notice for a database aura-core had to repair: how much of it the new database holds, and
+/// The notice for a database o7-core had to repair: how much of it the new database holds, and
 /// where the damaged original is, since whatever the copy lacks is only there.
 pub fn recovery_notice(quarantined: &str, salvage: &Salvage) -> String {
     match salvage {
@@ -242,9 +242,9 @@ pub fn recovery_notice(quarantined: &str, salvage: &Salvage) -> String {
 }
 
 impl Booted {
-    fn fail(mut self, step: &str, error: &aura_core::CoreError) -> Booted {
+    fn fail(mut self, step: &str, error: &o7_core::CoreError) -> Booted {
         tracing::error!(%error, step, "startup could not complete");
-        // aura-core's messages are complete sentences; keep them verbatim.
+        // o7-core's messages are complete sentences; keep them verbatim.
         self.fatal = Some(error.to_string());
         self
     }
@@ -256,7 +256,7 @@ mod tests {
     use std::fs;
     use std::path::Path;
 
-    use aura_core::paths::DATA_DIR_ENV;
+    use o7_core::paths::DATA_DIR_ENV;
 
     use crate::test_support::run_child;
 
@@ -298,11 +298,11 @@ mod tests {
         assert!(booted.device.is_some());
         assert_eq!(
             booted.profile.as_ref().map(|p| p.id.as_str()),
-            Some(aura_core::profile::LOCAL_PROFILE_ID)
+            Some(o7_core::profile::LOCAL_PROFILE_ID)
         );
         let db = booted.db.expect("db info");
         assert_eq!(db.outcome, OpenOutcome::Created);
-        assert_eq!(db.schema_version, aura_core::store::SCHEMA_VERSION);
+        assert_eq!(db.schema_version, o7_core::store::SCHEMA_VERSION);
         assert!(booted.store.is_some());
     }
 
@@ -478,7 +478,7 @@ mod tests {
             fatal.starts_with("o7 is already running with the profile in "),
             "{fatal}"
         );
-        assert!(fatal.contains("AURACODE_DATA_DIR"), "{fatal}");
+        assert!(fatal.contains("O7_DATA_DIR"), "{fatal}");
         assert!(second.store.is_none(), "the database was not opened");
         assert!(second.owner.is_none());
         assert!(
@@ -508,9 +508,9 @@ mod tests {
 
     #[test]
     fn no_data_folder_at_all_is_fatal() {
-        let booted = boot(Err(aura_core::CoreError::NoDataDir));
+        let booted = boot(Err(o7_core::CoreError::NoDataDir));
         let fatal = booted.fatal.expect("fatal error");
-        assert!(fatal.contains("AURACODE_DATA_DIR"), "{fatal}");
+        assert!(fatal.contains("O7_DATA_DIR"), "{fatal}");
         assert_eq!(booted.data_dir, None);
         assert_eq!(booted.recovery, None);
         assert_eq!(booted.integrity_check, None);
@@ -521,15 +521,15 @@ mod tests {
         root.join("device.json").is_file()
             && root
                 .join("profiles")
-                .join(aura_core::profile::LOCAL_PROFILE_ID)
+                .join(o7_core::profile::LOCAL_PROFILE_ID)
                 .join("aura.db")
                 .is_file()
     }
 
     /// Marks a re-executed copy of the test binary; holds the root that child should start in.
-    const CHILD_EXPECTS: &str = "AURACODE_DESKTOP_TEST_EXPECTED_ROOT";
+    const CHILD_EXPECTS: &str = "O7_DESKTOP_TEST_EXPECTED_ROOT";
 
-    /// The app starts exactly where aura-core (and so the CLI) resolves, `AURACODE_DATA_DIR`
+    /// The app starts exactly where o7-core (and so the CLI) resolves, `O7_DATA_DIR`
     /// included, which is what lets a smoke run start in a throwaway folder.
     #[test]
     fn startup_uses_the_data_root_aura_core_resolves() {
@@ -557,15 +557,15 @@ mod tests {
 
     /// Marks the child of the next test; holds its throwaway home folder.
     #[cfg(not(windows))]
-    const CHILD_HOME: &str = "AURACODE_DESKTOP_TEST_THROWAWAY_HOME";
+    const CHILD_HOME: &str = "O7_DESKTOP_TEST_THROWAWAY_HOME";
 
-    /// Without `AURACODE_DATA_DIR` the app starts in its default folder in the local app data
-    /// folder: `si.auracode.desktop`, the folder Tauri's `app_local_data_dir()` names, for an
-    /// installed build, and `si.auracode.desktop.dev` for this development build. The child gets a
+    /// Without `O7_DATA_DIR` the app starts in its default folder in the local app data
+    /// folder: `codes.o7.desktop`, the folder Tauri's `app_local_data_dir()` names, for an
+    /// installed build, and `codes.o7.desktop.dev` for this development build. The child gets a
     /// throwaway home folder, which is what the local app data folder is built from on macOS and
     /// Linux, so it boots there instead of in the user's real data. Windows looks its known
     /// folders up without the environment, so this cannot run there without touching real data;
-    /// aura-core's tests pin the local (never roaming) folder there.
+    /// o7-core's tests pin the local (never roaming) folder there.
     #[cfg(not(windows))]
     #[test]
     fn startup_without_an_override_uses_the_local_app_data_folder() {
@@ -582,7 +582,7 @@ mod tests {
             assert_eq!(booted.fatal, None);
             assert_eq!(
                 booted.data_dir,
-                Some(local_app_data(Path::new(&home)).join(aura_core::paths::DEFAULT_FOLDER))
+                Some(local_app_data(Path::new(&home)).join(o7_core::paths::DEFAULT_FOLDER))
             );
             return;
         }
@@ -595,11 +595,12 @@ mod tests {
                     .env(CHILD_HOME, home.path())
                     .env("HOME", home.path())
                     .env_remove("XDG_DATA_HOME")
-                    .env_remove(DATA_DIR_ENV);
+                    .env_remove(DATA_DIR_ENV)
+                    .env_remove(o7_core::paths::LEGACY_DATA_DIR_ENV);
             },
         );
         assert!(started_in(
-            &local_app_data(home.path()).join(aura_core::paths::DEFAULT_FOLDER)
+            &local_app_data(home.path()).join(o7_core::paths::DEFAULT_FOLDER)
         ));
     }
 }

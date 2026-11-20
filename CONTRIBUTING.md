@@ -7,7 +7,7 @@ change and why.
 ## Setting up
 
 [README.md](README.md#development) lists the prerequisites and how to run the app. A development
-build keeps its data in a folder of its own (`si.auracode.desktop.dev`), so it never touches an
+build keeps its data in a folder of its own (`codes.o7.desktop.dev`), so it never touches an
 installed o7.
 
 ## Before you open a pull request
@@ -27,10 +27,10 @@ own. Say in the description what you ran and what you saw.
 - **Add a line to `CHANGELOG.md`.** Every merged pull request has one, newest first under the day
   it merges in US Eastern time, written for someone who uses the app: what changed, then what
   they will notice.
-  [docs/developing-in-aura.md](docs/developing-in-aura.md) has the format, and `pnpm lint` checks
+  [docs/developing-in-o7.md](docs/developing-in-o7.md) has the format, and `pnpm lint` checks
   it.
 - **Commit generated files with the change that needs them.** After changing a Rust command or a
-  type it uses, run `cargo test -p auracode-desktop export_bindings` and commit
+  type it uses, run `cargo test -p o7-desktop export_bindings` and commit
   `apps/desktop/src/bindings.ts`. After changing any `package.json` or `Cargo.toml`, run
   `node .github/scripts/third-party-notices.mjs --write`.
 - **No real-looking secrets, anywhere.** A scanner checks every commit. Tests that need a token

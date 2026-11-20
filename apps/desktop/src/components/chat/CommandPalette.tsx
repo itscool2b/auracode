@@ -1,4 +1,4 @@
-import { Keycap } from "@auracode/ui/graphite";
+import { Keycap } from "@o7/ui/graphite";
 import { File, Folder, MessageSquare, Search, Terminal } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import type { FileMention, SearchResults } from "../../bindings";

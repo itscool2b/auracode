@@ -7,7 +7,7 @@ machine-readable listing, and from the agent's files where it does not. It also 
 harness's update status. Every change runs the
 agent's own reviewed command in a terminal after the person reads it (see
 [vendor-integrations.md](vendor-integrations.md)). Instruction files (`CLAUDE.md`, `AGENTS.md`)
-left this surface for the separate Instructions surface. aura-config keeps their inventory and copy
+left this surface for the separate Instructions surface. o7-config keeps their inventory and copy
 code for its other callers, but the Plugin library does not list them. The complete customization behavior is described in [desktop-customization.md](desktop-customization.md).
 
 Plugins stay with their agent. Shared MCP applies to every compatible agent, or the ones a server is for, in the selected scope.
@@ -20,8 +20,8 @@ Universal plugins are o7's own, built in for every agent (owner, 9 November 2026
 plugin" that people cannot add or remove, on by default). Each has a switch and nothing else to
 install: off turns it off for every agent and takes it out of the app. The first is Browser use,
 the browser beside the chat ([plan](superpowers/plans/2026-11-09-browser.md)): the panel, Annotate,
-and the `aura_browser` MCP tools a native Chat session's agent gets, served by o7's own
-executable (`--aura-browser-helper --mcp`) over a per-session loopback grant, with its skill in the
+and the `o7_browser` MCP tools a native Chat session's agent gets, served by o7's own
+executable (`--o7-browser-helper --mcp`) over a per-session loopback grant, with its skill in the
 server's instructions. Turned off, chats show no browser, sessions that start get no browser
 tools, and a running session's tools answer that it is off. Its card also holds the browser's own
 settings: saved passwords (WebView2's own manager, Windows only), browsing history and Clear
@@ -166,7 +166,7 @@ acceptance. Browser fixture results and light/dark captures are recorded separat
 
 ## How listings run
 
-`aura-agents::plugins` holds the reviewed recipes. Each command runs through the same bounded helper
+`o7-agents::plugins` holds the reviewed recipes. Each command runs through the same bounded helper
 launch as version probes (`run_helper`): the detected executable (npm shims resolved to their entry),
 the resolved environment, the home folder as its working directory, `NO_COLOR=1`, a 20-second
 timeout that kills the tree, and at most 6 MB of output. A command that fails, times out, prints too
@@ -210,7 +210,7 @@ measurements of the core stream, not timings promised for installed vendor CLIs.
 
 ## Harness status
 
-Detection computes one status per agent (`aura-agents::harness`) from the version probe and the
+Detection computes one status per agent (`o7-agents::harness`) from the version probe and the
 existing release checks: not installed; checking (detection or the first release check is running);
 up to date; update available (with the version, on the agent's section and as a calm line on the
 Agents page, both with the existing reviewed Update); unknown (offline, no release source for the
@@ -219,14 +219,14 @@ installation's channel, or release checks off; the installed version is still sh
 
 ## Checks
 
-- Rust: `cargo test -p aura-agents --lib`, `cargo test -p aura-agents --test plugins`
+- Rust: `cargo test -p o7-agents --lib`, `cargo test -p o7-agents --test plugins`
   (fake CLIs that answer only from `fake-listing.json` in the temporary home named by
-  `CLAUDE_CONFIG_DIR`, `CODEX_HOME` or `PI_CODING_AGENT_DIR`), `cargo test -p aura-config --test
-  extensions`, `cargo test -p aura-core --lib plugin_library`, `cargo test -p aura-core --test
+  `CLAUDE_CONFIG_DIR`, `CODEX_HOME` or `PI_CODING_AGENT_DIR`), `cargo test -p o7-config --test
+  extensions`, `cargo test -p o7-core --lib plugin_library`, `cargo test -p o7-core --test
   plugin_library -- --nocapture` (controlled delayed
   fake CLIs measure cold/warm first usable and all finished latency, initial sections before any
   CLI listing, fast providers before blocked ones, refresh detection, cancellation and explicit
-  unsupported inventory). `aura-agents --test plugins` also verifies the two-provider limit,
+  unsupported inventory). `o7-agents --test plugins` also verifies the two-provider limit,
   per-provider singleflight, failed refresh retention and stale installation generations.
 - Vitest: `src/components/library/PluginLibraryScreen.test.tsx`, `src/lib/plugins/format.test.ts`,
   `src/lib/plugins/loading.test.ts` (progressive updates and request/unmount lifetime).

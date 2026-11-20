@@ -1,4 +1,4 @@
-import { Logo, Wordmark } from "@auracode/ui/graphite";
+import { Logo, Wordmark } from "@o7/ui/graphite";
 
 export type IntroMode = "pending" | "live" | "still";
 

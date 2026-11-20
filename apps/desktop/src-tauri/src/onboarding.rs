@@ -4,7 +4,7 @@
 use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 
-use aura_core::onboarding::{
+use o7_core::onboarding::{
     OnboardingStore, SetupAction, SetupError, SetupPreferences, SetupSnapshot,
 };
 use tauri::{AppHandle, State};
@@ -134,7 +134,7 @@ mod tests {
     async fn setup_result_keeps_profile_switch_waiting_until_runtime_preferences_are_applied() {
         let dir = tempfile::tempdir().unwrap();
         let mut booted =
-            crate::boot::boot(Ok(aura_core::paths::DataRoot::at(dir.path().join("data"))));
+            crate::boot::boot(Ok(o7_core::paths::DataRoot::at(dir.path().join("data"))));
         let chats = crate::sessions::testing::start(&mut booted);
         let state = AppState::new(
             booted,

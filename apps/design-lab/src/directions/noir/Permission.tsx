@@ -1,4 +1,4 @@
-import { GlassPanel } from "@auracode/ui";
+import { GlassPanel } from "@o7/ui";
 import { Check, ShieldAlert, X } from "lucide-react";
 import { createContext, useContext, useEffect, useRef } from "react";
 import {

@@ -1,1 +1,1 @@
-export { Globe, type GlobeProject, labelLines } from "@auracode/ui/orbit";
+export { Globe, type GlobeProject, labelLines } from "@o7/ui/orbit";

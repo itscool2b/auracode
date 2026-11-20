@@ -1,11 +1,11 @@
 import { describe, expect, it } from "vitest";
-import type { AuraEvent, SessionStatus } from "../../bindings";
+import type { O7Event, SessionStatus } from "../../bindings";
 import { chatActivity, lastToolKind, streamingText } from "./activity";
 import { type ChatState, ChatStore } from "./chatStore";
 import { ev, FakeTransport, numbered, sessionInfo } from "./testing";
 import { applyEntries, emptyTranscript, renderTranscript } from "./transcript";
 
-function state(events: AuraEvent[], status: SessionStatus = "running"): ChatState {
+function state(events: O7Event[], status: SessionStatus = "running"): ChatState {
   return {
     ...new ChatStore("c", new FakeTransport()).getSnapshot(),
     session: sessionInfo({ status }),
@@ -44,7 +44,7 @@ describe("live chat protocol state", () => {
   });
 
   it("keeps informational notifications out of waiting activity before and after an answer", () => {
-    const events: AuraEvent[] = [
+    const events: O7Event[] = [
       ev.turnStarted("t"),
       ev.toolCall("read"),
       {
@@ -78,7 +78,7 @@ describe("live chat protocol state", () => {
   });
 
   it("steps the working line aside only while the newest shown output is streaming text", () => {
-    const shown = (events: AuraEvent[]) => renderTranscript(state(events).transcript, true).at(-1);
+    const shown = (events: O7Event[]) => renderTranscript(state(events).transcript, true).at(-1);
     const answer = [ev.turnStarted("t"), ev.message("a", "Hel")];
     expect(streamingText(shown(answer))).toBe(true);
     expect(streamingText(shown([...answer, ev.messageDone("a")]))).toBe(false);
@@ -91,7 +91,7 @@ describe("live chat protocol state", () => {
   });
 
   it("leans the working line towards the turn's latest call, across hidden thoughts", () => {
-    const shown = (events: AuraEvent[]) => renderTranscript(state(events).transcript, true).at(-1);
+    const shown = (events: O7Event[]) => renderTranscript(state(events).transcript, true).at(-1);
     expect(lastToolKind(shown([ev.turnStarted("t"), ev.thought("th", "Hmm")]))).toBeNull();
     expect(
       lastToolKind(

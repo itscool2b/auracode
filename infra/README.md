@@ -358,3 +358,30 @@ from the address it was issued for. Keep the registration until the old copies a
 
 The app's identifier stays `si.auracode.desktop`. It names the data folder and the installed
 app, not a web address; changing it would leave every chat and setting behind.
+
+## Everything is o7 (2026-11-19, evening)
+
+The owner asked for the old name to go everywhere ("change everything"). What changed in
+Cloudflare and GitHub, each checked live afterwards:
+
+- **The repository** is `itscool2b/o7` (renamed with `gh repo rename`; GitHub redirects the old
+  address, so `releases/latest/download/latest.json`, which copies from before read to update, still
+  resolves). Workers Builds' repository connection `915b851e-4e7f-4c2d-a416-c130a642f59f` was
+  renamed with it (same repository id, `1431949458`).
+- **The Workers** are `o7-web`, `o7-web-preview`, `o7-relay` and `o7-relay-preview`. They were
+  moved without a gap: each website Worker was copied module for module from the live one under
+  the new name (no workers.dev address, no previews), the relays were deployed from the same code
+  without routes, and then every route was pointed at its new Worker in place:
+  - `o7.codes/*` and `auracode.si/*` to `o7-web`; `preview.o7.codes/*` to `o7-web-preview`;
+  - `o7.codes/api/remote/*` and `auracode.si/api/remote/*` to `o7-relay`;
+    `preview.o7.codes/api/remote/*` to `o7-relay-preview`.
+  The relays start with no rooms: a computer claims its room again when it connects and sends its
+  bot links with it, and paired phones keep their keys, so nothing is lost but the open sockets.
+- **Workers Builds** triggers moved with the Workers: `o7-web` has "Deploy main"
+  (`8aff9db3-7378-4b24-be0e-f63d1bd4ada9`), `o7-web-preview` has "Deploy non-production branches"
+  (`785e5f21-ad90-432d-b756-8e67062aa587`) and "Deploy main" (`c7cd721a-7f0a-4bb0-bb25-54ae13ce3ff9`),
+  with the same build token and commands as before, building `@o7/web`. The old Workers' triggers
+  were deleted, and the old Workers themselves once the new ones had served a merge.
+- **Deleted**: the R2 bucket `auracode-releases`, empty and unused (releases are published to
+  GitHub). **Unchanged**: the zones and their DNS, TLS, rate-limit and analytics rules, the
+  account and its ids.

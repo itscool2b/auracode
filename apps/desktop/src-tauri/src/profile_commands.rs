@@ -9,7 +9,7 @@ use crate::{
     state::{AppInfo, AppState},
     sync::lock,
 };
-use aura_core::{
+use o7_core::{
     paths::DataRoot,
     profile::{Profile, ProfileMeta, Profiles},
 };
@@ -97,7 +97,7 @@ async fn run(app: tauri::AppHandle, profile_id: String) -> Result<AppInfo, AppEr
         {
             instructions.reset_profile();
         }
-        if let Some(clones) = app.try_state::<Arc<aura_core::cloning::Clones>>() {
+        if let Some(clones) = app.try_state::<Arc<o7_core::cloning::Clones>>() {
             clones.cancel_all();
         }
         crate::native_shell::profile_changed(&app);
@@ -112,8 +112,8 @@ async fn run(app: tauri::AppHandle, profile_id: String) -> Result<AppInfo, AppEr
 }
 
 type OutsideFactory = fn(
-    &Arc<aura_process::LeftoverRegistry>,
-    &Arc<aura_process::Redactor>,
+    &Arc<o7_process::LeftoverRegistry>,
+    &Arc<o7_process::Redactor>,
     &std::path::Path,
     &tokio::runtime::Handle,
 ) -> Outside;
@@ -183,12 +183,12 @@ async fn activate_serial(
     if let Some(chats) = state.chats() {
         let report = chats
             .manager
-            .stop_all(aura_core::session::StopScope::All, Duration::from_secs(30))
+            .stop_all(o7_core::session::StopScope::All, Duration::from_secs(30))
             .await;
         // A chat still on its way out is named, not mistaken for a Git change or an update.
         if !report.stopping.is_empty() {
             let names = chats.manager.chat_names(report.stopping).await;
-            return Err(unavailable(&aura_core::session::still_stopping(
+            return Err(unavailable(&o7_core::session::still_stopping(
                 &names,
                 "Switch profiles again in a moment.",
             )));
@@ -219,7 +219,7 @@ async fn activate_one(
     if let Some(old) = &old {
         if !matches!(
             old.manager.storage_status().state,
-            aura_protocol::session::StorageState::Ok
+            o7_protocol::session::StorageState::Ok
         ) {
             return Err(unavailable(
                 "Resolve the current profile's storage error before switching.",

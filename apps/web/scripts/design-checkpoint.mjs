@@ -1,4 +1,4 @@
-/** Reproducible local visual checkpoint. Run after `pnpm --filter @auracode/web build`.
+/** Reproducible local visual checkpoint. Run after `pnpm --filter @o7/web build`.
  * `node apps/web/scripts/design-checkpoint.mjs --serve` keeps both preview servers available.
  * Fixtures are synthetic and never invoke an agent or shell. */
 import { spawn } from "node:child_process";

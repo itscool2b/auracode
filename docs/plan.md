@@ -146,26 +146,26 @@ prerender public pages and serve static assets through Cloudflare. Rust owns API
 ```
 auracode/                        Cargo workspace + pnpm workspace
   crates/
-    aura-protocol/               AuraEvent, commands, capabilities, sync/API types (serde + specta -> TS)
-    aura-process/                process lifecycle (spawn, framing, shutdown, leftovers), env resolution +
+    o7-protocol/               O7Event, commands, capabilities, sync/API types (serde + specta -> TS)
+    o7-process/                process lifecycle (spawn, framing, shutdown, leftovers), env resolution +
                                  scrub, protocol logs
-    aura-agents/                 data-driven catalog, detection, adapter install, channels, versions, auth
-    aura-drivers/                protocol drivers: acp, claude, codex, pi; stream fallbacks; mock
-    aura-core/                   sessions, store, git/checkpoints/worktrees, search, handoff
-    aura-config/                 (M8) per-agent config adapters (read into items, apply changes)
+    o7-agents/                 data-driven catalog, detection, adapter install, channels, versions, auth
+    o7-drivers/                protocol drivers: acp, claude, codex, pi; stream fallbacks; mock
+    o7-core/                   sessions, store, git/checkpoints/worktrees, search, handoff
+    o7-config/                 (M8) per-agent config adapters (read into items, apply changes)
     aura-sync/                   (M6/M7/M9) API client, token manager, merge engines, crypto
-    aura-cli/                    dev CLI: detect, smoke-test agents, record fixtures, replay
+    o7-cli/                    dev CLI: detect, smoke-test agents, record fixtures, replay
   apps/
-    desktop/src-tauri/           Tauri shell: thin commands/channels over aura-core, window glass, plugins
+    desktop/src-tauri/           Tauri shell: thin commands/channels over o7-core, window glass, plugins
     desktop/src/                 React UI
     web/                         (M6) o7.codes: React Router 7 on Cloudflare Workers
   services/api/                  (M6) Rust Cloudflare Worker: accounts, devices, sync, email delivery
   packages/ui/                   TS Aura design system shared by app + site: tokens, marks, motion
-  packages/api-types/            TS types generated from aura-protocol (shared by app, site, API)
+  packages/api-types/            TS types generated from o7-protocol (shared by app, site, API)
   infra/                         Wrangler configs, SQL migrations for D1, release scripts
 ```
-- **Processes.** One Tauri process runs aura-core on tokio (`panic = "unwind"` in release; panics contained
-  per task). aura-core doesn't depend on Tauri, so a headless daemon can reuse it later for remote access.
+- **Processes.** One Tauri process runs o7-core on tokio (`panic = "unwind"` in release; panics contained
+  per task). o7-core doesn't depend on Tauri, so a headless daemon can reuse it later for remote access.
 - **Shell.** Tauri 2.12.x: the window keeps its platform material plan (vibrancy on macOS, Mica on
   Windows 11, opaque elsewhere), but the interface uses solid surfaces, so native material
   shows through. Overlay titlebar + `trafficLightPosition`
@@ -213,7 +213,7 @@ auracode/                        Cargo workspace + pnpm workspace
   mentions in M2c). Questions have an answer path (`RespondUi` in, `UiResolved` out), like permissions.
   Turns, the prompt queue and persistence belong to the session manager, not the drivers. The UI reads
   `capabilities`, never agent names.
-- **AuraEvent** (ACP vocabulary): turn.started/ended, user_message.delta, message.delta/completed,
+- **O7Event** (ACP vocabulary): turn.started/ended, user_message.delta, message.delta/completed,
   thought.delta/completed, tool.call, tool.update (text | diff | terminal), permission.requested/resolved,
   ui.request/resolved, plan.updated, usage.updated, limits.updated, session.updated (status, native id,
   title, model, effort, mode; no slash commands, which the UI fetches on request), prompt_lifecycle (the
@@ -277,7 +277,7 @@ the agent once, from the same Rust list.
 - **Actions** on an agent (update, sign-in check, executable choice, Plugin library listings) act
   on the connection it uses, so a CLI too old for the native driver can still be updated from the
   row the adapter runs. The adapter's one-time download is stated in the agent's details and in New
-  chat before the first chat that needs it. The developer CLI (`aura-cli probe`, `smoke`) still
+  chat before the first chat that needs it. The developer CLI (`o7-cli probe`, `smoke`) still
   addresses connections by id.
 
 **Detection + updates.**
@@ -447,7 +447,7 @@ to its nameservers, `asa.ns.cloudflare.com` and `rohin.ns.cloudflare.com`. The z
   official installers (Cursor/Grok need the user's sign-in), then Pi native driver and the ACP dialects
   (Antigravity, Cursor, Grok, oh-my-pi, OpenCode) + agy/grok fallbacks.
 - **M1e Catalog.** Detection on macOS/Windows, channels, versions, vendor updates,
-  last-verified badges, auth status. Done when `aura-cli smoke <agent>` passes for every installed agent.
+  last-verified badges, auth status. Done when `o7-cli smoke <agent>` passes for every installed agent.
 - **M2a Design system + transcript.** Shared theme tokens, fonts, state-driven agent marks,
   transcript components and accessibility against live protocol fixtures. Retire legacy shader/serif
   dependencies only when no retained Design Lab direction uses them.
@@ -582,13 +582,13 @@ Settings Sync's model).
   New consequential actions outside that scope are confirmed before execution; secrets live in Wrangler/Cloudflare secrets and GitHub Actions secrets, never in git.
 
 ## Verification
-- **Rust tests:** replay of recorded raw streams (Claude, Codex, Pi, ACP) into expected AuraEvents; Codex
+- **Rust tests:** replay of recorded raw streams (Claude, Codex, Pi, ACP) into expected O7Events; Codex
   types validated against generated schemas; detection on fake PATHs (symlinks, `agent` collision, leftover
   dirs, WSL output parsing); channel rules; env scrub; process shutdown chain and leftover cleanup;
   checkpoint/revert in git and non-git folders; handoff budget and delta; merges (LWW, append, 3-way config
   table incl. first-sync union, tombstones, skipped, vendor zones); crypto round trips; each edge case above
   that lives in Rust.
-- **Real-agent smoke (opt-in, uses quota):** `aura-cli smoke <agent>` in a temp repo: stream, tool call,
+- **Real-agent smoke (opt-in, uses quota):** `o7-cli smoke <agent>` in a temp repo: stream, tool call,
   approval, interrupt, resume, model switch, fork.
 - **App UI:** Vitest for logic; Playwright on the Vite build with mocked Tauri IPC in Chromium and WebKit for
   flows (onboarding, project, chat, stream, approve, diff, interrupt, restart, switch agent, sign in, switch

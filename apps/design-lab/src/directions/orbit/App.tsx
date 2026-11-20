@@ -1,6 +1,6 @@
 import "./tokens.css";
 import "./orbit.css";
-import { type AgentBrandId, getBrand } from "@auracode/ui";
+import { type AgentBrandId, getBrand } from "@o7/ui";
 import { AnimatePresence, motion } from "motion/react";
 import {
   type CSSProperties,

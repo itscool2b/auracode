@@ -1,5 +1,5 @@
 {
-  "name": "auracode",
+  "name": "o7",
   "private": true,
   "license": "MIT",
   "packageManager": "pnpm@12.15.0",
@@ -7,9 +7,9 @@
     "node": "^22.12.0 || ^24.0.0 || >=26.0.0"
   },
   "scripts": {
-    "dev": "pnpm --filter @auracode/desktop tauri dev",
-    "bundle": "pnpm --filter @auracode/desktop bundle",
-    "signing": "pnpm --filter @auracode/desktop signing",
+    "dev": "pnpm --filter @o7/desktop tauri dev",
+    "bundle": "pnpm --filter @o7/desktop bundle",
+    "signing": "pnpm --filter @o7/desktop signing",
     "build": "pnpm -r --if-present build",
     "typecheck": "pnpm -r --if-present typecheck",
     "test": "node --test .github/scripts/check-changelog.test.mjs .github/scripts/check-instructions.test.mjs .github/scripts/check-styles.test.mjs .github/scripts/third-party-notices.test.mjs && pnpm -r --if-present test",

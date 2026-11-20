@@ -25,7 +25,7 @@ const info: AppInfo = {
   db: null,
   glass: "none",
   launch: { type: "normal" },
-  notices: ["AURACODE_STRESS was ignored: orbs must be between 1 and 24."],
+  notices: ["O7_STRESS was ignored: orbs must be between 1 and 24."],
   recovery_notice:
     "Your database was damaged, so o7 rebuilt it. Nothing was lost; the damaged copy was kept at C:/fixture/backups/aura.db.corrupt-1.",
   fatal: null,

@@ -39,7 +39,7 @@ link is a new link):
 
 No link has a tool for Settings, accounts or sign-in, installing or updating software, remote
 access itself, deleting data, a raw terminal, or reading a file by its path. The tools are
-described to bots in `apps/relay/src/tools.json` and run in `crates/aura-remote/src/bot.rs`.
+described to bots in `apps/relay/src/tools.json` and run in `crates/o7-remote/src/bot.rs`.
 
 The level limits the bot's own tools. It is not a wall around the computer: at either level a
 bot sends messages to agents and answers their permission requests, and agents run commands.
@@ -48,8 +48,8 @@ bot sends messages to agents and answers their permission requests, and agents r
 
 | Part | Where | What it does |
 |---|---|---|
-| Relay | `apps/relay` (Worker `auracode-relay`, route `o7.codes/api/remote/*`) | One Durable Object per computer holds its host socket and the browsers' sockets and forwards between them. Serves MCP to bots. |
-| Service | `crates/aura-remote` | Pairing links, devices and bot links (`registry.rs`), the sealed channel (`crypto.rs`), one session per browser (`host.rs`, `host/session.rs`), bot tools (`bot.rs`, `render.rs`), the socket (`relay.rs`). |
+| Relay | `apps/relay` (Worker `o7-relay`, route `o7.codes/api/remote/*`) | One Durable Object per computer holds its host socket and the browsers' sockets and forwards between them. Serves MCP to bots. |
+| Service | `crates/o7-remote` | Pairing links, devices and bot links (`registry.rs`), the sealed channel (`crypto.rs`), one session per browser (`host.rs`, `host/session.rs`), bot tools (`bot.rs`, `render.rs`), the socket (`relay.rs`). |
 | App | `apps/desktop/src-tauri/src/remote.rs` | Starts the service, gives it the open profile's chats through the same lease a window's commands take, and exposes the commands Settings uses. |
 | Settings page | `apps/desktop/src/components/settings/RemotePanel.tsx` | The switch, devices, bots, and the two dialogs that show a secret once. |
 | Remote page | `apps/web/app/pages/remote.tsx`, `apps/web/app/remote/` | The browser's session (`client.ts`), its half of the channel (`channel.ts`), where device keys are kept (`storage.ts`). |
@@ -127,7 +127,7 @@ Both sides hold one 32-byte secret: the pairing key, or the device key.
 
 The browser accepts exactly one welcome per hello and one `ready` per session, so a replayed
 welcome can never restart a key's numbering. Anything that fails to open, arrives out of order,
-or is not one of the operations ends the session. `crates/aura-remote/tests/vectors.json` holds
+or is not one of the operations ends the session. `crates/o7-remote/tests/vectors.json` holds
 vectors both implementations are tested against.
 
 A refusal (`R`) is not sealed, since there may be no key to seal it with. So it deletes nothing:
@@ -201,7 +201,7 @@ computer, and it reaches only a browser that already proved a key.
 
 `pair`, `overview`, `open`, `close`, `history`, `send`, `interrupt`, `permission`, `answer`,
 `create`, `forget`, and for the pickers `options`, `set_model`, `set_thinking` and `switch_agent`
-(`crates/aura-remote/src/wire.rs`). Each maps to the session manager call the app's own window
+(`crates/o7-remote/src/wire.rs`). Each maps to the session manager call the app's own window
 makes; there is no file, terminal, settings or account access. A new chat starts in the project
 folder itself with the project's usual agent.
 
@@ -221,25 +221,25 @@ The computer pushes `chat` (a status changed), `frame` (live events of the follo
 
 ## Running and testing it
 
-- **Deploy:** `corepack pnpm --filter @auracode/relay exec wrangler deploy --env production`
+- **Deploy:** `corepack pnpm --filter @o7/relay exec wrangler deploy --env production`
   (and `--env preview`). The route `o7.codes/api/remote/*` is more specific than the website's
   `o7.codes/*`, so those requests reach the relay.
-- **Development:** a debug build reads `AURACODE_REMOTE_RELAY` (for example
-  `ws://127.0.0.1:8799`) and `AURACODE_REMOTE_SITE` together; release builds reach only
+- **Development:** a debug build reads `O7_REMOTE_RELAY` (for example
+  `ws://127.0.0.1:8799`) and `O7_REMOTE_SITE` together; release builds reach only
   o7's own relay. A page served from `localhost` accepts `?relay=ws://127.0.0.1:<port>`.
 - **Tests:**
-  - `corepack pnpm --filter @auracode/relay worker:test`: the relay in the Workers runtime.
-  - `cargo test -p aura-remote`: the service against a relay on this machine, with a simulated
+  - `corepack pnpm --filter @o7/relay worker:test`: the relay in the Workers runtime.
+  - `cargo test -p o7-remote`: the service against a relay on this machine, with a simulated
     browser and bot.
-  - `corepack pnpm --filter @auracode/web test`: the browser's channel against the shared
+  - `corepack pnpm --filter @o7/web test`: the browser's channel against the shared
     vectors, and the page's headers.
   - `apps/desktop/scripts/check-remote.mjs` (part of `check:settings`): the Settings page.
-  - `corepack pnpm --filter @auracode/relay worker:e2e`: everything together on this machine.
-    It needs the website built and `cargo build -p aura-remote --example demo_host`, a stand-in
+  - `corepack pnpm --filter @o7/relay worker:e2e`: everything together on this machine.
+    It needs the website built and `cargo build -p o7-remote --example demo_host`, a stand-in
     computer with a scripted agent. `--engines chromium,webkit` runs it in both, `--scheme dark`
     reports a dark system, and `--shots <folder>` keeps screenshots. Midway it silences the
     phone's socket without closing it and expects the page back on a new one.
-  - `node apps/relay/tests/native.mjs <auracode.exe> [--prompt]`: the real debug app in a data
+  - `node apps/relay/tests/native.mjs <o7.exe> [--prompt]`: the real debug app in a data
     folder of its own, paired from a separate browser and called by an MCP client. `--prompt`
     also runs a turn through the development build's scripted agent.
 

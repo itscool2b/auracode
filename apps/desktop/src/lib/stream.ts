@@ -1,7 +1,7 @@
 import type {
-  AuraEvent,
   EventBatch,
   LimitWindow,
+  O7Event,
   PermissionRequest,
   PlanEntry,
   SessionInfo,
@@ -200,7 +200,7 @@ class Draft {
     this.#turn = base.turn;
   }
 
-  apply(event: AuraEvent): void {
+  apply(event: O7Event): void {
     switch (event.type) {
       case "turn_started":
         this.#turn = { id: event.turn_id, ended: false, stopReason: null, usage: null };

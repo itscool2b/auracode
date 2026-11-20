@@ -1,4 +1,4 @@
-import { brandCssVariables, getBrand, Orb, type OrbState } from "@auracode/ui";
+import { brandCssVariables, getBrand, Orb, type OrbState } from "@o7/ui";
 import {
   ArrowRight,
   BookOpen,

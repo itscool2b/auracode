@@ -2,7 +2,7 @@ use crate::{
     error::{AppError, AppErrorCode},
     state::AppState,
 };
-use aura_protocol::agents::AgentInstallations;
+use o7_protocol::agents::AgentInstallations;
 use tauri::{State, Webview};
 
 fn current(view: &Webview, state: &AppState) -> Result<(), AppError> {

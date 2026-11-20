@@ -117,7 +117,7 @@ describe("Delete all o7 data", () => {
     expect(render(REVIEW)).not.toContain("Also move o7 to the Trash");
     const mac = {
       ...REVIEW,
-      app_bundle: "/Applications/auracode.app",
+      app_bundle: "/Applications/o7.app",
       keys: [],
       warnings: [],
       secure_store: "the macOS keychain",

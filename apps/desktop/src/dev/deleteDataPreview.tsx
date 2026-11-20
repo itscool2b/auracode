@@ -62,7 +62,7 @@ function review(mode: Mode): DataCleanupReview {
           },
           {
             kind: "temporary",
-            path: "C:\\Users\\you\\AppData\\Local\\Temp\\auracode-0.2.0-updater-k3d9",
+            path: "C:\\Users\\you\\AppData\\Local\\Temp\\o7-0.2.0-updater-k3d9",
             bytes: 9_437_184,
           },
         ],
@@ -94,7 +94,7 @@ function review(mode: Mode): DataCleanupReview {
       },
     ],
     secure_store: mac ? "the macOS keychain" : "Windows Credential Manager",
-    app_bundle: mac ? "/Applications/auracode.app" : null,
+    app_bundle: mac ? "/Applications/o7.app" : null,
   };
 }
 

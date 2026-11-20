@@ -8,7 +8,7 @@ import {
   type OrbState,
   springs,
   usePrefersReducedMotion,
-} from "@auracode/ui";
+} from "@o7/ui";
 import { GitCompareArrows, ListEnd, PanelRight, X } from "lucide-react";
 import { AnimatePresence, animate, motion } from "motion/react";
 import {

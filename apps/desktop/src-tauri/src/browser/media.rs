@@ -314,7 +314,7 @@ pub fn launch_env(
         set.push((
             "GST_REGISTRY_1_0",
             cache
-                .join(aura_core::paths::DEFAULT_FOLDER)
+                .join(o7_core::paths::DEFAULT_FOLDER)
                 .join("gstreamer-1.0")
                 .join(file)
                 .into_os_string(),
@@ -769,7 +769,7 @@ mod tests {
         ]);
         let set = launch_env(&env.var(), root.path());
         let registry = PathBuf::from("/home/someone/.cache")
-            .join(aura_core::paths::DEFAULT_FOLDER)
+            .join(o7_core::paths::DEFAULT_FOLDER)
             .join(format!(
                 "gstreamer-1.0/system-{}.bin",
                 std::env::consts::ARCH

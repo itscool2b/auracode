@@ -39,7 +39,7 @@ The page for a project opens from the board button beside its name in the sideba
 
 ## The tools
 
-A coordinator's or a worker's agent gets one more MCP server, `aura_project`, started the way the browser's and project memory's are: the app's own executable as a stdio helper (`--aura-project-helper --mcp`) that reaches the running app over a loopback listener. Its instructions are part of the server's `initialize` reply, which an agent's client keeps in its system prompt, so they outlast a compaction of the conversation.
+A coordinator's or a worker's agent gets one more MCP server, `o7_project`, started the way the browser's and project memory's are: the app's own executable as a stdio helper (`--o7-project-helper --mcp`) that reaches the running app over a loopback listener. Its instructions are part of the server's `initialize` reply, which an agent's client keeps in its system prompt, so they outlast a compaction of the conversation.
 
 | Tool | Coordinator | Worker |
 |---|---|---|
@@ -59,7 +59,7 @@ A coordinator's or a worker's agent gets one more MCP server, `aura_project`, st
 - **A worker** cannot start, message or stop workers, cannot create tasks or routines, and cannot record decisions. A worker reads files, pages and tool output that may carry hostile text; what it writes to the decision log would be shown to every other agent as settled, so it says its choices in its report and the coordinator decides what to record.
 - **A worker starts** in one of its own project's folders (the one named, else the coordinator's), in its own Git worktree and branch unless the coordinator asks otherwise, with the access level Settings gives every new chat. The coordinator cannot raise it. When a worktree cannot be made the coordinator is told why; o7 never falls back to the shared folder by itself.
 - **Runaway work** is bounded: at most 4 workers at once, and a project whose coordinator was sent 60 reports and routines within an hour is paused by o7, which says so on the page. Routines wait while their coordinator is working, so prompts never pile up.
-- **Sizes** are bounded for the person and agents alike (`aura_protocol::coordinator::limits`): a Context file 64 KiB, 200 files a project, a decision 2 KiB, 2,000 decisions, 3,000 tasks, 20 routines, a report 16 KiB, an assignment 24 KiB. A Context path is a name (letters, digits, dots, dashes, underscores, at most four folders deep, ending in `.md`), never a file system path, so nothing here can reach a folder.
+- **Sizes** are bounded for the person and agents alike (`o7_protocol::coordinator::limits`): a Context file 64 KiB, 200 files a project, a decision 2 KiB, 2,000 decisions, 3,000 tasks, 20 routines, a report 16 KiB, an assignment 24 KiB. A Context path is a name (letters, digits, dots, dashes, underscores, at most four folders deep, ending in `.md`), never a file system path, so nothing here can reach a folder.
 - **Remote devices and bots** get nothing new. Coordinator and worker chats are ordinary chats, so a paired device or bot sees and can message them as it can any chat in the profile; the project tools, the page and its commands are not offered over the relay.
 
 ## Limits, said plainly
@@ -73,14 +73,14 @@ A coordinator's or a worker's agent gets one more MCP server, `aura_project`, st
 
 ## Where the code is
 
-- `crates/aura-protocol/src/coordinator.rs`: the types and limits.
-- `crates/aura-core/migrations/0019_coordinator.sql`, `crates/aura-core/src/chatstore/coordinator.rs`: storage, and who may change what.
-- `crates/aura-core/src/coordinator_service.rs`: the grant, the helper, the tools and their instructions.
-- `crates/aura-core/src/session/coordinator.rs`: the engine (starting workers, passing reports on, routines, the hourly limit).
+- `crates/o7-protocol/src/coordinator.rs`: the types and limits.
+- `crates/o7-core/migrations/0019_coordinator.sql`, `crates/o7-core/src/chatstore/coordinator.rs`: storage, and who may change what.
+- `crates/o7-core/src/coordinator_service.rs`: the grant, the helper, the tools and their instructions.
+- `crates/o7-core/src/session/coordinator.rs`: the engine (starting workers, passing reports on, routines, the hourly limit).
 - `apps/desktop/src-tauri/src/coordinator_commands.rs`: the page's commands.
 - `apps/desktop/src/components/project/`, `apps/desktop/src/lib/coordinator.ts`: the page.
 
 ## Verification
 
-- `cargo test -p aura-core coordinator`: storage rules and every refusal; the grant's token, scope and switch; and an end-to-end run over scripted agents (a coordinator is started, starts a worker with its tool, the worker is primed with the person's decision, and its report reaches the coordinator).
+- `cargo test -p o7-core coordinator`: storage rules and every refusal; the grant's token, scope and switch; and an end-to-end run over scripted agents (a coordinator is started, starts a worker with its tool, the worker is primed with the person's decision, and its report reaches the coordinator).
 - `node apps/desktop/scripts/check-coordinator.mjs`: the sidebar, the page and events in a chat on a synthetic project, in Chromium and WebKit, in both appearances, with an accessibility audit.

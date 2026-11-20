@@ -1,6 +1,6 @@
 use super::*;
 use crate::{glass::GlassEffect, launch::LaunchOptions, os::OsInfo};
-use aura_core::{chatstore::NewChat, owner::ProfileOwner};
+use o7_core::{chatstore::NewChat, owner::ProfileOwner};
 
 fn state(root: &DataRoot) -> AppState {
     let mut booted = boot::boot(Ok(root.clone()));
@@ -227,7 +227,7 @@ async fn reserved_terminal_and_target_owner_failure_preserve_current_profile() {
 /// What an o7 account left in the data folder: a profile folder whose `profile.json` says
 /// `account`, with an encrypted database. Returns its id and every file with its bytes.
 fn account_leftover(root: &DataRoot) -> (String, Vec<(std::path::PathBuf, Vec<u8>)>) {
-    let id = aura_core::ids::new_id();
+    let id = o7_core::ids::new_id();
     let dir = root.profile_dir(&id).unwrap();
     std::fs::create_dir_all(dir.join("attachments")).unwrap();
     let files = [

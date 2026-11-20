@@ -16,11 +16,11 @@ and the `wasm32-unknown-unknown` target.
 
 ```powershell
 corepack pnpm install --frozen-lockfile
-cargo test -p auracode-web-worker --locked
-cargo clippy -p auracode-web-worker --all-targets --locked -- -D warnings
-corepack pnpm --filter @auracode/web-worker worker:build
-cargo clippy -p auracode-web-worker --target wasm32-unknown-unknown --locked -- -D warnings
-corepack pnpm --filter @auracode/web-worker worker:test
+cargo test -p o7-web-worker --locked
+cargo clippy -p o7-web-worker --all-targets --locked -- -D warnings
+corepack pnpm --filter @o7/web-worker worker:build
+cargo clippy -p o7-web-worker --target wasm32-unknown-unknown --locked -- -D warnings
+corepack pnpm --filter @o7/web-worker worker:test
 ```
 
 `worker:build` first runs the unchanged website build, including its generated `_headers`, then

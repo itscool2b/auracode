@@ -1,11 +1,11 @@
 /**
  * Remote sessions end to end, on this machine: the relay in the Workers runtime, the desktop's
- * real connection task in front of a scripted agent (`crates/aura-remote/examples/demo_host.rs`),
+ * real connection task in front of a scripted agent (`crates/o7-remote/examples/demo_host.rs`),
  * the built website's remote page in real browsers, and a bot speaking MCP over HTTP.
  *
- *   corepack pnpm --filter @auracode/web build
- *   cargo build -p aura-remote --example demo_host
- *   corepack pnpm --filter @auracode/relay worker:build
+ *   corepack pnpm --filter @o7/web build
+ *   cargo build -p o7-remote --example demo_host
+ *   corepack pnpm --filter @o7/relay worker:build
  *   node apps/relay/tests/e2e.mjs [--host <demo_host executable>] [--engines chromium,webkit]
  *     [--shots <folder for screenshots>] [--scheme light|dark]
  *
@@ -508,7 +508,7 @@ await relay.ready;
 
 /** A desktop of its own for each run, so one run's chats are not in the next one's way. */
 async function withHost(work) {
-  const folder = await mkdtemp(join(tmpdir(), "aura-remote-e2e-"));
+  const folder = await mkdtemp(join(tmpdir(), "o7-remote-e2e-"));
   const host = startHost(folder);
   try {
     const first = await host.line("PAIR");

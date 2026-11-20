@@ -1,5 +1,5 @@
 {
-  "name": "@auracode/web",
+  "name": "@o7/web",
   "version": "0.1.0",
   "private": true,
   "type": "module",
@@ -12,7 +12,7 @@
     "test:release": "node tests/release.test.mjs"
   },
   "dependencies": {
-    "@auracode/ui": "workspace:*",
+    "@o7/ui": "workspace:*",
     "react": "19.3.1",
     "react-dom": "19.3.1",
     "react-router": "7.18.4"

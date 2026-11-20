@@ -3,11 +3,11 @@ use crate::{
     error::{AppError, AppErrorCode},
     state::AppState,
 };
-use aura_core::session::{EditorOpen, UrlTarget};
-use aura_core::terminal::TerminalError;
-use aura_process::{Spawner, pty::PtySize};
-use aura_protocol::git::{GitInitializePreview, GitWorkspace};
-use aura_protocol::project_tools::{
+use o7_core::session::{EditorOpen, UrlTarget};
+use o7_core::terminal::TerminalError;
+use o7_process::{Spawner, pty::PtySize};
+use o7_protocol::git::{GitInitializePreview, GitWorkspace};
+use o7_protocol::project_tools::{
     DetectedEditors, ProjectEditor, ProjectShell, ProjectTerminalOpened, ProjectTerminalReview,
     ProjectToolsReview,
 };
@@ -106,13 +106,13 @@ pub async fn worktree_run(
     webview: Webview,
     state: State<'_, AppState>,
     chat_id: String,
-) -> Result<Option<aura_protocol::worktree_setup::WorktreeRun>, AppError> {
+) -> Result<Option<o7_protocol::worktree_setup::WorktreeRun>, AppError> {
     current(&webview, &state)?;
     Ok(state.sessions()?.worktree_run(&chat_id).await?)
 }
 
 /// Starts Run in a reserved project terminal (`project_terminal_reserve`): the saved Run command
-/// in the chat's worktree, with `AURACODE_PORT` and `PORT`. Closing the terminal stops it.
+/// in the chat's worktree, with `O7_PORT` and `PORT`. Closing the terminal stops it.
 #[tauri::command]
 #[specta::specta]
 pub async fn worktree_run_start(

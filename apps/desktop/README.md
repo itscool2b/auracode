@@ -8,9 +8,9 @@ repository root:
 | `pnpm dev` | The app with hot reload (Vite for the UI, Cargo for the shell). |
 | `pnpm bundle` | Release bundles (`tauri build`), signed on macOS as described below. Extra arguments go to `tauri build`. |
 | `pnpm signing create` / `pnpm signing status` | The local macOS signing identity (below). |
-| `pnpm --filter @auracode/desktop host-upgrade <command>` | Windows: installs a local build over the installed app with a snapshot to roll back to, also from a chat inside the app (`install --after-exit`). See [docs/developing-in-aura.md](../../docs/developing-in-aura.md). |
-| `pnpm --filter @auracode/desktop test` | UI tests (Vitest). |
-| `cargo test -p auracode-desktop` | Shell tests; also regenerates `src/bindings.ts`. |
+| `pnpm --filter @o7/desktop host-upgrade <command>` | Windows: installs a local build over the installed app with a snapshot to roll back to, also from a chat inside the app (`install --after-exit`). See [docs/developing-in-o7.md](../../docs/developing-in-o7.md). |
+| `pnpm --filter @o7/desktop test` | UI tests (Vitest). |
+| `cargo test -p o7-desktop` | Shell tests; also regenerates `src/bindings.ts`. |
 
 ## Linux
 
@@ -31,7 +31,7 @@ AppIndicator, ALSA and OpenSSL libraries the binary uses, and GStreamer's base a
 which the browser's pages play sound and video with. The AppImage carries those plugins itself,
 staged from the build machine; the bundle stops and names the packages when they are missing, and
 `--without-media` builds an image without them that uses the system's
-(`docs/developing-in-aura.md`, Linux).
+(`docs/developing-in-o7.md`, Linux).
 
 - The window is opaque: Linux has no glass material behind windows.
 - Sound and video: where GStreamer's base and good plugins are missing, pages start with them off
@@ -58,7 +58,7 @@ app's *designated requirement*. A build with the default ad-hoc signature has th
 `cdhash H"…"`, the hash of that exact build, which no other build satisfies: after every rebuild
 macOS treats o7 as a new app, asks for access again, and leaves the old entries behind in
 System Settings. Signed with one stable identity, every build has the requirement
-`identifier "si.auracode.desktop" and certificate root = H"<certificate SHA-1>"`, so grants carry
+`identifier "codes.o7.desktop" and certificate root = H"<certificate SHA-1>"`, so grants carry
 over from build to build.
 
 The identity is a self-signed certificate named **auracode Local Signing**, kept in your login
@@ -95,7 +95,7 @@ identity (marked `CSSMERR_TP_NOT_TRUSTED`, which is expected).
 - **Bundles:** `pnpm bundle` passes the identity's SHA-1 to `tauri build` as
   `APPLE_SIGNING_IDENTITY`. On a Mac without the identity it signs ad hoc (`-`, as CI does) and
   warns, so the build still works. If you set `APPLE_SIGNING_IDENTITY` yourself, it wins. Check a
-  bundle with `codesign -d -r- target/release/bundle/macos/auracode.app`.
+  bundle with `codesign -d -r- target/release/bundle/macos/o7.app`.
 - **Dev builds:** `src-tauri/.cargo/config.toml` makes `scripts/macos-signing.sh` Cargo's runner on
   macOS, so `pnpm dev` signs `target/debug/auracode` with the identity (and the bundle's
   identifier) just before it starts. Without the identity the build runs as before, with a hint.
@@ -105,7 +105,7 @@ identity (marked `CSSMERR_TP_NOT_TRUSTED`, which is expected).
   read the runner config, which Cargo only loads for commands run inside `src-tauri/`.
 - **Windows and Linux** need nothing: the scripts only sign on macOS.
 
-To keep the identity in another keychain, set `AURACODE_SIGNING_KEYCHAIN` to its path for
+To keep the identity in another keychain, set `O7_SIGNING_KEYCHAIN` to its path for
 `create`, `status` and builds. `codesign` only finds identities in keychains on your search list
 (`security list-keychains`), which the login keychain always is.
 
@@ -140,7 +140,7 @@ pnpm signing create
 ```
 
 The next build has a new designated requirement, so macOS asks for folder access once more. Clear
-the stale grant with `tccutil reset SystemPolicyDesktopFolder si.auracode.desktop`, or in System
+the stale grant with `tccutil reset SystemPolicyDesktopFolder codes.o7.desktop`, or in System
 Settings > Privacy & Security > Files and Folders.
 
 ### Troubleshooting

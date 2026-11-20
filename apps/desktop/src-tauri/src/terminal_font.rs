@@ -65,7 +65,7 @@ pub async fn terminal_system_font(
     })
 }
 
-fn env_vars(vars: &aura_process::EnvMap) -> BTreeMap<String, String> {
+fn env_vars(vars: &o7_process::EnvMap) -> BTreeMap<String, String> {
     vars.iter()
         .filter_map(|(name, value)| {
             Some((

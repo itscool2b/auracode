@@ -97,10 +97,10 @@ function setup() {
     dataDir: join(root, "data"),
     stateDir: join(root, "state"),
   };
-  const installed = appImage(join(root, "Applications", "auracode_0.1.0_amd64.AppImage"), "old");
+  const installed = appImage(join(root, "Applications", "o7_0.1.0_amd64.AppImage"), "old");
   symlinkSync(basename(installed), paths.link);
   const built = appImage(
-    join(root, "repo", "target", "release", "bundle", "appimage", "auracode_0.1.0_amd64.AppImage"),
+    join(root, "repo", "target", "release", "bundle", "appimage", "o7_0.1.0_amd64.AppImage"),
     "new",
   );
   return { root, paths, installed, built };
@@ -118,17 +118,17 @@ const quiet = () => {};
 
 test("folders follow the XDG variables and the overrides", () => {
   const paths = folders({ HOME: "/home/me" });
-  assert.equal(paths.link, "/home/me/Applications/auracode.AppImage");
-  assert.equal(paths.dataDir, "/home/me/.local/share/si.auracode.desktop");
-  assert.equal(paths.stateDir, "/home/me/.local/state/auracode-upgrades");
+  assert.equal(paths.link, "/home/me/Applications/o7.AppImage");
+  assert.equal(paths.dataDir, "/home/me/.local/share/codes.o7.desktop");
+  assert.equal(paths.stateDir, "/home/me/.local/state/o7-upgrades");
   const xdg = folders(
     { HOME: "/home/me", XDG_DATA_HOME: "/d", XDG_STATE_HOME: "/s" },
     { link: "/x/a.AppImage" },
   );
   assert.deepEqual(xdg, {
     link: "/x/a.AppImage",
-    dataDir: "/d/si.auracode.desktop",
-    stateDir: "/s/auracode-upgrades",
+    dataDir: "/d/codes.o7.desktop",
+    stateDir: "/s/o7-upgrades",
   });
 });
 
@@ -144,9 +144,7 @@ test("only a type 2 AppImage passes the header check", () => {
 
 test("the newest AppImage under a target folder is found, with or without a triple", () => {
   const dir = temp();
-  const older = appImage(
-    join(dir, "release", "bundle", "appimage", "auracode_0.1.0_amd64.AppImage"),
-  );
+  const older = appImage(join(dir, "release", "bundle", "appimage", "o7_0.1.0_amd64.AppImage"));
   const newer = appImage(
     join(
       dir,
@@ -154,7 +152,7 @@ test("the newest AppImage under a target folder is found, with or without a trip
       "release",
       "bundle",
       "appimage",
-      "auracode_0.1.1_amd64.AppImage",
+      "o7_0.1.1_amd64.AppImage",
     ),
   );
   utimesSync(older, new Date(2026, 0, 1), new Date(2026, 0, 1));
@@ -165,10 +163,10 @@ test("the newest AppImage under a target folder is found, with or without a trip
 test("a staged build keeps its name with the time added", () => {
   const at = new Date(2026, 10, 16, 9, 5, 7);
   assert.equal(
-    stagedName("/t/auracode_0.1.0_amd64.AppImage", at),
-    "auracode_0.1.0_amd64_20261116-090507.AppImage",
+    stagedName("/t/o7_0.1.0_amd64.AppImage", at),
+    "o7_0.1.0_amd64_20261116-090507.AppImage",
   );
-  assert.equal(stagedName("/t/other.AppImage", at), "auracode_other_20261116-090507.AppImage");
+  assert.equal(stagedName("/t/other.AppImage", at), "o7_other_20261116-090507.AppImage");
 });
 
 test("the launch env loses an agent session and an AppImage launcher, and keeps the rest", () => {
@@ -176,7 +174,7 @@ test("the launch env loses an agent session and an AppImage launcher, and keeps 
     HOME: "/home/me",
     WAYLAND_DISPLAY: "wayland-1",
     CLAUDECODE: "1",
-    AURA_MCP_0_env_1: "secret",
+    O7_MCP_0_env_1: "secret",
     APPDIR: "/tmp/.mount_x",
     APPIMAGE: "/a.AppImage",
     LD_LIBRARY_PATH: "/tmp/.mount_x/usr/lib/:",
@@ -326,7 +324,7 @@ test("status names the link, what runs and what is kept", async () => {
   await install(options({ appimage: built }), paths, system, quiet, {});
   const lines = [];
   status(paths, system, (line) => lines.push(line));
-  assert.match(lines[0], /auracode\.AppImage -> .*_20261116-170000\.AppImage/u);
+  assert.match(lines[0], /o7\.AppImage -> .*_20261116-170000\.AppImage/u);
   assert.ok(lines.some((line) => line.startsWith("Running: 100")));
   assert.ok(lines.some((line) => line.includes(`Kept builds: ${basename(installed)}`)));
 });
@@ -336,7 +334,7 @@ test("old builds beyond --keep are pruned, never the previous one", async () => 
   const system = fakeSystem();
   const dir = dirname(paths.link);
   for (const [index, name] of ["a", "b", "c", "d"].entries()) {
-    const file = appImage(join(dir, `auracode_${name}.AppImage`));
+    const file = appImage(join(dir, `o7_${name}.AppImage`));
     utimesSync(file, new Date(2026, 0, 1 + index), new Date(2026, 0, 1 + index));
   }
   utimesSync(installed, new Date(2025, 0, 1), new Date(2025, 0, 1));
@@ -358,7 +356,7 @@ test("old builds beyond --keep are pruned, never the previous one", async () => 
 test("a build runs as its runtime or as the app inside its mount", () => {
   // As /proc names it: resolved, which macOS's temporary folder (/var, a link to /private/var) is not.
   const dir = realpathSync(temp());
-  const file = appImage(join(dir, "auracode_0.1.0_amd64.AppImage"));
+  const file = appImage(join(dir, "o7_0.1.0_amd64.AppImage"));
   const env = (image) => Buffer.from(`HOME=/home/me\0APPIMAGE=${image}\0APPDIR=/tmp/.mount_x\0`);
   assert.equal(buildOf(file, undefined, dir), file);
   assert.equal(buildOf(`${file} (deleted)`, undefined, dir), file);

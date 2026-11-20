@@ -6,7 +6,7 @@ import {
   orbPosterBackground,
   springs,
   usePrefersReducedMotion,
-} from "@auracode/ui";
+} from "@o7/ui";
 import {
   ArrowUp,
   Check,

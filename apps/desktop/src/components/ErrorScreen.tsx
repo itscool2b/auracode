@@ -1,9 +1,9 @@
-import { CopyButton, Logo } from "@auracode/ui/graphite";
+import { CopyButton, Logo } from "@o7/ui/graphite";
 import { DataPath, Notices } from "./InfoCard";
 import "./ErrorScreen.css";
 
 /**
- * Shown instead of the app when startup could not complete: what happened, in aura-core's own
+ * Shown instead of the app when startup could not complete: what happened, in o7-core's own
  * words, where the data lives, and what to do. Calm on purpose; nothing was changed or lost.
  */
 export function ErrorScreen({

@@ -12,7 +12,7 @@ use std::process::{Command, Stdio};
 use std::sync::Mutex;
 use std::time::{Duration, Instant};
 
-use aura_core::uninstall::{self, GitTool, ItemKind, Os, PlatformDirs, Targets};
+use o7_core::uninstall::{self, GitTool, ItemKind, Os, PlatformDirs, Targets};
 use serde::{Deserialize, Serialize};
 use tauri::{AppHandle, Manager, State};
 
@@ -25,7 +25,7 @@ use crate::state::AppState;
 pub enum DataCleanupScope {
     /// Everything o7 keeps on this device.
     Machine,
-    /// Only this launch's own data folder (`AURACODE_DATA_DIR`).
+    /// Only this launch's own data folder (`O7_DATA_DIR`).
     DataFolder,
 }
 
@@ -153,7 +153,7 @@ pub async fn data_cleanup_review(
         .collect();
     let app_bundle = crate::uninstall::app_bundle();
     let review = DataCleanupReview {
-        token: aura_core::ids::new_id(),
+        token: o7_core::ids::new_id(),
         scope,
         items: plan
             .items
@@ -303,7 +303,8 @@ fn spawn_detached(exe: &Path, arguments: &[std::ffi::OsString]) -> std::io::Resu
         let mut command = Command::new(exe);
         command
             .args(arguments)
-            .env_remove(aura_core::paths::DATA_DIR_ENV)
+            .env_remove(o7_core::paths::DATA_DIR_ENV)
+            .env_remove(o7_core::paths::LEGACY_DATA_DIR_ENV)
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::null());
@@ -317,16 +318,15 @@ fn spawn_detached(exe: &Path, arguments: &[std::ffi::OsString]) -> std::io::Resu
         const CREATE_BREAKAWAY_FROM_JOB: u32 = 0x0100_0000;
         let flags = DETACHED_PROCESS | CREATE_NEW_PROCESS_GROUP;
         // A job that forbids breaking away refuses the flag; then start inside it.
-        match aura_process::spawn_command(build().creation_flags(flags | CREATE_BREAKAWAY_FROM_JOB))
-        {
+        match o7_process::spawn_command(build().creation_flags(flags | CREATE_BREAKAWAY_FROM_JOB)) {
             Ok(_) => Ok(()),
-            Err(_) => aura_process::spawn_command(build().creation_flags(flags)).map(drop),
+            Err(_) => o7_process::spawn_command(build().creation_flags(flags)).map(drop),
         }
     }
     #[cfg(unix)]
     {
         use std::os::unix::process::CommandExt;
-        aura_process::spawn_command(build().process_group(0)).map(drop)
+        o7_process::spawn_command(build().process_group(0)).map(drop)
     }
 }
 

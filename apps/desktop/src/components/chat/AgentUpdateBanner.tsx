@@ -1,4 +1,4 @@
-import { AgentMark } from "@auracode/ui/graphite";
+import { AgentMark } from "@o7/ui/graphite";
 import { X } from "lucide-react";
 import { useEffect, useId, useRef, useState } from "react";
 import type { AgentMaintenance } from "../../bindings";

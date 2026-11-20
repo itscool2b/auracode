@@ -6,14 +6,14 @@ import { lastMessage } from "./stream";
 import { stressTurnTokens } from "./stress";
 
 /**
- * The stream check of smoke mode (`AURACODE_SMOKE=1`): a scripted check of the real shell, through
+ * The stream check of smoke mode (`O7_SMOKE=1`): a scripted check of the real shell, through
  * the real UI. The chat scenarios are in `smokeChat.ts`.
  *
  * 1. A full demo turn: every block arrives complete, in order, and the answer renders.
  * 2. A cancelled turn: stopping mid-stream ends the turn as "cancelled".
  * 3. A stress burst (6 orbs, 200 tokens/s, 3 s) with the frame rate measured while it streams.
  *
- * The report goes to the shell, which prints `AURACODE_SMOKE_RESULT <json>` and may exit with it.
+ * The report goes to the shell, which prints `O7_SMOKE_RESULT <json>` and may exit with it.
  */
 
 export const SMOKE_STRESS: StressConfig = { orbs: 6, rate: 200, aura: true, seconds: 3 };

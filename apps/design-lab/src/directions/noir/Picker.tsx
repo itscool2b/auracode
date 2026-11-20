@@ -1,4 +1,4 @@
-import { GlassPanel, Orb } from "@auracode/ui";
+import { GlassPanel, Orb } from "@o7/ui";
 import { Check } from "lucide-react";
 import { motion } from "motion/react";
 import { type KeyboardEvent, useEffect, useId, useRef } from "react";

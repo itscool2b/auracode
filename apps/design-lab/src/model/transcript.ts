@@ -1,4 +1,4 @@
-import type { AgentBrandId, AuraIntensity, OrbState } from "@auracode/ui";
+import type { AgentBrandId, AuraIntensity, OrbState } from "@o7/ui";
 import type {
   Cost,
   LabEvent,

@@ -1,5 +1,5 @@
-import { AGENT_BRANDS, type AgentBrandId } from "@auracode/ui";
-import { Logo } from "@auracode/ui/graphite";
+import { AGENT_BRANDS, type AgentBrandId } from "@o7/ui";
+import { Logo } from "@o7/ui/graphite";
 import { type RefObject, useEffect, useState } from "react";
 import { useInView, usePageVisible, useReducedMotion } from "../motion";
 import {

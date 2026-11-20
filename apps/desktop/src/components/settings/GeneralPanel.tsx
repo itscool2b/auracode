@@ -1,4 +1,4 @@
-import { AgentMark } from "@auracode/ui/graphite";
+import { AgentMark } from "@o7/ui/graphite";
 import { useEffect, useState, useSyncExternalStore } from "react";
 import type {
   AgentEntry,

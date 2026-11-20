@@ -1,5 +1,5 @@
 import "./plain.css";
-import { AuraField, brandCssVariables, getBrand, Orb } from "@auracode/ui";
+import { AuraField, brandCssVariables, getBrand, Orb } from "@o7/ui";
 import { type CSSProperties, useLayoutEffect, useRef } from "react";
 import type { DirectionProps } from "../directions/types";
 import type { ChatStatus, PlanStatus } from "../fixture/types";

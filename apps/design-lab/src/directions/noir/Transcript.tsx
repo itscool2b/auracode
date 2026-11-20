@@ -1,4 +1,4 @@
-import { easings, GlassPanel, getBrand, Orb, type OrbState } from "@auracode/ui";
+import { easings, GlassPanel, getBrand, Orb, type OrbState } from "@o7/ui";
 import {
   Brain,
   ChevronDown,

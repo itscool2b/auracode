@@ -1,4 +1,4 @@
-import { prefersReducedMotion } from "@auracode/ui";
+import { prefersReducedMotion } from "@o7/ui";
 import { Check, Mic, X } from "lucide-react";
 import {
   type CSSProperties,

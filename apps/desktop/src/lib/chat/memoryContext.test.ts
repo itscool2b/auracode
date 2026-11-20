@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 import { splitMemoryContext } from "./memoryContext";
 
-/** The block as `visible_context` (crates/aura-core/src/chatstore/memory.rs) writes it today. */
+/** The block as `visible_context` (crates/o7-core/src/chatstore/memory.rs) writes it today. */
 const GUIDANCE =
   "Use this as project background. The current request and instruction files take precedence. Native agent memory is unchanged. You can read and edit this memory with the o7 project-memory tools when they are available: read it first, then write the complete updated Markdown. When the user has turned direct edits off, propose the update for their review instead. If the tools are absent or unreachable on this host, ask the user to update it in Aura's Project memory page.";
 const block = (revision: string, markdown: string, edited = "") =>

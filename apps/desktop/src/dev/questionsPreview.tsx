@@ -1,7 +1,7 @@
 /** Owned browser fixture for pending questions. It makes no native or agent calls. */
 import { useState } from "react";
 import { createRoot } from "react-dom/client";
-import type { AuraEvent, EventBatch, UiAnswer, UiPrompt } from "../bindings";
+import type { EventBatch, O7Event, UiAnswer, UiPrompt } from "../bindings";
 import { ChatView } from "../components/chat/ChatView";
 import {
   attachResult,
@@ -22,7 +22,7 @@ function Preview() {
     const scenario = new URLSearchParams(location.search).get("case");
     const status = scenario === "startup" ? "starting" : "running";
     const chat = chatSummary("questions-chat", { status });
-    const events: AuraEvent[] = [];
+    const events: O7Event[] = [];
     for (let i = 0; i < 90; i++)
       events.push(
         ev.turnStarted(`old-${i}`),
@@ -35,14 +35,14 @@ function Preview() {
     let receive: ((value: EventBatch) => void) | null = null;
     let pending: {
       id: string;
-      event: AuraEvent;
+      event: O7Event;
       resolve: () => void;
       reject: (error: Error) => void;
     } | null = null;
     const calls: { id: string; answer: UiAnswer | null }[] = [];
     const permissionCalls: { id: string; optionId: string | null }[] = [];
     let sent = false;
-    const publish = (updates: AuraEvent[]) => {
+    const publish = (updates: O7Event[]) => {
       const start = events.length;
       events.push(...updates);
       receive?.(frame(chat.id, start, updates));

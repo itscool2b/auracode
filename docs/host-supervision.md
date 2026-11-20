@@ -11,7 +11,7 @@ realm. A global host enum must not enable execution before those checks.
 
 ## Linux endpoint
 
-`aura-host-supervisor --stdio <absolute-state-directory>` serves one connection. `--version`
+`o7-host-supervisor --stdio <absolute-state-directory>` serves one connection. `--version`
 reports the package and protocol versions without resolving an environment or starting an agent.
 The endpoint uses the existing environment resolver, targeted scrub, redactor, log factory,
 process spawner, descendant tracking and leftover registry. The Linux environment remains local.

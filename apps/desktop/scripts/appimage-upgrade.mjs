@@ -1,7 +1,7 @@
 // `pnpm host-upgrade` on Linux: replaces the installed o7 AppImage with a local build, and
 // puts the previous build back when the new one does not work.
 //
-// The installed app is one file behind a link, `~/Applications/auracode.AppImage`, which the
+// The installed app is one file behind a link, `~/Applications/o7.AppImage`, which the
 // desktop entry starts. A running AppImage reads its own file, so a new build is a new file next to
 // it and the link moves; the running app is untouched and the previous files stay for a rollback.
 // The installed app is usually the one running the agent session that built the new one, and an
@@ -10,7 +10,7 @@
 // When the person quits o7 the waiter moves the link, starts o7, and moves the link
 // back and starts the previous build if the new one does not stay up. `rollback` moves the link
 // back by hand and, with `--restore-database`, restores the databases a newer schema migrated.
-// See docs/developing-in-aura.md.
+// See docs/developing-in-o7.md.
 
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
@@ -45,7 +45,7 @@ const REPO = resolve(dirname(SCRIPT), "..", "..", "..");
 /** A kept build: `auracode_<anything>.AppImage`, never the link itself. */
 const BUILD = /^auracode_.+\.AppImage$/u;
 
-const USAGE = `Usage: pnpm --filter @auracode/desktop host-upgrade <command> [options]   (Linux)
+const USAGE = `Usage: pnpm --filter @o7/desktop host-upgrade <command> [options]   (Linux)
 
   install [--appimage <file>] [--after-exit [--wait <minutes>]]
       Copies a local AppImage next to the installed one and points the link at it. The newest
@@ -53,12 +53,14 @@ const USAGE = `Usage: pnpm --filter @auracode/desktop host-upgrade <command> [op
       instead: it runs once o7 quits (default wait 30 minutes).
   rollback [--to <file>] [--restore-database]
       Points the link back at the previous build (or --to). --restore-database also restores
-      each database a newer build migrated since then, from aura-core's pre-migration backup.
+      each database a newer build migrated since then, from o7-core's pre-migration backup.
   status    What is installed, running, armed and kept.
   cancel    Stops an armed install.
 
-  --link, --data-dir and --state-dir override ~/Applications/auracode.AppImage,
-  $XDG_DATA_HOME/si.auracode.desktop and $XDG_STATE_HOME/auracode-upgrades.`;
+  --link, --data-dir and --state-dir override ~/Applications/o7.AppImage (auracode.AppImage on a
+  machine set up before the rename),
+  the data folder ($XDG_DATA_HOME/codes.o7.desktop, or si.auracode.desktop from then) and
+  $XDG_STATE_HOME/o7-upgrades (or auracode-upgrades).`;
 
 /** The files the commands work on. */
 export function folders(env, overrides = {}) {
@@ -66,10 +68,35 @@ export function folders(env, overrides = {}) {
   const data = env.XDG_DATA_HOME || join(home, ".local", "share");
   const state = env.XDG_STATE_HOME || join(home, ".local", "state");
   return {
-    link: resolve(overrides.link ?? join(home, "Applications", "auracode.AppImage")),
-    dataDir: resolve(overrides.dataDir ?? join(data, "si.auracode.desktop")),
-    stateDir: resolve(overrides.stateDir ?? join(state, "auracode-upgrades")),
+    link: resolve(
+      overrides.link ??
+        inUse(
+          join(home, "Applications", "o7.AppImage"),
+          join(home, "Applications", "auracode.AppImage"),
+        ),
+    ),
+    dataDir: resolve(
+      overrides.dataDir ??
+        inUse(join(data, "codes.o7.desktop"), join(data, "si.auracode.desktop"), true),
+    ),
+    stateDir: resolve(
+      overrides.stateDir ?? inUse(join(state, "o7-upgrades"), join(state, "auracode-upgrades")),
+    ),
   };
+}
+
+/**
+ * o7 was auracode until 19 November 2026. A machine set up before then keeps its link, its data
+ * and its kept upgrades under the earlier names: `current` when it is used, else `earlier` when
+ * that is, else `current`. A data folder is used when it has `device.json` or `profiles`;
+ * anything else when it exists.
+ */
+export function inUse(current, earlier, data = false) {
+  const used = (path) =>
+    data
+      ? existsSync(join(path, "device.json")) || existsSync(join(path, "profiles"))
+      : existsSync(path);
+  return !used(current) && used(earlier) ? earlier : current;
 }
 
 /** Whether `file` is a type 2 AppImage (`AI\x02` at byte 8 of an ELF file). */
@@ -117,7 +144,7 @@ export function newestAppImage(roots) {
 /** The kept name for `source` staged at `date`: its own name with the time added. */
 export function stagedName(source, date) {
   const stem = basename(source).replace(/\.AppImage$/u, "");
-  const named = stem.startsWith("auracode_") ? stem : `auracode_${stem}`;
+  const named = stem.startsWith("o7_") ? stem : `o7_${stem}`;
   return `${named}_${stampOf(date)}.AppImage`;
 }
 

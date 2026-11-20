@@ -1,12 +1,13 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "auracode",
-  "identifier": "si.auracode.desktop",
+  "productName": "o7",
+  "mainBinaryName": "o7",
+  "identifier": "codes.o7.desktop",
   "build": {
     "devUrl": "http://localhost:1420",
     "frontendDist": "../dist",
-    "beforeDevCommand": "pnpm --filter @auracode/desktop dev",
-    "beforeBuildCommand": "pnpm --filter @auracode/desktop build"
+    "beforeDevCommand": "pnpm --filter @o7/desktop dev",
+    "beforeBuildCommand": "pnpm --filter @o7/desktop build"
   },
   "app": {
     "withGlobalTauri": false,
@@ -26,7 +27,10 @@
         "decorations": true,
         "titleBarStyle": "Overlay",
         "hiddenTitle": true,
-        "trafficLightPosition": { "x": 18, "y": 24 }
+        "trafficLightPosition": {
+          "x": 18,
+          "y": 24
+        }
       }
     ],
     "security": {
@@ -49,7 +53,9 @@
       "pubkey": "",
       "requireSignedVersion": true,
       "allowDowngrades": false,
-      "windows": { "installMode": "passive" }
+      "windows": {
+        "installMode": "passive"
+      }
     }
   },
   "bundle": {
@@ -62,7 +68,9 @@
       "icons/icon.icns",
       "icons/icon.ico"
     ],
-    "resources": { "resources/dictation/": "dictation/" },
+    "resources": {
+      "resources/dictation/": "dictation/"
+    },
     "linux": {
       "deb": {
         "depends": [
@@ -74,7 +82,9 @@
           "gstreamer1.0-gl",
           "gstreamer1.0-pulseaudio | gstreamer1.0-alsa"
         ],
-        "section": "devel"
+        "section": "devel",
+        "conflicts": ["auracode"],
+        "replaces": ["auracode"]
       },
       "rpm": {
         "depends": [
@@ -84,9 +94,13 @@
           "libcrypto.so.3()(64bit)",
           "gstreamer1-plugins-base",
           "gstreamer1-plugins-good"
-        ]
+        ],
+        "conflicts": ["auracode"],
+        "obsoletes": ["auracode"]
       },
-      "appimage": { "bundleMediaFramework": true }
+      "appimage": {
+        "bundleMediaFramework": true
+      }
     },
     "category": "DeveloperTool",
     "shortDescription": "One home for all your coding agents.",
@@ -105,8 +119,11 @@
         "installMode": "currentUser",
         "installerHooks": "./windows/hooks.nsh",
         "languages": ["English"],
-        "customLanguageFiles": { "English": "./windows/English.nsh" }
+        "customLanguageFiles": {
+          "English": "./windows/English.nsh"
+        }
       }
-    }
+    },
+    "publisher": "o7"
   }
 }

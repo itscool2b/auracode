@@ -1,5 +1,5 @@
-import { prefersReducedMotion } from "@auracode/ui";
-import { CopyButton, StatusDot } from "@auracode/ui/graphite";
+import { prefersReducedMotion } from "@o7/ui";
+import { CopyButton, StatusDot } from "@o7/ui/graphite";
 import {
   ArrowRightLeft,
   Brain,

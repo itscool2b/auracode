@@ -1,4 +1,4 @@
-import { AgentMark } from "@auracode/ui/graphite";
+import { AgentMark } from "@o7/ui/graphite";
 import { useEffect, useState } from "react";
 import type { AgentEntry, ConfigChoice, ModelRole, RoleModel } from "../../bindings";
 import { NO_ROLES, ROLES } from "../../lib/roles";

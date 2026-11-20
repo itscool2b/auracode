@@ -120,19 +120,19 @@ them in profile logs. A diagnostic launch must capture stderr to retain phase ti
 Run the focused native regression suite with:
 
 ```text
-cargo test -p aura-core --lib checkpoints
+cargo test -p o7-core --lib checkpoints
 ```
 
 The ignored `checkpoint_performance` test creates disposable 1,000, 10,000, and 20,000-file
 workspaces and reports cold, unchanged, and one-file-edit captures.
-`AURA_CHECKPOINT_BENCH_COUNTS` selects comma-separated sizes and
-`AURA_CHECKPOINT_BENCH_WARM` selects the number of unchanged samples, defaulting to one.
+`O7_CHECKPOINT_BENCH_COUNTS` selects comma-separated sizes and
+`O7_CHECKPOINT_BENCH_WARM` selects the number of unchanged samples, defaulting to one.
 
 ```text
-cargo test -p aura-core checkpoint_performance -- --ignored --nocapture
+cargo test -p o7-core checkpoint_performance -- --ignored --nocapture
 ```
 
-Set `AURA_CHECKPOINT_BENCH_WORKSPACE` to an explicit workspace and run
+Set `O7_CHECKPOINT_BENCH_WORKSPACE` to an explicit workspace and run
 `checkpoint_workspace_performance` to measure its cold capture and three unchanged captures.
 It only reads that workspace; its private checkpoint profile is temporary. The separate
 `checkpoint_prompt_performance` fixture measures manager-send to scripted-driver receipt for
@@ -159,7 +159,7 @@ per scenario. Results describe these runs, not tail latency or statistical signi
 fixture excludes desktop UI/IPC, real harness startup, provider/model latency, and production log
 formatting and writes.
 
-`AURA_CHECKPOINT_BENCH_DIAGNOSTICS=1` enables a bounded checkpoint-only event collector in the
+`O7_CHECKPOINT_BENCH_DIAGNOSTICS=1` enables a bounded checkpoint-only event collector in the
 ignored core fixtures; CI comparisons enable it. Collection adds small bounded allocations and
 mutex locking, but formatting and output occur after each elapsed time is frozen. `CAPTURE_DIAGNOSTIC`
 records retain phase/helper timings and durability selection without messages, IDs, paths, or

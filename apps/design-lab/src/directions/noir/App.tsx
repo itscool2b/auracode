@@ -7,7 +7,7 @@ import {
   getBrand,
   Orb,
   type OrbState,
-} from "@auracode/ui";
+} from "@o7/ui";
 import { Check, ChevronDown } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
 import {

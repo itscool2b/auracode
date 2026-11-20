@@ -1,4 +1,4 @@
-import { PixelLoader } from "@auracode/ui/graphite";
+import { PixelLoader } from "@o7/ui/graphite";
 import { ChevronDown, Folder, GitBranch } from "lucide-react";
 import { type CSSProperties, useEffect, useId, useRef, useState } from "react";
 import {

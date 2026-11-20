@@ -9,14 +9,14 @@ browser with a computer through the relay in `apps/relay` ([remote-sessions.md](
 ## Local checks
 
 ```powershell
-corepack pnpm --filter @auracode/web typecheck
-corepack pnpm --filter @auracode/web test
-corepack pnpm --filter @auracode/web test:browser
-corepack pnpm --filter @auracode/web dev
+corepack pnpm --filter @o7/web typecheck
+corepack pnpm --filter @o7/web test
+corepack pnpm --filter @o7/web test:browser
+corepack pnpm --filter @o7/web dev
 ```
 
 Browser checks use owned headless Chromium and WebKit and block external requests
-(`pnpm --filter @auracode/web test:browser chromium` runs one engine; Playwright's WebKit does not
+(`pnpm --filter @o7/web test:browser chromium` runs one engine; Playwright's WebKit does not
 start on Arch Linux, which lacks the Ubuntu libraries it is built against). They cover
 dark and light with the system, desktop/mobile overflow, keyboard focus, the agents' chips at every
 width (complete, in view, still), as toggle buttons and with the chosen one's mark, the six feature
@@ -27,7 +27,7 @@ the skip link and verifies keyboard activation. Real Safari/macOS acceptance rem
 
 React Router 7.18.4 supports TypeScript through version 6 in its peer contract, so this package pins
 TypeScript 6.0.3 locally. The desktop/workspace compiler remains unchanged. The website uses the
-shared Geist font package and semantic tokens from `@auracode/ui`.
+shared Geist font package and semantic tokens from `@o7/ui`.
 
 ## Reference evidence
 

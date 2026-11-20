@@ -14,7 +14,7 @@ import {
 } from "./check-changelog.mjs";
 
 const script = fileURLToPath(new URL("./check-changelog.mjs", import.meta.url));
-const pr = (n) => `([#${n}](https://github.com/itscool2b/auracode/pull/${n}))`;
+const pr = (n) => `([#${n}](https://github.com/itscool2b/o7/pull/${n}))`;
 const valid = [
   "# Changelog",
   "",

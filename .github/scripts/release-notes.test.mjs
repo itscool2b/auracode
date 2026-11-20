@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { entries, FALLBACK, headline, MAX_LINES, notes } from "./release-notes.mjs";
 
-const pr = (n) => `([#${n}](https://github.com/itscool2b/auracode/pull/${n}))`;
+const pr = (n) => `([#${n}](https://github.com/itscool2b/o7/pull/${n}))`;
 const changelog = (...days) =>
   [
     "# Changelog",

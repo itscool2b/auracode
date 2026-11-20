@@ -1,4 +1,4 @@
-import { PixelLoader } from "@auracode/ui/graphite";
+import { PixelLoader } from "@o7/ui/graphite";
 import { Bot, Check, CircleStop, History, TerminalSquare, TriangleAlert } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { TaskKind, TaskStatus } from "../../bindings";

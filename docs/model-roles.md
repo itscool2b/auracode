@@ -20,9 +20,9 @@ The offer needs the role's agent to be ready on this computer. If it stops being
 
 ## Where it is saved and read
 
-- `general.roles` in the profile's setup preferences (`crates/aura-core/src/onboarding.rs`: `RoleModels`, `RoleModel`, `ModelRole`, action `role_model`). An agent is saved as the agent, not a connection of it, as the default agent is. Each value is checked as an identifier.
+- `general.roles` in the profile's setup preferences (`crates/o7-core/src/onboarding.rs`: `RoleModels`, `RoleModel`, `ModelRole`, action `role_model`). An agent is saved as the agent, not a connection of it, as the default agent is. Each value is checked as an identifier.
 - The window applies Planning and Building (`apps/desktop/src/lib/roles.ts`, `ChatView.tsx`). They use only what the pickers and the agent switch already do: `chat_set_option`, `respond_permission`, `chat_stop`, `continuation_preview` and `continuation_apply`, `composer_send`.
-- Rust reads Coordinator and Workers (`crates/aura-core/src/session/coordinator.rs`, `role_for`).
+- Rust reads Coordinator and Workers (`crates/o7-core/src/session/coordinator.rs`, `role_for`).
 
 ## Limits
 
@@ -32,6 +32,6 @@ The offer needs the role's agent to be ready on this computer. If it stops being
 
 ## Verification
 
-- `cargo test -p aura-core onboarding` (the preference: saved, normalized, refused when not an identifier, absent in older profiles).
-- `pnpm --filter @auracode/desktop exec vitest run src/lib/roles.test.ts src/components/chat/PlanCard.test.tsx`.
+- `cargo test -p o7-core onboarding` (the preference: saved, normalized, refused when not an identifier, absent in older profiles).
+- `pnpm --filter @o7/desktop exec vitest run src/lib/roles.test.ts src/components/chat/PlanCard.test.tsx`.
 - `node apps/desktop/scripts/check-settings.mjs` (the rows, in both engines and appearances, with the page's search).

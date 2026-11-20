@@ -1,10 +1,10 @@
 //! The o7 desktop shell: the Tauri window, the plugins, and typed commands and channels over
-//! aura-core and aura-drivers. Everything that is not UI stays in Rust; this crate is the thin layer
+//! o7-core and o7-drivers. Everything that is not UI stays in Rust; this crate is the thin layer
 //! that exposes it to the React UI in `apps/desktop/src`.
 //!
 //! Startup ([`run`]): logging, launch switches from the environment, the plugins (single-instance
 //! first, unless the launch runs on its own: [`LaunchOptions::single_instance`]), then `setup` runs
-//! aura-core's startup sequence on the data root aura-core resolves (failures become an error
+//! o7-core's startup sequence on the data root o7-core resolves (failures become an error
 //! screen, never a crash), picks the window glass for this OS, creates the main window hidden,
 //! starts the chat store and the session manager ([`sessions::start_chats`]), and arms the fallback
 //! that shows the window if the page never reports its first paint. If no window can be created at
@@ -142,6 +142,8 @@ pub fn run() {
     // The plugin's file is per bundle identifier, outside any data folder (see
     // `LaunchOptions::remembers_window_geometry`).
     if launch.remembers_window_geometry() {
+        // A copy updated from auracode: its window opens where auracode's last was.
+        o7_core::paths::carry_window_state();
         builder = builder.plugin(
             tauri_plugin_window_state::Builder::new()
                 .with_state_flags(window::restored_state())
@@ -193,7 +195,7 @@ fn setup(app: &mut tauri::App, launch: LaunchOptions) {
     app.set_theme(None);
     if let Some(Err(error)) = &launch.smoke {
         // Automation is waiting for a result: say why no scenario runs, and with
-        // AURACODE_SMOKE_EXIT end here, before any data opens or any agent starts.
+        // O7_SMOKE_EXIT end here, before any data opens or any agent starts.
         tracing::error!(%error, "the smoke switches cannot run a scenario");
         let report = smoke::setup_failed(error.scenario, &error.message);
         smoke::print(&report);
@@ -233,8 +235,7 @@ fn setup(app: &mut tauri::App, launch: LaunchOptions) {
     let shown = Arc::clone(&state.window_shown);
     let reported = Arc::clone(&state.smoke_reported);
     let quit = Arc::clone(&state.quit);
-    let clones =
-        aura_core::cloning::Clones::new(state.data_dir().map(std::path::Path::to_path_buf));
+    let clones = o7_core::cloning::Clones::new(state.data_dir().map(std::path::Path::to_path_buf));
     app.manage(state);
     #[cfg(windows)]
     app.manage(window::WebviewVisibility::default());
@@ -349,7 +350,7 @@ fn on_page_load(webview: &Webview, payload: &PageLoadPayload<'_>) {
         if let Some(vendor) = webview.try_state::<Arc<config_vendor::VendorService>>() {
             vendor.drop_owner(owner);
         }
-        if let Some(clones) = webview.try_state::<Arc<aura_core::cloning::Clones>>() {
+        if let Some(clones) = webview.try_state::<Arc<o7_core::cloning::Clones>>() {
             clones.drop_owner(owner);
         }
         if let Some(chats) = chats {
@@ -413,7 +414,7 @@ fn on_event(app: &tauri::AppHandle, event: RunEvent) {
             // The browser's pages close before the window they live in.
             browser::shutdown(app);
             remote::shutdown(app);
-            if let Some(clones) = app.try_state::<Arc<aura_core::cloning::Clones>>() {
+            if let Some(clones) = app.try_state::<Arc<o7_core::cloning::Clones>>() {
                 clones.cancel_all();
             }
             if let Some(shell) = app.try_state::<Arc<native_shell::NativeShell>>() {
@@ -444,7 +445,7 @@ fn on_exit_requested(app: &tauri::AppHandle, code: Option<i32>, api: &tauri::Exi
             api.prevent_exit();
             state.dictation.cancel_all();
             state.terminals.close_non_project();
-            if let Some(clones) = app.try_state::<Arc<aura_core::cloning::Clones>>() {
+            if let Some(clones) = app.try_state::<Arc<o7_core::cloning::Clones>>() {
                 clones.cancel_all();
             }
             // The last window closing asks without a code; that is a normal quit.

@@ -1,6 +1,6 @@
 //! Thin Plugin library commands. Rust owns which CLI commands run, the cache and the harness
 //! status; the renderer only asks for a snapshot or a refresh.
-use aura_protocol::plugins::PluginLibrary;
+use o7_protocol::plugins::PluginLibrary;
 use tauri::{State, ipc::Channel};
 
 use crate::{error::AppError, state::AppState};
@@ -8,14 +8,14 @@ use crate::{error::AppError, state::AppState};
 #[specta::specta]
 pub async fn plugin_management_capabilities(
     state: State<'_, AppState>,
-) -> Result<Vec<aura_protocol::plugins::PluginManagement>, AppError> {
+) -> Result<Vec<o7_protocol::plugins::PluginManagement>, AppError> {
     let sessions = state.sessions()?;
     Ok(sessions
         .agents(false)
         .await
         .into_iter()
         .filter_map(|agent| {
-            aura_agents::plugins::management(
+            o7_agents::plugins::management(
                 &agent.id,
                 agent.installation.as_ref().map(|i| i.version.as_str()),
             )

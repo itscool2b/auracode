@@ -175,7 +175,7 @@ importers:
 
   apps/design-lab:
     dependencies:
-      '@auracode/ui':
+      '@o7/ui':
         specifier: workspace:*
         version: link:../../packages/ui
       lucide-react:
@@ -221,7 +221,7 @@ importers:
 
   apps/desktop:
     dependencies:
-      '@auracode/ui':
+      '@o7/ui':
         specifier: workspace:*
         version: link:../../packages/ui
       '@tanstack/react-virtual':
@@ -309,7 +309,7 @@ importers:
 
   apps/web:
     dependencies:
-      '@auracode/ui':
+      '@o7/ui':
         specifier: workspace:*
         version: link:../../packages/ui
       react:

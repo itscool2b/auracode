@@ -3,9 +3,9 @@ use crate::{
     error::{AppError, AppErrorCode},
     state::AppState,
 };
-use aura_core::terminal::{TerminalChunk, TerminalError};
-use aura_process::{Spawner, pty::PtySize};
-use aura_protocol::setup_actions::AgentInstallReview;
+use o7_core::terminal::{TerminalChunk, TerminalError};
+use o7_process::{Spawner, pty::PtySize};
+use o7_protocol::setup_actions::AgentInstallReview;
 use tauri::{State, Webview};
 
 impl From<TerminalError> for AppError {

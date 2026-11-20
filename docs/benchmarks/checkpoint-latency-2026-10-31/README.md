@@ -4,7 +4,7 @@ These measurements compare the Local checkpoint optimization with its baseline u
 fixtures and workspace on each native runner. They measure backend capture and scripted-driver
 dispatch, not complete assistant response time.
 
-- [Validation run](https://github.com/itscool2b/auracode/actions/runs/41177407155).
+- [Validation run](https://github.com/itscool2b/o7/actions/runs/41177407155).
 - Baseline: `af499cd05684df8d2f08e48af21d268b522862f7`.
 - Measured implementation: `05d4e42c533559b88a45e729ea86744148f184fe`.
 - Identical core fixture blob: `b95e9b975383ace8b45f7609a636159cbe68aa82`.
@@ -72,7 +72,7 @@ Each platform's diagnostics contain 794 events, no dropped-event markers, and se
 object-write decisions, all with `batch_fsync=true`. Concurrent Git helper durations overlap
 and must not be summed as wall time.
 
-The earlier complete [application and frontend validation run](https://github.com/itscool2b/auracode/actions/runs/41154741726)
+The earlier complete [application and frontend validation run](https://github.com/itscool2b/o7/actions/runs/41154741726)
 passed at `1bcbec79`. Subsequent production changes are confined to checkpoint internals; the
 measured revision reruns the affected native core, encrypted-storage, and Clippy gates. Local
 compilation checks also passed with and without `account-sync`. Windows Application Control

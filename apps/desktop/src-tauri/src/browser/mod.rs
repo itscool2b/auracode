@@ -1620,27 +1620,27 @@ pub(crate) enum Shot {
     },
 }
 
-/// Agents' calls from aura-core's browser grants, run in the app's browser.
+/// Agents' calls from o7-core's browser grants, run in the app's browser.
 struct AgentBridge(std::sync::Weak<Browser>);
 
-impl aura_core::browser_service::BrowserBridge for AgentBridge {
+impl o7_core::browser_service::BrowserBridge for AgentBridge {
     fn call(
         &self,
         chat_id: String,
         tool: String,
         arguments: Value,
-    ) -> aura_core::browser_service::BrowserFuture {
+    ) -> o7_core::browser_service::BrowserFuture {
         let browser = self.0.upgrade();
         Box::pin(async move {
             let Some(browser) = browser else {
-                return aura_core::browser_service::BrowserToolReply {
+                return o7_core::browser_service::BrowserToolReply {
                     text: "o7 is closing.".into(),
                     image: None,
                     error: true,
                 };
             };
             let reply = agent::call(&browser, &chat_id, &tool, &arguments).await;
-            aura_core::browser_service::BrowserToolReply {
+            o7_core::browser_service::BrowserToolReply {
                 text: reply.text,
                 image: reply.image,
                 error: reply.error,
@@ -1684,7 +1684,7 @@ pub fn sync(app: &AppHandle) {
 }
 
 /// Settings' switches for the browser: the plugin itself and saved sign-ins.
-pub fn apply_preferences(app: &AppHandle, general: &aura_core::onboarding::GeneralPreferences) {
+pub fn apply_preferences(app: &AppHandle, general: &o7_core::onboarding::GeneralPreferences) {
     use tauri::Manager;
     sync(app);
     if let Some(browser) = app
