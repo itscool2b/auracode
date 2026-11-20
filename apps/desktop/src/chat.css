@@ -861,6 +861,212 @@
   white-space: nowrap;
 }
 
+/* A stretch's kinds, as their icons, between its chevron and its words. */
+.chat-tool-group-kinds {
+  display: inline-flex;
+  flex: none;
+  align-items: center;
+  gap: var(--g-space-4);
+  color: var(--g-fg-3);
+}
+
+.chat-tool-group-kinds:empty {
+  display: none;
+}
+
+@media (hover: hover) {
+  .chat-tool-group-toggle:hover .chat-tool-group-kinds {
+    color: var(--g-fg-2);
+  }
+}
+
+/*
+ * The sheen on what runs now (owner, 19 November 2026: make "it thinking, tool calling, etc."
+ * sexier): a running call's words, a running stretch's sentence and "Thinking" are drawn in a
+ * gradient a step brighter in its middle, which slides across them on the working line's beat.
+ * Every word inside takes the gradient, so a call's verb and object read as one line while it
+ * runs. Under reduced motion none of this applies: the words stay in their own colours.
+ */
+@media (prefers-reduced-motion: no-preference) {
+  :root:not([data-motion="reduced"], [data-motion="off"])
+    :is(.chat-tool-label, .chat-tool-group-summary, .chat-thought-label)[data-sheen] {
+    background-image: linear-gradient(
+      90deg,
+      var(--g-fg-3) 0%,
+      var(--g-fg-3) 38%,
+      var(--g-fg-1) 50%,
+      var(--g-fg-3) 62%,
+      var(--g-fg-3) 100%
+    );
+    background-size: 250% 100%;
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+    animation: chat-sheen var(--g-dur-bloom) linear infinite;
+  }
+
+  :root:not([data-motion="reduced"], [data-motion="off"]) .chat-tool-label[data-sheen] > * {
+    color: transparent;
+  }
+
+  :root:not([data-motion="reduced"], [data-motion="off"]) .chat-thought-mark[data-thinking] circle {
+    animation: chat-thought-ripple var(--g-dur-tick) var(--g-ease-in-out) infinite alternate;
+  }
+
+  :root:not([data-motion="reduced"], [data-motion="off"])
+    .chat-thought-mark[data-thinking]
+    circle:nth-child(2) {
+    animation-delay: var(--g-dur-base);
+  }
+
+  :root:not([data-motion="reduced"], [data-motion="off"])
+    .chat-thought-mark[data-thinking]
+    circle:nth-child(3) {
+    animation-delay: var(--g-dur-reveal);
+  }
+}
+
+@keyframes chat-sheen {
+  from {
+    background-position: 100% 0;
+  }
+  to {
+    background-position: 0% 0;
+  }
+}
+
+/*
+ * The agent's reasoning (owner, 19 November 2026): a row of the tool rows' kind, a step quieter.
+ * "Thinking" while it streams, with its newest lines fading in under it; "Thought for 4 s" once
+ * done, which opens to the reasoning set as prose in fg-2 on a hairline, a step smaller than the
+ * answer. A thought with no words is a line that does not open.
+ */
+.chat-thought {
+  display: flex;
+  flex-direction: column;
+}
+
+.chat-thought summary::-webkit-details-marker {
+  display: none;
+}
+
+.chat-thought-head {
+  color: var(--g-fg-3);
+  list-style: none;
+}
+
+.chat-thought-head[data-static] {
+  cursor: default;
+}
+
+@media (hover: hover) {
+  .chat-thought-head:hover {
+    color: var(--g-fg-2);
+  }
+
+  .chat-thought-head[data-static]:hover {
+    background-color: transparent;
+    color: var(--g-fg-3);
+  }
+
+  .chat-thought-head:hover .chat-tool-chevron {
+    opacity: 1;
+  }
+}
+
+.chat-thought-label {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.chat-thought details[open]:not([data-reveal="close"]) > summary .chat-tool-chevron {
+  opacity: 1;
+  transform: rotate(90deg);
+}
+
+/* The mark: three dots, the middle one raised, rippling in turn while the agent thinks. */
+.chat-thought-mark {
+  flex: none;
+  color: var(--g-fg-3);
+}
+
+.chat-thought-mark circle {
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+@keyframes chat-thought-ripple {
+  from {
+    opacity: 0.45;
+    transform: translateY(1px) scale(0.8);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/*
+ * While it streams, the reasoning's newest lines: three at most, held to the bottom, the oldest
+ * fading out at the top, so the words seem to rise through a window under "Thinking".
+ */
+.chat-thought-preview {
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  max-height: calc(var(--g-leading-meta) * 3);
+  margin: 0 var(--g-space-8) var(--g-space-4) var(--ui-gutter);
+  overflow: hidden;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+  -webkit-mask-image: linear-gradient(180deg, transparent 0%, black 55%);
+  mask-image: linear-gradient(180deg, transparent 0%, black 55%);
+}
+
+.chat-thought-preview > p {
+  margin: 0;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* Opened, the reasoning as prose, a step quieter than the answer and on a hairline. */
+.chat-thought-body {
+  margin: var(--g-space-4) var(--g-space-8) var(--g-space-8) calc(var(--ui-gutter) / 2);
+  padding: 0 0 0 calc(var(--ui-gutter) / 2 + var(--g-space-2));
+  box-shadow: inset 1px 0 var(--g-line);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+.chat-app .chat-thought-body > .answer {
+  padding-left: 0;
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+  letter-spacing: normal;
+}
+
+.chat-app .chat-thought-body .answer :is(p, li, h1, h2, h3, h4) {
+  margin-bottom: 0;
+  color: inherit;
+  font-size: inherit;
+  line-height: inherit;
+}
+
+.chat-app .chat-thought-body .answer :is(h1, h2, h3, h4) {
+  margin-top: var(--g-space-8);
+}
+
+.chat-app .chat-thought-body .answer :is(h1, h2, h3, h4, strong) {
+  color: var(--g-fg-1);
+  font-weight: var(--g-weight-medium);
+}
+
 .chat-locations {
   display: flex;
   flex-direction: column;
@@ -1261,6 +1467,26 @@
 }
 
 .chat-plan-body > :first-child {
+  margin-top: 0;
+}
+
+/*
+ * The plan is the card's content, under its title: it starts on the title's edge, and its own
+ * headings stay a step under the title's weight, so the card reads title first.
+ */
+.chat-app .chat-plan-body > .answer {
+  padding-left: 0;
+}
+
+.chat-app .chat-plan-body .answer :is(h1, h2, h3, h4) {
+  margin-top: var(--g-space-16);
+  margin-bottom: calc(var(--g-space-4) * -1);
+  font-size: var(--g-text-chat);
+  line-height: var(--g-leading-chat);
+  font-weight: var(--g-weight-semibold);
+}
+
+.chat-app .chat-plan-body .answer .md-block:first-child > :is(h1, h2, h3, h4):first-child {
   margin-top: 0;
 }
 
@@ -1871,7 +2097,18 @@
  * Its chevron turns down while the work is open.
  */
 .chat-worked {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  gap: var(--g-space-8);
   padding-left: var(--ui-gutter);
+}
+
+/* The work above, the answer below: a hairline from the row to the column's edge. */
+.chat-worked-rule {
+  flex: 1;
+  height: 1px;
+  background-color: var(--g-line);
 }
 
 .chat-worked-toggle {
@@ -2072,7 +2309,7 @@
   line-height: var(--g-leading-meta);
 }
 
-.chat-plan {
+.chat-checklist {
   display: flex;
   flex-direction: column;
   gap: var(--g-space-2);
@@ -2081,7 +2318,7 @@
   list-style: none;
 }
 
-.chat-plan li {
+.chat-checklist li {
   display: flex;
   align-items: center;
   gap: var(--g-space-8);
@@ -2089,18 +2326,18 @@
   color: var(--g-fg-2);
 }
 
-.chat-plan li[data-status="completed"] {
+.chat-checklist li[data-status="completed"] {
   color: var(--g-fg-3);
   text-decoration: line-through;
   text-decoration-color: var(--g-fg-4);
 }
 
-.chat-plan li[data-status="in_progress"] {
+.chat-checklist li[data-status="in_progress"] {
   color: var(--g-fg-1);
   font-weight: var(--g-weight-medium);
 }
 
-.chat-plan input[type="checkbox"] {
+.chat-checklist input[type="checkbox"] {
   width: 14px;
   height: 14px;
   cursor: default;
@@ -3544,9 +3781,12 @@ details.chat-workflow-plan:not([open]) > summary:not(:hover) {
 }
 
 .chat-picker-role-title {
+  display: flex;
+  align-items: center;
+  min-height: 32px;
   color: var(--g-fg-2);
   font-size: var(--g-text-ui);
-  line-height: 32px;
+  line-height: var(--g-leading-ui);
 }
 
 .chat-picker-role-controls {

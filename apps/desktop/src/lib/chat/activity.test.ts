@@ -82,15 +82,16 @@ describe("live chat protocol state", () => {
     const answer = [ev.turnStarted("t"), ev.message("a", "Hel")];
     expect(streamingText(shown(answer))).toBe(true);
     expect(streamingText(shown([...answer, ev.messageDone("a")]))).toBe(false);
-    // A call after the text, or hidden reasoning after it, brings the line back.
+    // A call after the text brings the line back.
     expect(streamingText(shown([...answer, ev.toolCall("b")]))).toBe(false);
-    expect(streamingText(shown([...answer, ev.messageDone("a"), ev.thought("th", "Hmm")]))).toBe(
-      false,
-    );
+    // Reasoning streaming in is the live part too: its Thinking row stands in for the line.
+    const thinking = [...answer, ev.messageDone("a"), ev.thought("th", "Hmm")];
+    expect(streamingText(shown(thinking))).toBe(true);
+    expect(streamingText(shown([...thinking, ev.thoughtDone("th", 1200)]))).toBe(false);
     expect(streamingText(shown([...answer, ev.turnEnded("t")]))).toBe(false);
   });
 
-  it("leans the working line towards the turn's latest call, across hidden thoughts", () => {
+  it("leans the working line towards the turn's latest call, across thoughts", () => {
     const shown = (events: O7Event[]) => renderTranscript(state(events).transcript, true).at(-1);
     expect(lastToolKind(shown([ev.turnStarted("t"), ev.thought("th", "Hmm")]))).toBeNull();
     expect(

@@ -290,10 +290,11 @@ describe("the automation attributes of the chat screens", () => {
         recovered: "false",
       },
     ]);
-    // The thought stays in the model; the transcript never shows it (owner, 2 November 2026).
-    expect(html).not.toContain("Thought for");
+    // The thought shows as its own row, folded to how long it took (owner, 19 November 2026).
+    expect(html).toContain("Thought for 1 s");
     expect(marked(html, "item")).toEqual([
       { tag: "div", kind: "user" },
+      { tag: "div", kind: "thought", completed: "true" },
       { tag: "div", kind: "tool", "tool-kind": "read", status: "completed" },
       {
         tag: "div",

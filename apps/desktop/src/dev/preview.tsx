@@ -719,7 +719,14 @@ function synthetic(mode: string): O7Event[] {
       ),
       ev.turnEnded("next", "error"),
     );
-  else events.push(ev.thought("next-thought", "Checking the narrow layout and the focus order."));
+  else
+    events.push(
+      ev.thought(
+        "next-thought",
+        "Checking the narrow layout and the focus order.\n\nThe sidebar truncates long titles at 960 pixels, so the active chat needs its own scroll-into-view rather than relying on the list.",
+      ),
+      ev.thoughtDone("next-thought", 2400),
+    );
   return events;
 }
 
@@ -1042,9 +1049,9 @@ function Preview() {
       switch ((event as CustomEvent).detail) {
         case "tools":
           publishPreview.current?.([
-            ev.thoughtDone("next-thought", 0),
             ev.toolCall("working-read", { title: "Read first.ts", status: "completed" }),
-            ev.thought("working-hidden", "Do not render this private fixture reasoning."),
+            // A blink of reasoning with no words gets no row, so it does not split the stretch.
+            ev.thought("working-hidden", ""),
             ev.thoughtDone("working-hidden", 0),
             ev.toolCall("working-search", { kind: "search", title: "Search for sidebar" }),
           ]);

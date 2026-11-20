@@ -714,13 +714,33 @@ export function stopReasonLabel(end: TurnEnd): string {
 }
 
 /**
- * An item as the transcript shows it: tools carry the status their mark shows. Thoughts are kept
- * in the model and in storage but never shown (owner, 2 November 2026): the working line stands in
- * for the agent's reasoning, so a thought neither renders nor splits a run of tool calls.
+ * An item as the transcript shows it: tools carry the status their mark shows, and thoughts
+ * whether the agent is thinking them now. The agent's reasoning shows as its own row, folded to
+ * "Thought for 4 s" once done (owner, 19 November 2026: make "it thinking, tool calling, etc."
+ * sexier; on 2 November empty "Thought for 0 ms" rows were why reasoning was hidden, and a thought
+ * with nothing to show still is: see `shownThought`).
  */
 export type RenderedItem =
   | Exclude<Item, ToolItem | ThoughtItem>
-  | (ToolItem & { display: ToolDisplayStatus });
+  | (ToolItem & { display: ToolDisplayStatus })
+  | (ThoughtItem & { thinking: boolean });
+
+/** A thought shorter than this, with no words, is not worth a row. */
+const QUIET_THOUGHT_MS = 1000;
+
+/**
+ * Whether a thought gets a row: while the agent thinks it, or once done when it has words or
+ * took a second or more. One with neither (an agent that keeps its reasoning to itself, a blink)
+ * stays in the model only.
+ */
+export function shownThought(thought: ThoughtItem, thinking: boolean): boolean {
+  return thinking || thought.text.trim() !== "" || (thought.durationMs ?? 0) >= QUIET_THOUGHT_MS;
+}
+
+/** A thought is being thought while it is not done in a turn still running on a live session. */
+function thinkingNow(thought: ThoughtItem, end: TurnEnd | null, live: boolean): boolean {
+  return !thought.completed && end === null && live;
+}
 
 export interface RenderedSegment {
   readonly key: string;
@@ -737,22 +757,22 @@ export interface RenderedSegment {
  * render the same" compares. `live`: the session has a process.
  */
 export function renderTranscript(model: Transcript, live: boolean): RenderedSegment[] {
-  return model.segments.map((segment) => renderSegment(segment, itemsOf(model, segment), live));
+  return model.segments.map((segment) =>
+    renderSegment(segment, itemsOf(model, segment, live), live),
+  );
 }
 
-/** A segment's items the screen shows, in order: every kind but thoughts. */
-function itemsOf(model: Transcript, segment: Segment): Exclude<Item, ThoughtItem>[] {
-  return segment.itemKeys.flatMap((key) => {
+/** A segment's items the screen shows, in order: every kind, thoughts only where they say something. */
+function itemsOf(model: Transcript, segment: Segment, live: boolean): Item[] {
+  return segment.itemKeys.flatMap((key): Item[] => {
     const item = model.items.get(key);
-    return item && item.kind !== "thought" ? [item] : [];
+    if (!item) return [];
+    if (item.kind !== "thought") return [item];
+    return shownThought(item, thinkingNow(item, segment.end, live)) ? [item] : [];
   });
 }
 
-function renderSegment(
-  segment: Segment,
-  items: readonly Exclude<Item, ThoughtItem>[],
-  live: boolean,
-): RenderedSegment {
+function renderSegment(segment: Segment, items: readonly Item[], live: boolean): RenderedSegment {
   return {
     key: segment.key,
     turnId: segment.turnId,
@@ -764,7 +784,9 @@ function renderSegment(
       (item): RenderedItem =>
         item.kind === "tool"
           ? { ...item, display: toolDisplayStatus(item, segment.end, live) }
-          : item,
+          : item.kind === "thought"
+            ? { ...item, thinking: thinkingNow(item, segment.end, live) }
+            : item,
     ),
   };
 }
@@ -778,14 +800,14 @@ export function renderCache(): (model: Transcript, live: boolean) => RenderedSeg
   type Cached = {
     readonly live: boolean;
     readonly segment: Segment;
-    readonly items: Exclude<Item, ThoughtItem>[];
+    readonly items: Item[];
     readonly rendered: RenderedSegment;
   };
   let previous = new Map<string, Cached>();
   return (model, live) => {
     const next = new Map<string, Cached>();
     const rendered = model.segments.map((segment) => {
-      const items = itemsOf(model, segment);
+      const items = itemsOf(model, segment, live);
       const cached = previous.get(segment.key);
       const reuse =
         cached !== undefined &&

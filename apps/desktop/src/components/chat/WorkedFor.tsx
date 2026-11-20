@@ -31,6 +31,8 @@ export function WorkedFor({
         <span>{label}</span>
         <ChevronRight size={14} aria-hidden="true" className="chat-worked-chevron" />
       </button>
+      {/* A hairline from the row to the column's edge: the work above, the answer below. */}
+      <span className="chat-worked-rule" aria-hidden="true" />
     </div>
   );
 }

@@ -46,6 +46,8 @@ function estimateOf(item: RenderedItem, grouped: boolean): number {
       return 160;
     case "tool":
       return grouped ? 24 : 28;
+    case "thought":
+      return 28;
     case "permission":
     case "question":
       return 180;
@@ -272,8 +274,7 @@ export function Transcript({
         addItem(index, item);
         continue;
       }
-      // A stretch of work: every call until the agent's next text, card or notice. Thoughts are
-      // not among the rendered items, so the calls on either side of one join the same stretch.
+      // A stretch of work: every call until the agent's next text, reasoning, card or notice.
       const tools: Extract<RenderedItem, { kind: "tool" }>[] = [];
       for (let next = index; next < segment.items.length; next++) {
         const candidate = segment.items[next];

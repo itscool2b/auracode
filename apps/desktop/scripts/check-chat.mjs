@@ -143,11 +143,30 @@ async function workingLifecycle(page, engine, theme) {
       ?.textContent.includes("searching for 1 pattern"),
   );
   assert.match((await group.textContent()) ?? "", /Reading 1 file and searching for 1 pattern/);
-  assert.equal(await group.getAttribute("data-test-count"), "2", "thought split a tool stretch");
+  assert.equal(
+    await group.getAttribute("data-test-count"),
+    "2",
+    "a wordless thought split a tool stretch",
+  );
   assert.equal(await line.count(), 1, "tools duplicated the working line");
-  assert.doesNotMatch(
-    (await page.getByTestId("transcript").textContent()) ?? "",
-    /Thought for|private fixture reasoning|Checking the narrow layout/,
+  // The reasoning before the calls is one folded row; the wordless blink between them has none.
+  const thoughts = page.locator('[data-test-turn-id="next"] [data-test-kind="thought"]');
+  assert.equal(await thoughts.count(), 1);
+  assert.equal(
+    (await thoughts.getByTestId("thought-toggle").textContent())?.trim(),
+    "Thought for 2 s",
+  );
+  assert.equal(await thoughts.getByTestId("thought-body").isVisible(), false);
+  await thoughts.getByTestId("thought-toggle").click();
+  await thoughts
+    .getByTestId("thought-body")
+    .getByText(/sidebar truncates long titles/)
+    .waitFor();
+  await thoughts.getByTestId("thought-toggle").click();
+  await page.waitForFunction(
+    () =>
+      !document.querySelector('[data-test-turn-id="next"] [data-test-kind="thought"] details')
+        ?.open,
   );
   await group.focus();
   await page.evaluate(() => {
@@ -258,6 +277,7 @@ async function workingLifecycle(page, engine, theme) {
     true,
     "footer remounted the working row",
   );
+  // The ended turn's reasoning folds with its calls under Worked for.
   assert.equal(await page.locator('[data-test-kind="thought"]').count(), 0);
   await settled(page);
   const scan = await new AxeBuilder({ page }).withTags(["wcag2a", "wcag2aa", "wcag21aa"]).analyze();
@@ -812,6 +832,69 @@ async function richAnswer(page, theme) {
   );
 }
 /**
+ * Reasoning as it streams (owner, 19 November 2026: make "it thinking, tool calling, etc."
+ * sexier): a "Thinking" row with a sheen and the newest lines under it stands in for the working
+ * line, then folds to "Thought for 2 s" that opens to the whole reasoning. A running call's words
+ * carry the sheen too. Reduced motion stills both.
+ */
+async function liveReasoning(page) {
+  await page.emulateMedia({ reducedMotion: "no-preference" });
+  await page.goto(`${url}/?preview=streaming`);
+  const thought = page.locator('[data-test-kind="thought"]').last();
+  await page.locator('[data-test-kind="thought"][data-thinking]').waitFor();
+  assert.equal((await thought.locator(".chat-thought-label").textContent())?.trim(), "Thinking");
+  assert.notEqual(await thought.locator(".chat-thought-label").getAttribute("data-sheen"), null);
+  await thought
+    .getByTestId("thought-preview")
+    .getByText(/Checking how the composer/)
+    .waitFor();
+  assert.equal(
+    await thought
+      .locator(".chat-thought-label")
+      .evaluate(
+        (node) =>
+          node.getAnimations().filter((animation) => animation.playState === "running").length,
+      ),
+    1,
+    "the Thinking sheen does not move",
+  );
+  // One live indicator: the working line steps aside while the reasoning streams.
+  assert.notEqual(await page.getByTestId("working-line").getAttribute("data-hidden"), null);
+  await page.waitForFunction(
+    () =>
+      document
+        .querySelector('[data-test-kind="thought"]:last-of-type .chat-thought-label')
+        ?.textContent?.trim() === "Thought for 2 s" ||
+      [...document.querySelectorAll('[data-test-kind="thought"] .chat-thought-label')].some(
+        (node) => node.textContent?.trim() === "Thought for 2 s",
+      ),
+  );
+  assert.equal(await page.locator('[data-test-kind="thought"][data-thinking]').count(), 0);
+  assert.equal(await page.getByTestId("thought-preview").count(), 0);
+  // A running call's words carry the sheen until it completes.
+  await page
+    .locator(".chat-tool-label[data-sheen], .chat-tool-group-summary[data-sheen]")
+    .first()
+    .waitFor();
+  // Reduced motion: the words hold still in their own colours. A page of its own, so nothing the
+  // live turn above left running carries over.
+  const quiet = await page.context().newPage();
+  await quiet.emulateMedia({ reducedMotion: "reduce" });
+  await quiet.goto(`${url}/?preview=streaming`);
+  await quiet.locator('[data-test-kind="thought"][data-thinking]').waitFor();
+  const still = quiet.locator('[data-test-kind="thought"][data-thinking] .chat-thought-label');
+  assert.equal(
+    await still.evaluate(
+      (node) =>
+        node.getAnimations().length + (getComputedStyle(node).color === "rgba(0, 0, 0, 0)" ? 1 : 0),
+    ),
+    0,
+    "reduced motion: the Thinking words move or vanish",
+  );
+  await quiet.close();
+}
+
+/**
  * Plan and build, each chat's own (owner, 19 November 2026: models by role are "a chat by chat
  * thing not a settings thing"): nothing is chosen at first; Plan with applies when Plan turns on;
  * Build with takes an agent, then its model and thinking level, and takes an accepted plan.
@@ -981,6 +1064,7 @@ async function inspect(engine, launcher) {
         results.push({ theme, mode, violations });
         await page.screenshot({ path: resolve(out, `${engine}-${theme}-${mode}.png`) });
         if (mode === "recorded-thinking") {
+          // Claude kept this reasoning to itself and took under a second: no row.
           assert.equal(await page.locator('[data-test-kind="thought"]').count(), 0);
           assert.doesNotMatch(
             (await page.getByTestId("transcript").textContent()) ?? "",
@@ -1092,7 +1176,7 @@ async function inspect(engine, launcher) {
           });
           assert.deepEqual(
             rendered.map((turn) => turn.items),
-            [["tool:read:completed", "tool:execute:completed", "message"], ["message"]],
+            [["thought", "tool:read:completed", "tool:execute:completed", "message"], ["message"]],
             "native smoke reader lost virtual transcript pieces",
           );
           assert.equal(rendered[1].prompt, "A browser-only verification message");
@@ -1237,7 +1321,7 @@ async function inspect(engine, launcher) {
         { prompt: "/echo Hello from the smoke run", items: ["message"] },
         {
           prompt: "Make the project list easier to scan, and keep the active chat visible.",
-          items: ["tool:read:completed", "tool:execute:completed", "message"],
+          items: ["thought", "tool:read:completed", "tool:execute:completed", "message"],
         },
         {
           prompt: "/permission auto",
@@ -1622,7 +1706,11 @@ async function inspect(engine, launcher) {
     // Unmounting follows the next layout pass; under load WebKit can take longer than a fixed sleep.
     await lastTool.waitFor({ state: "detached", timeout: 3000 }).catch(() => {});
     assert.equal(await lastTool.count(), 0, "old tool remained mounted");
-    assert.equal(await page.locator('[data-test-kind="thought"]').count(), 0);
+    // At the top again: the turn's reasoning, folded to its time, before its thousand calls.
+    assert.equal(
+      (await page.locator('[data-test-kind="thought"] .chat-thought-label').textContent())?.trim(),
+      "Thought for 1 s",
+    );
     await page.getByTestId("jump-latest").click();
     await lastTool.waitFor();
     assert.notEqual(
@@ -2073,6 +2161,7 @@ async function inspect(engine, launcher) {
       .click();
     await page.getByText("Plan accepted.").first().waitFor();
     await planAndBuild(page);
+    await liveReasoning(page);
 
     await page.setViewportSize({ width: 960, height: 640 });
     await page.goto(`${url}/?preview=permission`);
