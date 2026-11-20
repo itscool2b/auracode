@@ -13,7 +13,8 @@
 //!   writer: one turn can hold hundreds of megabytes of tool events (a long command's streamed
 //!   output), and the writer carries every live chat. Only edit calls and their updates are read
 //!   (SQLite picks them out), folded as compaction folds them, so a turn counts the same before
-//!   and after compaction, and an edit cut to fit the event budget is read whole from its blob.
+//!   and after compaction; an edit cut to fit the event budget is read whole from the blob of the
+//!   event that last set its input, once it is known to have completed.
 //!   What a pass counted is saved through the writer in one short transaction ([`save`]).
 //! - **What is kept.** `line_edits` holds the turn, its chat, its agent, the quarter hour and the
 //!   count: no paths and no text. Deleted chats and projects drop out of [`read`].
@@ -153,6 +154,17 @@ pub(crate) fn read(conn: &Connection, since: Millis) -> rusqlite::Result<Vec<Lin
     .collect()
 }
 
+/// An edit call folded from its stored events, with the cut events that last set its input and
+/// its content. A streamed edit sends thousands of updates, each cut and each with a blob of the
+/// whole input so far: only the last one that set a field matters, so only its blob is read, and
+/// only for a completed call whose field is still a cut preview ([`restore`]).
+struct Folded {
+    call: ToolCall,
+    at: Millis,
+    input_cut: Option<Truncation>,
+    content_cut: Option<Truncation>,
+}
+
 /// The lines one turn's completed edits changed, by quarter hour, and how many bytes it read. Only
 /// the turn's edit calls and their updates are read: SQLite picks them out of the turn's events.
 fn count_turn(
@@ -160,7 +172,7 @@ fn count_turn(
     attachments: &Attachments,
     turn_id: &str,
 ) -> rusqlite::Result<(BTreeMap<Millis, u64>, u64)> {
-    let mut calls: HashMap<String, (ToolCall, Millis)> = HashMap::new();
+    let mut calls: HashMap<String, Folded> = HashMap::new();
     let mut read = 0u64;
     // A row that is not JSON (a salvaged one) reads as NULL here instead of failing the turn, and
     // with it every turn after it.
@@ -175,15 +187,20 @@ fn count_turn(
             let payload: String = row.get(0)?;
             let at: Millis = row.get(1)?;
             read = read.saturating_add(payload.len() as u64);
-            let Ok(event) = serde_json::from_str::<O7Event>(&payload) else {
+            let Ok(O7Event::ToolCall(call)) = serde_json::from_str::<O7Event>(&payload) else {
                 continue;
             };
-            if let O7Event::ToolCall(call) = whole(event, attachments, &mut read) {
-                let first = calls
-                    .get(&call.tool_call_id)
-                    .map_or(at, |(_, first)| *first);
-                calls.insert(call.tool_call_id.clone(), (call, first));
-            }
+            let at = calls.get(&call.tool_call_id).map_or(at, |folded| folded.at);
+            let cut = call.truncated.clone();
+            calls.insert(
+                call.tool_call_id.clone(),
+                Folded {
+                    call,
+                    at,
+                    input_cut: cut.clone(),
+                    content_cut: cut,
+                },
+            );
         }
     }
     if calls.is_empty() {
@@ -200,24 +217,30 @@ fn count_turn(
     while let Some(row) = rows.next()? {
         let payload: String = row.get(0)?;
         read = read.saturating_add(payload.len() as u64);
-        let Ok(event) = serde_json::from_str::<O7Event>(&payload) else {
+        let Ok(O7Event::ToolUpdate(update)) = serde_json::from_str::<O7Event>(&payload) else {
             continue;
         };
-        if let O7Event::ToolUpdate(update) = whole(event, attachments, &mut read)
-            && let Some((call, first)) = calls.remove(&update.tool_call_id)
-        {
-            calls.insert(
-                update.tool_call_id.clone(),
-                (apply_update(call, update), first),
-            );
+        let Some(mut folded) = calls.remove(&update.tool_call_id) else {
+            continue;
+        };
+        if update.raw_input.is_some() {
+            folded.input_cut = update.truncated.clone();
         }
+        if update.content.is_some() {
+            folded.content_cut = update.truncated.clone();
+        }
+        let id = update.tool_call_id.clone();
+        folded.call = apply_update(folded.call, update);
+        calls.insert(id, folded);
     }
     let mut buckets = BTreeMap::new();
-    for (call, at) in calls.values() {
-        if call.status != ToolStatus::Completed {
+    for folded in calls.into_values() {
+        if folded.call.status != ToolStatus::Completed {
             continue;
         }
-        let lines = edit_lines(call, &mut |cut| blob(attachments, cut, &mut read));
+        let at = folded.at;
+        let call = restore(folded, attachments, &mut read);
+        let lines = edit_lines(&call, &mut |cut| blob(attachments, cut, &mut read));
         if lines > 0 {
             let bucket = buckets.entry(at - at.rem_euclid(BUCKET_MS)).or_insert(0u64);
             *bucket = bucket.saturating_add(lines);
@@ -226,29 +249,62 @@ fn count_turn(
     Ok((buckets, read))
 }
 
-/// The event as the agent sent it, when the stored one was cut to fit and its blob holds it whole.
-fn whole(event: O7Event, attachments: &Attachments, read: &mut u64) -> O7Event {
-    let cut = match &event {
-        O7Event::ToolCall(call) => call.truncated.clone(),
-        O7Event::ToolUpdate(update) => update.truncated.clone(),
-        _ => None,
-    };
-    let Some(bytes) = cut.and_then(|cut| blob(attachments, &cut, read)) else {
-        return event;
-    };
-    match (serde_json::from_slice::<O7Event>(&bytes), &event) {
-        (Ok(O7Event::ToolCall(original)), O7Event::ToolCall(call))
-            if original.tool_call_id == call.tool_call_id =>
-        {
-            O7Event::ToolCall(original)
+/// The call with the input and content its agent sent, where what was kept is a cut preview and
+/// the event that last set it holds it whole in its blob.
+fn restore(folded: Folded, attachments: &Attachments, read: &mut u64) -> ToolCall {
+    let Folded {
+        mut call,
+        input_cut,
+        content_cut,
+        ..
+    } = folded;
+    let id = call.tool_call_id.clone();
+    let mut original = |cut: &Truncation| -> Option<(Option<Value>, Option<Vec<ToolContent>>)> {
+        let bytes = blob(attachments, cut, read)?;
+        match serde_json::from_slice::<O7Event>(&bytes).ok()? {
+            O7Event::ToolCall(whole) if whole.tool_call_id == id => {
+                Some((whole.raw_input, Some(whole.content)))
+            }
+            O7Event::ToolUpdate(whole) if whole.tool_call_id == id => {
+                Some((whole.raw_input, whole.content))
+            }
+            _ => None,
         }
-        (Ok(O7Event::ToolUpdate(original)), O7Event::ToolUpdate(update))
-            if original.tool_call_id == update.tool_call_id =>
-        {
-            O7Event::ToolUpdate(original)
+    };
+    let input_previewed = call
+        .raw_input
+        .as_ref()
+        .is_some_and(|input| input.get("_auracode_truncated").is_some());
+    let content_cut_short = call.content.is_empty()
+        || call.content.iter().any(|entry| match entry {
+            ToolContent::Text { truncated, .. }
+            | ToolContent::Diff { truncated, .. }
+            | ToolContent::Terminal { truncated, .. } => truncated.is_some(),
+        });
+    let mut content_restored = false;
+    if input_previewed
+        && let Some(cut) = &input_cut
+        && let Some((input, content)) = original(cut)
+    {
+        if input.is_some() {
+            call.raw_input = input;
         }
-        _ => event,
+        // One event cut both: its blob already holds the content too.
+        if content_cut.as_ref() == Some(cut)
+            && let Some(content) = content
+        {
+            call.content = content;
+            content_restored = true;
+        }
     }
+    if !content_restored
+        && content_cut_short
+        && let Some(cut) = &content_cut
+        && let Some((_, Some(content))) = original(cut)
+    {
+        call.content = content;
+    }
+    call
 }
 
 /// A blob's bytes, when it is small enough to count from; counted into `read`.
@@ -675,6 +731,51 @@ mod tests {
         end(&db, "t1");
         count_all(&db, &attachments);
         assert_eq!(read_all(&db)[0].lines, 500);
+    }
+
+    /// A streamed edit: every update carries the input so far, cut, with a blob of its own. The
+    /// last one that set the input decides; the earlier blobs are never needed.
+    #[test]
+    fn a_streamed_edit_counts_the_input_its_last_update_set() {
+        let db = TestDb::new();
+        let (dir, attachments) = attachments();
+        let chat = db.chat("/work");
+        db.turn(&chat, "t1", 1, 0);
+        let preview = json!({"_auracode_truncated":true,"bytes":9000,"preview":"{"});
+        let mut rows = vec![at(
+            0,
+            "t1",
+            1,
+            &O7Event::ToolCall(call("t1.w", "Write", ToolStatus::InProgress, json!({}))),
+        )];
+        for (seq, lines, sha) in [(1, 7, "a1"), (2, 300, "b2"), (3, 0, "c3")] {
+            let sha = sha.repeat(32);
+            let mut whole = update("t1.w", ToolStatus::InProgress);
+            if lines > 0 {
+                whole.raw_input = Some(json!({"file_path":"big","content":"x\n".repeat(lines)}));
+                let bytes = serde_json::to_vec(&O7Event::ToolUpdate(whole)).expect("json");
+                blobs::write(dir.path(), &sha, &bytes).expect("blob");
+                let mut cut = update("t1.w", ToolStatus::InProgress);
+                cut.raw_input = Some(preview.clone());
+                cut.truncated = Some(Truncation {
+                    total_bytes: 9000,
+                    blob: Some(sha),
+                });
+                rows.push(at(seq, "t1", 2, &O7Event::ToolUpdate(cut)));
+            } else {
+                // The last update sets only the status: the input stays the one before it.
+                rows.push(at(
+                    seq,
+                    "t1",
+                    3,
+                    &O7Event::ToolUpdate(update("t1.w", ToolStatus::Completed)),
+                ));
+            }
+        }
+        db.append(&chat, &rows);
+        end(&db, "t1");
+        count_all(&db, &attachments);
+        assert_eq!(read_all(&db)[0].lines, 300);
     }
 
     #[test]
