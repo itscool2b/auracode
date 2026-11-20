@@ -33,6 +33,7 @@ pub(crate) mod files;
 pub(crate) mod folder_resolution;
 pub(crate) mod history;
 pub(crate) mod image_refs;
+pub(crate) mod line_edits;
 pub(crate) mod memory;
 pub(crate) mod organization;
 pub(crate) mod recover;
@@ -71,6 +72,9 @@ pub(crate) use writer::{WaitError, WriterConfig, await_reply, op_bytes};
 
 /// A call that gets no answer within this fails.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// How long one call for line edits spends counting turns that have not been counted yet.
+const LINE_EDITS_COUNTING: Duration = Duration::from_secs(20);
 
 /// A shutdown reports success only if the writer also closed the connection within this much more.
 const CLOSE_MARGIN: Duration = Duration::from_secs(2);
@@ -298,6 +302,34 @@ impl ChatStore {
             Some(permits),
         );
         answer.await.map_err(|_| StoreError::Closed)?
+    }
+    /// Every agent's line edits since `since` ([`line_edits`]), after counting the turns that ended
+    /// since the last call: one pass per request, so other work goes between the passes, for at
+    /// most [`LINE_EDITS_COUNTING`]. Turns still waiting after that make the answer incomplete.
+    pub(crate) async fn line_edits(
+        &self,
+        since: Millis,
+    ) -> Result<o7_protocol::activity::LineEdits, StoreError> {
+        if self.is_paused() {
+            return Err(self.timed_out());
+        }
+        let started = Instant::now();
+        let mut complete = false;
+        while started.elapsed() < LINE_EDITS_COUNTING {
+            let (reply, answer) = oneshot::channel();
+            if !self
+                .request(Request::CountLineEdits { reply }, answer)
+                .await??
+            {
+                complete = true;
+                break;
+            }
+        }
+        let (reply, answer) = oneshot::channel();
+        let buckets = self
+            .request(Request::ReadLineEdits { since, reply }, answer)
+            .await??;
+        Ok(o7_protocol::activity::LineEdits { buckets, complete })
     }
     pub(crate) async fn search(
         &self,

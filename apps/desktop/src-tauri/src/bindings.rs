@@ -190,6 +190,7 @@ pub fn builder() -> tauri_specta::Builder<tauri::Wry> {
             commands::env_refresh,
             commands::pick_folder,
             crate::search_commands::workspace_search,
+            crate::search_commands::dashboard_line_edits,
             crate::conversation_commands::conversation_turns,
             crate::conversation_commands::conversation_pending,
             crate::conversation_commands::conversation_editable,

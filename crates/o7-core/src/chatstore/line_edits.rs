@@ -1,0 +1,684 @@
+//! The Dashboard's line edits: how many lines agents' edit tools changed, by quarter hour.
+//!
+//! - **What counts.** A completed tool call that edited files: a diff the agent attached (ACP
+//!   agents' old and new text), an edit's own input (Claude Code's Edit, MultiEdit, Write and
+//!   NotebookEdit, Pi's edit and write: the text replaced and its replacement, or a file's new
+//!   text) and Codex's file changes (a hunk per changed file, or a new file's text). A changed line
+//!   counts once: each stretch of changes counts the larger of the lines it removed and the lines
+//!   it added, so a rewritten line is one edit and a new file is its length. Failed and unfinished
+//!   calls count nothing, nor do files changed by commands, nor subagents' edits (their steps carry
+//!   no input).
+//! - **When.** A turn is counted once it has ended, the next time the Dashboard asks, a pass of turns
+//!   at a time so the writer is never held for long ([`count_pass`]). Its calls are folded as
+//!   compaction folds them, so a turn counts the same before and after compaction, and an event cut
+//!   to fit the event budget is read whole from its blob.
+//! - **What is kept.** `line_edits` holds the turn, its chat, its agent, the quarter hour and the
+//!   count: no paths and no text. Deleted chats and projects drop out of [`read`].
+
+use std::collections::{BTreeMap, HashMap};
+
+use o7_protocol::activity::LineEditBucket;
+use o7_protocol::{Millis, O7Event, ToolCall, ToolContent, ToolKind, ToolStatus, Truncation};
+use rusqlite::{Connection, params};
+use serde_json::Value;
+
+use super::compact::{apply_update, default_tool};
+use super::files::Attachments;
+
+/// Edits are kept by the quarter hour they were made in: every time zone's day starts on one.
+pub(crate) const BUCKET_MS: Millis = 15 * 60 * 1000;
+
+/// One pass counts at most this many turns...
+const PASS_TURNS: usize = 32;
+
+/// ...and stops once it has read this much.
+const PASS_BYTES: u64 = 16 * 1024 * 1024;
+
+/// The longest changed stretch, on either side, compared line by line (as the chat's diff does);
+/// a longer one counts as the larger side.
+const MAX_DIFF_LINES: usize = 2000;
+
+/// A blob larger than this is not read for counting: its call counts what its row kept.
+const MAX_BLOB_READ: u64 = 16 * 1024 * 1024;
+
+/// Counts the edits of up to one pass of ended turns not counted yet, in the caller's
+/// transaction. Returns whether ended turns still wait to be counted.
+pub(crate) fn count_pass(
+    conn: &Connection,
+    attachments: &Attachments,
+    now: Millis,
+) -> rusqlite::Result<bool> {
+    let turns: Vec<(String, String, String)> = conn
+        .prepare_cached(
+            "SELECT t.id, t.chat_id, COALESCE(t.source_agent, s.agent_id, c.active_agent, '') \
+             FROM turns t JOIN chats c ON c.id = t.chat_id \
+             LEFT JOIN agent_sessions s ON s.id = t.agent_session_id \
+             WHERE t.edits_counted_at IS NULL AND t.status <> 'running' \
+             ORDER BY t.started_at LIMIT ?1",
+        )?
+        .query_map(params![PASS_TURNS as i64 + 1], |row| {
+            Ok((row.get(0)?, row.get(1)?, row.get(2)?))
+        })?
+        .collect::<rusqlite::Result<_>>()?;
+    let mut insert = conn.prepare_cached(
+        "INSERT INTO line_edits (turn_id, chat_id, agent, at, lines) VALUES (?1, ?2, ?3, ?4, ?5) \
+         ON CONFLICT (turn_id, at) DO UPDATE SET lines = excluded.lines",
+    )?;
+    let mut counted =
+        conn.prepare_cached("UPDATE turns SET edits_counted_at = ?2 WHERE id = ?1")?;
+    let mut read = 0u64;
+    for (turn_id, chat_id, agent) in turns.iter().take(PASS_TURNS) {
+        if read >= PASS_BYTES {
+            return Ok(true);
+        }
+        let (buckets, bytes) = count_turn(conn, attachments, turn_id)?;
+        read = read.saturating_add(bytes);
+        for (at, lines) in buckets {
+            let lines = i64::try_from(lines).unwrap_or(i64::MAX);
+            insert.execute(params![turn_id, chat_id, agent, at, lines])?;
+        }
+        counted.execute(params![turn_id, now])?;
+    }
+    Ok(turns.len() > PASS_TURNS)
+}
+
+/// Every agent's line edits since `since`, by quarter hour, oldest first. Chats and projects that
+/// were deleted are left out; archived ones stay, since their edits were made.
+pub(crate) fn read(conn: &Connection, since: Millis) -> rusqlite::Result<Vec<LineEditBucket>> {
+    let since = since - since.rem_euclid(BUCKET_MS);
+    conn.prepare_cached(
+        "SELECT e.agent, e.at, SUM(e.lines) FROM line_edits e \
+         JOIN chats c ON c.id = e.chat_id JOIN projects p ON p.id = c.project_id \
+         WHERE e.at >= ?1 AND c.deleted = 0 AND p.deleted = 0 \
+         GROUP BY e.at, e.agent ORDER BY e.at, e.agent",
+    )?
+    .query_map(params![since], |row| {
+        let lines: i64 = row.get(2)?;
+        Ok(LineEditBucket {
+            agent: row.get(0)?,
+            at: row.get(1)?,
+            lines: u32::try_from(lines.max(0)).unwrap_or(u32::MAX),
+        })
+    })?
+    .collect()
+}
+
+/// The lines one turn's completed edits changed, by quarter hour, and how many bytes it read.
+fn count_turn(
+    conn: &Connection,
+    attachments: &Attachments,
+    turn_id: &str,
+) -> rusqlite::Result<(BTreeMap<Millis, u64>, u64)> {
+    let mut stmt = conn.prepare_cached(
+        "SELECT payload, created_at FROM events \
+         WHERE turn_id = ?1 AND kind IN ('tool_call', 'tool_update') ORDER BY seq",
+    )?;
+    let mut rows = stmt.query(params![turn_id])?;
+    // Ids this turn minted; an update to one whose call is missing gets a call, as compaction's.
+    let minted = format!("{turn_id}.");
+    let mut calls: HashMap<String, (ToolCall, Millis)> = HashMap::new();
+    let mut read = 0u64;
+    while let Some(row) = rows.next()? {
+        let payload: String = row.get(0)?;
+        let at: Millis = row.get(1)?;
+        read = read.saturating_add(payload.len() as u64);
+        let Ok(event) = serde_json::from_str::<O7Event>(&payload) else {
+            continue;
+        };
+        match whole(event, attachments, &mut read) {
+            O7Event::ToolCall(call) => {
+                let first = calls
+                    .get(&call.tool_call_id)
+                    .map_or(at, |(_, first)| *first);
+                calls.insert(call.tool_call_id.clone(), (call, first));
+            }
+            O7Event::ToolUpdate(update) => {
+                let id = update.tool_call_id.clone();
+                let known = match calls.remove(&id) {
+                    Some(known) => Some(known),
+                    None if id.starts_with(&minted) => Some((default_tool(&id), at)),
+                    None => None,
+                };
+                if let Some((call, first)) = known {
+                    calls.insert(id, (apply_update(call, update), first));
+                }
+            }
+            _ => {}
+        }
+    }
+    let mut buckets = BTreeMap::new();
+    for (call, at) in calls.values() {
+        if call.status != ToolStatus::Completed {
+            continue;
+        }
+        let lines = edit_lines(call, &mut |cut| blob(attachments, cut, &mut read));
+        if lines > 0 {
+            let bucket = buckets.entry(at - at.rem_euclid(BUCKET_MS)).or_insert(0u64);
+            *bucket = bucket.saturating_add(lines);
+        }
+    }
+    Ok((buckets, read))
+}
+
+/// The event as the agent sent it, when the stored one was cut to fit and its blob holds it whole.
+fn whole(event: O7Event, attachments: &Attachments, read: &mut u64) -> O7Event {
+    let cut = match &event {
+        O7Event::ToolCall(call) => call.truncated.clone(),
+        O7Event::ToolUpdate(update) => update.truncated.clone(),
+        _ => None,
+    };
+    let Some(bytes) = cut.and_then(|cut| blob(attachments, &cut, read)) else {
+        return event;
+    };
+    match (serde_json::from_slice::<O7Event>(&bytes), &event) {
+        (Ok(O7Event::ToolCall(original)), O7Event::ToolCall(call))
+            if original.tool_call_id == call.tool_call_id =>
+        {
+            O7Event::ToolCall(original)
+        }
+        (Ok(O7Event::ToolUpdate(original)), O7Event::ToolUpdate(update))
+            if original.tool_call_id == update.tool_call_id =>
+        {
+            O7Event::ToolUpdate(original)
+        }
+        _ => event,
+    }
+}
+
+/// A blob's bytes, when it is small enough to count from; counted into `read`.
+fn blob(attachments: &Attachments, cut: &Truncation, read: &mut u64) -> Option<Vec<u8>> {
+    let bytes = attachments.read_all(cut.blob.as_deref()?, MAX_BLOB_READ)?;
+    *read = read.saturating_add(bytes.len() as u64);
+    Some(bytes)
+}
+
+/// The lines one completed call changed; 0 for a call that edits nothing readable here.
+fn edit_lines(call: &ToolCall, blob: &mut impl FnMut(&Truncation) -> Option<Vec<u8>>) -> u64 {
+    let mut diffs = false;
+    let mut lines = 0u64;
+    for content in &call.content {
+        let ToolContent::Diff {
+            old_text,
+            new_text,
+            truncated,
+            ..
+        } = content
+        else {
+            continue;
+        };
+        diffs = true;
+        let emptied = new_text.is_empty() && old_text.as_deref().is_none_or(str::is_empty);
+        let counted = match truncated.as_ref().filter(|_| emptied) {
+            // An emptied diff: its texts are in the blob, as {"old_text", "new_text"}.
+            Some(cut) => blob(cut)
+                .and_then(|bytes| serde_json::from_slice::<Value>(&bytes).ok())
+                .map_or(0, |texts| {
+                    changed(text(&texts, "old_text"), text(&texts, "new_text"))
+                }),
+            None => changed(old_text.as_deref().unwrap_or(""), new_text),
+        };
+        lines = lines.saturating_add(counted);
+    }
+    if diffs || call.kind != ToolKind::Edit {
+        return lines;
+    }
+    call.raw_input.as_ref().map_or(0, input_lines)
+}
+
+/// The lines an edit tool's input changes, read by its fields' names: the text replaced and its
+/// replacement, several of those, a file's whole new text, or Codex's changes.
+fn input_lines(input: &Value) -> u64 {
+    if let Some(edits) = input.get("edits").and_then(Value::as_array) {
+        return edits.iter().map(input_lines).fold(0, u64::saturating_add);
+    }
+    if let Some(changes) = input.get("changes").and_then(Value::as_array) {
+        return changes
+            .iter()
+            .map(|change| {
+                let diff = text(change, "diff");
+                match change.pointer("/kind/type").and_then(Value::as_str) {
+                    Some("update") => patch_lines(diff),
+                    // A new file's text, or a deleted one's.
+                    _ => line_count(diff),
+                }
+            })
+            .fold(0, u64::saturating_add);
+    }
+    for (old, new) in [("old_string", "new_string"), ("oldText", "newText")] {
+        if input.get(old).is_some() || input.get(new).is_some() {
+            return changed(text(input, old), text(input, new));
+        }
+    }
+    for whole in ["content", "new_source"] {
+        if let Some(written) = input.get(whole).and_then(Value::as_str) {
+            return line_count(written);
+        }
+    }
+    0
+}
+
+fn text<'a>(value: &'a Value, key: &str) -> &'a str {
+    value.get(key).and_then(Value::as_str).unwrap_or("")
+}
+
+/// Lines of `text`, without the empty entry a trailing newline would add (as the chat's diff
+/// splits them), each without a carriage return.
+fn split(text: &str) -> Vec<&str> {
+    if text.is_empty() {
+        return Vec::new();
+    }
+    let mut lines: Vec<&str> = text
+        .split('\n')
+        .map(|line| line.strip_suffix('\r').unwrap_or(line))
+        .collect();
+    if lines.last() == Some(&"") {
+        lines.pop();
+    }
+    lines
+}
+
+fn line_count(text: &str) -> u64 {
+    split(text).len() as u64
+}
+
+/// The lines a change from `old` to `new` edits: in each stretch of changed lines, the larger of
+/// the lines removed and the lines added. A longest common subsequence over the lines, after
+/// setting aside the lines both start and end with, as the chat's diff compares them.
+pub(crate) fn changed(old: &str, new: &str) -> u64 {
+    let before = split(old);
+    let after = split(new);
+    let head = before
+        .iter()
+        .zip(&after)
+        .take_while(|(a, b)| a == b)
+        .count();
+    let tail = before[head..]
+        .iter()
+        .rev()
+        .zip(after[head..].iter().rev())
+        .take_while(|(a, b)| a == b)
+        .count();
+    let old = &before[head..before.len() - tail];
+    let new = &after[head..after.len() - tail];
+    let (n, m) = (old.len(), new.len());
+    if n == 0 || m == 0 || n > MAX_DIFF_LINES || m > MAX_DIFF_LINES {
+        return n.max(m) as u64;
+    }
+    // `common[i][j]`: the longest common subsequence of `old[i..]` and `new[j..]`.
+    let width = m + 1;
+    let mut common = vec![0u16; (n + 1) * width];
+    for i in (0..n).rev() {
+        for j in (0..m).rev() {
+            common[i * width + j] = if old[i] == new[j] {
+                common[(i + 1) * width + j + 1] + 1
+            } else {
+                common[(i + 1) * width + j].max(common[i * width + j + 1])
+            };
+        }
+    }
+    let (mut i, mut j) = (0, 0);
+    let (mut removed, mut added, mut total) = (0u64, 0u64, 0u64);
+    while i < n && j < m {
+        if old[i] == new[j] {
+            total += removed.max(added);
+            (removed, added) = (0, 0);
+            i += 1;
+            j += 1;
+        } else if common[(i + 1) * width + j] >= common[i * width + j + 1] {
+            removed += 1;
+            i += 1;
+        } else {
+            added += 1;
+            j += 1;
+        }
+    }
+    removed += (n - i) as u64;
+    added += (m - j) as u64;
+    total + removed.max(added)
+}
+
+/// The lines a unified diff's hunks edit, counted as [`changed`] counts them. Headers before the
+/// first hunk are skipped; a diff with no header counts from its first line.
+fn patch_lines(diff: &str) -> u64 {
+    let mut in_hunk = !(diff.starts_with("--- ") || diff.starts_with("diff "));
+    let (mut removed, mut added, mut total) = (0u64, 0u64, 0u64);
+    for line in diff.lines() {
+        if line.starts_with("@@") {
+            in_hunk = true;
+            total += removed.max(added);
+            (removed, added) = (0, 0);
+            continue;
+        }
+        if !in_hunk {
+            continue;
+        }
+        match line.as_bytes().first() {
+            Some(b'+') => added += 1,
+            Some(b'-') => removed += 1,
+            // "\ No newline at end of file"
+            Some(b'\\') => {}
+            _ => {
+                total += removed.max(added);
+                (removed, added) = (0, 0);
+            }
+        }
+    }
+    total + removed.max(added)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::chatstore::test_support::{TestDb, event_row};
+    use crate::chatstore::{EventRow, blobs};
+    use o7_protocol::{StopReason, ToolUpdate};
+    use serde_json::json;
+
+    const DAY: Millis = 24 * 60 * 60 * 1000;
+
+    fn call(id: &str, tool: &str, status: ToolStatus, raw: Value) -> ToolCall {
+        ToolCall {
+            tool_call_id: id.into(),
+            kind: ToolKind::Edit,
+            title: format!("{tool} file"),
+            status,
+            locations: Vec::new(),
+            raw_input: Some(raw),
+            tool_name: Some(tool.into()),
+            content: Vec::new(),
+            truncated: None,
+        }
+    }
+
+    fn update(id: &str, status: ToolStatus) -> ToolUpdate {
+        ToolUpdate {
+            tool_call_id: id.into(),
+            status: Some(status),
+            title: None,
+            kind: None,
+            locations: None,
+            raw_input: None,
+            tool_name: None,
+            content: None,
+            truncated: None,
+        }
+    }
+
+    fn at(seq: u32, turn: &str, created_at: Millis, event: &O7Event) -> EventRow {
+        EventRow {
+            created_at,
+            ..event_row(seq, Some(turn), event)
+        }
+    }
+
+    fn end(db: &TestDb, turn: &str) {
+        db.conn()
+            .execute(
+                "UPDATE turns SET status = 'completed' WHERE id = ?1",
+                params![turn],
+            )
+            .expect("end");
+    }
+
+    fn attachments() -> (tempfile::TempDir, Attachments) {
+        let dir = tempfile::tempdir().expect("attachments");
+        let attachments = Attachments::new(dir.path().to_path_buf());
+        (dir, attachments)
+    }
+
+    fn count_all(db: &TestDb, attachments: &Attachments) {
+        while count_pass(db.conn(), attachments, 99).expect("count") {}
+    }
+
+    #[test]
+    fn a_rewritten_line_counts_once_and_a_new_file_its_length() {
+        assert_eq!(changed("a\nb\nc\n", "a\nB\nc\n"), 1);
+        assert_eq!(changed("", "one\ntwo\nthree\n"), 3);
+        assert_eq!(changed("one\ntwo\n", ""), 2);
+        assert_eq!(changed("same\n", "same\n"), 0);
+        // Two stretches apart, one a replacement of two by three lines, one a removal.
+        assert_eq!(
+            changed("a\nb\nc\nd\ne\nf\ng\n", "a\nB1\nB2\nB3\nd\ne\ng\n"),
+            4
+        );
+        // Line endings do not make every line differ.
+        assert_eq!(changed("a\r\nb\r\n", "a\nb\nc\n"), 1);
+    }
+
+    #[test]
+    fn hunks_count_their_changed_stretches() {
+        let diff = "@@ -1,3 +1,4 @@\n keep\n-old\n+new\n+added\n keep\n@@ -9 +10 @@\n-gone\n\\ No newline at end of file\n";
+        assert_eq!(patch_lines(diff), 3);
+        let with_headers = "--- a/x\n+++ b/x\n@@ -1 +1 @@\n-a\n+b\n";
+        assert_eq!(patch_lines(with_headers), 1);
+        assert_eq!(patch_lines("+content for x"), 1);
+    }
+
+    #[test]
+    fn edit_inputs_count_by_their_fields() {
+        let count = |raw: Value| input_lines(&raw);
+        assert_eq!(
+            count(json!({"file_path":"a","old_string":"x\ny","new_string":"x\nz\nw"})),
+            2
+        );
+        assert_eq!(
+            count(
+                json!({"edits":[{"old_string":"a","new_string":"b"},{"old_string":"","new_string":"c\nd"}]})
+            ),
+            3
+        );
+        assert_eq!(count(json!({"file_path":"a","content":"1\n2\n3\n"})), 3);
+        assert_eq!(count(json!({"path":"a","oldText":"q","newText":"r"})), 1);
+        assert_eq!(
+            count(json!({"notebook_path":"n","new_source":"x = 1\ny = 2"})),
+            2
+        );
+        assert_eq!(
+            count(json!({"type":"fileChange","changes":[
+                {"path":"a","kind":{"type":"update","move_path":null},"diff":"@@ -1 +1,2 @@\n-a\n+b\n+c\n"},
+                {"path":"b","kind":{"type":"add"},"diff":"one\ntwo\n"}
+            ]})),
+            4
+        );
+        // A preview of a cut input names no edit.
+        assert_eq!(
+            count(json!({"_auracode_truncated":true,"bytes":9000,"preview":"{\"content\":"})),
+            0
+        );
+    }
+
+    #[test]
+    fn a_turn_counts_its_completed_edits_once_by_quarter_hour() {
+        let db = TestDb::new();
+        let (_dir, attachments) = attachments();
+        let chat = db.chat("/work");
+        db.turn(&chat, "t1", 1, 0);
+        let start = 20 * DAY + 5 * 60 * 1000;
+        let edit = call(
+            "t1.a",
+            "Edit",
+            ToolStatus::InProgress,
+            json!({"file_path":"a","old_string":"one","new_string":"two\nthree"}),
+        );
+        let write = call(
+            "t1.b",
+            "Write",
+            ToolStatus::Completed,
+            json!({"file_path":"b","content":"1\n2\n3\n4\n"}),
+        );
+        let failed = call(
+            "t1.c",
+            "Write",
+            ToolStatus::Failed,
+            json!({"file_path":"c","content":"x\n"}),
+        );
+        let mut reading = call(
+            "t1.d",
+            "Read",
+            ToolStatus::Completed,
+            json!({"content":"x\n"}),
+        );
+        reading.kind = ToolKind::Read;
+        db.append(
+            &chat,
+            &[
+                at(0, "t1", start, &O7Event::ToolCall(edit)),
+                at(1, "t1", start + 1, &O7Event::ToolCall(failed)),
+                at(2, "t1", start + 2, &O7Event::ToolCall(reading)),
+                at(
+                    3,
+                    "t1",
+                    start + 3,
+                    &O7Event::ToolUpdate(update("t1.a", ToolStatus::Completed)),
+                ),
+                // The next quarter hour.
+                at(4, "t1", start + BUCKET_MS, &O7Event::ToolCall(write)),
+            ],
+        );
+        // A running turn waits.
+        assert!(!count_pass(db.conn(), &attachments, 7).expect("count"));
+        assert!(read_all(&db).is_empty());
+        end(&db, "t1");
+        assert!(!count_pass(db.conn(), &attachments, 7).expect("count"));
+        let quarter = start - start.rem_euclid(BUCKET_MS);
+        assert_eq!(
+            read_all(&db),
+            vec![
+                LineEditBucket {
+                    agent: "mock".into(),
+                    at: quarter,
+                    lines: 2
+                },
+                LineEditBucket {
+                    agent: "mock".into(),
+                    at: quarter + BUCKET_MS,
+                    lines: 4
+                },
+            ]
+        );
+        // Counted once: a later pass leaves the figures as they are.
+        assert!(!count_pass(db.conn(), &attachments, 8).expect("count"));
+        assert_eq!(read_all(&db).len(), 2);
+        let counted: Option<i64> = db
+            .conn()
+            .query_row(
+                "SELECT edits_counted_at FROM turns WHERE id = 't1'",
+                [],
+                |row| row.get(0),
+            )
+            .expect("counted");
+        assert_eq!(counted, Some(7));
+        // Only what is since the asked moment.
+        assert_eq!(read(db.conn(), quarter + BUCKET_MS).expect("read").len(), 1);
+    }
+
+    #[test]
+    fn a_cut_input_is_counted_whole_from_its_blob() {
+        let db = TestDb::new();
+        let (dir, attachments) = attachments();
+        let chat = db.chat("/work");
+        db.turn(&chat, "t1", 1, 0);
+        let content = "line\n".repeat(500);
+        let original = O7Event::ToolCall(call(
+            "t1.w",
+            "Write",
+            ToolStatus::Completed,
+            json!({"file_path":"big","content":content}),
+        ));
+        let bytes = serde_json::to_vec(&original).expect("json");
+        let sha = "ab".repeat(32);
+        blobs::write(dir.path(), &sha, &bytes).expect("blob");
+        let mut stored = call(
+            "t1.w",
+            "Write",
+            ToolStatus::Completed,
+            json!({"_auracode_truncated":true,"bytes":bytes.len(),"preview":"{"}),
+        );
+        stored.truncated = Some(Truncation {
+            total_bytes: bytes.len() as u64,
+            blob: Some(sha),
+        });
+        db.append(&chat, &[at(0, "t1", 1, &O7Event::ToolCall(stored))]);
+        end(&db, "t1");
+        count_all(&db, &attachments);
+        assert_eq!(read_all(&db)[0].lines, 500);
+    }
+
+    #[test]
+    fn diffs_and_codex_changes_count_and_deleted_chats_drop_out() {
+        let db = TestDb::new();
+        let (_dir, attachments) = attachments();
+        let chat = db.chat("/work");
+        db.turn(&chat, "t1", 1, 0);
+        let mut diff = call("t1.d", "edit", ToolStatus::Completed, json!({}));
+        diff.content = vec![ToolContent::Diff {
+            path: "a".into(),
+            old_text: Some("a\nb\n".into()),
+            new_text: "a\nc\nd\n".into(),
+            truncated: None,
+        }];
+        let mut codex = call(
+            "t1.x",
+            "",
+            ToolStatus::InProgress,
+            json!({"type":"fileChange","changes":[{"path":"a","kind":{"type":"update","move_path":null},"diff":"@@ -1 +1 @@\n-a\n+b\n"}]}),
+        );
+        codex.tool_name = None;
+        let mut done = update("t1.x", ToolStatus::Completed);
+        done.raw_input = codex.raw_input.clone();
+        db.append(
+            &chat,
+            &[
+                at(0, "t1", 1, &O7Event::ToolCall(diff)),
+                at(1, "t1", 2, &O7Event::ToolCall(codex)),
+                at(2, "t1", 3, &O7Event::ToolUpdate(done)),
+                at(
+                    3,
+                    "t1",
+                    4,
+                    &O7Event::TurnEnded {
+                        turn_id: "t1".into(),
+                        stop_reason: StopReason::EndTurn,
+                        usage: None,
+                        duration_ms: None,
+                        recovered: false,
+                    },
+                ),
+            ],
+        );
+        end(&db, "t1");
+        count_all(&db, &attachments);
+        assert_eq!(read_all(&db)[0].lines, 3);
+        db.conn()
+            .execute("UPDATE chats SET deleted = 1 WHERE id = ?1", params![chat])
+            .expect("delete");
+        assert!(read_all(&db).is_empty());
+    }
+
+    #[test]
+    fn a_pass_stops_at_its_turn_limit_and_the_rest_wait() {
+        let db = TestDb::new();
+        let (_dir, attachments) = attachments();
+        let chat = db.chat("/work");
+        for ordinal in 1..=(PASS_TURNS as u32 + 3) {
+            let turn = format!("t{ordinal}");
+            db.turn(&chat, &turn, ordinal, ordinal);
+            end(&db, &turn);
+        }
+        assert!(count_pass(db.conn(), &attachments, 1).expect("first"));
+        assert!(!count_pass(db.conn(), &attachments, 2).expect("second"));
+        let waiting: i64 = db
+            .conn()
+            .query_row(
+                "SELECT COUNT(*) FROM turns WHERE edits_counted_at IS NULL",
+                [],
+                |row| row.get(0),
+            )
+            .expect("waiting");
+        assert_eq!(waiting, 0);
+    }
+
+    fn read_all(db: &TestDb) -> Vec<LineEditBucket> {
+        read(db.conn(), 0).expect("read")
+    }
+}

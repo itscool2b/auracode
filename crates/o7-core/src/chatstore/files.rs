@@ -22,6 +22,20 @@ impl Attachments {
     ) -> Result<BlobText, ReadError> {
         blobs::read_page(&self.0, hash, offset, len)
     }
+    /// A whole blob of at most `max` bytes; `None` when it is missing, larger or unreadable, or
+    /// `hash` is not a content address.
+    pub(crate) fn read_all(&self, hash: &str, max: u64) -> Option<Vec<u8>> {
+        use std::io::Read;
+        let file = std::fs::File::open(blobs::path(&self.0, hash)?).ok()?;
+        if !file.metadata().ok()?.is_file() {
+            return None;
+        }
+        let mut bytes = Vec::new();
+        file.take(max.saturating_add(1))
+            .read_to_end(&mut bytes)
+            .ok()?;
+        (bytes.len() as u64 <= max).then_some(bytes)
+    }
 }
 
 #[derive(Clone)]

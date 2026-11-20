@@ -200,6 +200,14 @@ pub(crate) enum Request {
         include_archived: bool,
         reply: oneshot::Sender<Result<o7_protocol::search::SearchResults, StoreError>>,
     },
+    /// Counts one pass of ended turns' line edits; answers whether turns still wait.
+    CountLineEdits {
+        reply: oneshot::Sender<Result<bool, StoreError>>,
+    },
+    ReadLineEdits {
+        since: o7_protocol::Millis,
+        reply: oneshot::Sender<Result<Vec<o7_protocol::activity::LineEditBucket>, StoreError>>,
+    },
     Conversation {
         command: super::conversation::ConversationCommand,
         reply: oneshot::Sender<Result<super::conversation::ConversationReply, StoreError>>,
@@ -722,6 +730,8 @@ fn work_name(work: &Work) -> &'static str {
         Work::Request(Request::Conversation { .. }) => "conversation",
         Work::Request(Request::Chats { .. }) => "chats",
         Work::Request(Request::Search { .. }) => "search",
+        Work::Request(Request::CountLineEdits { .. }) => "count_line_edits",
+        Work::Request(Request::ReadLineEdits { .. }) => "read_line_edits",
         Work::Request(Request::LoadChat { .. }) => "load_chat",
         Work::Request(Request::ExportMarkdown { .. }) => "export_markdown",
         Work::Request(Request::ReadBlob { .. }) => "read_blob",
@@ -1413,6 +1423,19 @@ impl Writer {
             } => {
                 let _ = reply
                     .send(self.read(|conn| super::search::execute(conn, &query, include_archived)));
+            }
+            Request::CountLineEdits { reply } => {
+                let attachments = self.files.attachments.clone();
+                let now = now_millis();
+                let result = if matches!(self.mode, Mode::Damaged) {
+                    Err(StoreError::Damaged(DAMAGED.into()))
+                } else {
+                    self.write_tx(|conn| super::line_edits::count_pass(conn, &attachments, now))
+                };
+                let _ = reply.send(result);
+            }
+            Request::ReadLineEdits { since, reply } => {
+                let _ = reply.send(self.read(|conn| super::line_edits::read(conn, since)));
             }
             Request::Memory { command, reply } => {
                 let now = now_millis();

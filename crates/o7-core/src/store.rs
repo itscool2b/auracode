@@ -65,7 +65,7 @@ use lock::OpenLock;
 use recovery::Recovery;
 
 /// The schema version this build reads and writes; equals the number of migrations.
-pub const SCHEMA_VERSION: u32 = 20;
+pub const SCHEMA_VERSION: u32 = 21;
 
 /// Pre-migration backups kept per database. Enough to step back through several upgrades without
 /// letting a long-lived install fill the disk with copies.
@@ -113,6 +113,7 @@ static MIGRATIONS: std::sync::LazyLock<[M<'static>; SCHEMA_VERSION as usize]> =
             M::up(include_str!("../migrations/0018_shared_mcp.sql")).foreign_key_check(),
             M::up(include_str!("../migrations/0019_coordinator.sql")).foreign_key_check(),
             M::up(include_str!("../migrations/0020_chat_roles.sql")).foreign_key_check(),
+            M::up(include_str!("../migrations/0021_line_edits.sql")).foreign_key_check(),
         ]
     });
 
