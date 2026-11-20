@@ -465,6 +465,214 @@
   flex: none;
 }
 
+/* --------------------------------------------------------------------------- AI line edits */
+
+/*
+ * A flat card under the board: the title over the year's total at its left, the agents as the
+ * shared segmented control at its right; then a year of days as squares, a week to a column with
+ * Sunday on top, each lit in the heat colour by where it falls among the active days; then four
+ * figures and the legend. Nothing glows. The squares share the board's width, so they shrink with
+ * the window and never scroll sideways.
+ */
+.dashboard-activity {
+  --dashboard-heat-0: var(--g-glass-control-hover);
+  --dashboard-heat-1: color-mix(in srgb, var(--g-heat) 30%, transparent);
+  --dashboard-heat-2: color-mix(in srgb, var(--g-heat) 52%, transparent);
+  --dashboard-heat-3: color-mix(in srgb, var(--g-heat) 76%, transparent);
+  --dashboard-heat-4: var(--g-heat);
+  margin-top: var(--g-space-40);
+  padding: var(--g-space-20) var(--g-space-24);
+  border-radius: var(--g-radius-16);
+  background-color: var(--ui-card-flat);
+}
+
+.dashboard-activity-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: var(--g-space-16);
+}
+
+.dashboard-activity-title {
+  margin: 0;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-heading);
+  line-height: var(--g-leading-heading);
+  font-weight: var(--g-weight-regular);
+}
+
+.dashboard-activity-total {
+  margin: var(--g-space-2) 0 0;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-display);
+  line-height: var(--g-leading-display);
+  font-weight: var(--g-weight-semibold);
+  letter-spacing: var(--g-tracking-display);
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard-activity-agents {
+  flex: none;
+  margin: 0;
+  border: 0;
+}
+
+.dashboard-activity-error {
+  margin: var(--g-space-12) 0 0;
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
+
+.dashboard-activity-calendar {
+  position: relative;
+  margin-top: var(--g-space-24);
+}
+
+/* Month names over the week each month's first Sunday starts, on the squares' own columns. */
+.dashboard-activity-months,
+.dashboard-activity-grid {
+  display: grid;
+  grid-template-columns: repeat(53, minmax(0, 1fr));
+  column-gap: var(--dashboard-activity-gap, var(--g-space-6));
+}
+
+.dashboard-activity-months {
+  margin-bottom: var(--g-space-6);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
+
+.dashboard-activity-months > span {
+  grid-row: 1;
+  white-space: nowrap;
+}
+
+.dashboard-activity-grid {
+  grid-template-rows: repeat(7, auto);
+  grid-auto-flow: column;
+  row-gap: var(--dashboard-activity-gap, var(--g-space-6));
+}
+
+.dashboard-activity-day {
+  display: block;
+  aspect-ratio: 1;
+  /* Squares at any size: the corner shrinks with a narrow window's small squares. */
+  border-radius: min(var(--g-radius-4), 22%);
+  background-color: var(--dashboard-heat-0);
+  transition: background-color var(--g-dur-fast) var(--g-ease);
+}
+
+.dashboard-activity-day[data-level="1"] {
+  background-color: var(--dashboard-heat-1);
+}
+
+.dashboard-activity-day[data-level="2"] {
+  background-color: var(--dashboard-heat-2);
+}
+
+.dashboard-activity-day[data-level="3"] {
+  background-color: var(--dashboard-heat-3);
+}
+
+.dashboard-activity-day[data-level="4"] {
+  background-color: var(--dashboard-heat-4);
+}
+
+@media (hover: hover) {
+  .dashboard-activity-grid > .dashboard-activity-day:hover {
+    box-shadow: inset 0 0 0 1px var(--g-glass-rim-strong);
+  }
+}
+
+/* The day under the pointer, above its square. */
+.dashboard-activity-tip {
+  position: absolute;
+  z-index: 2;
+  max-width: none;
+  white-space: nowrap;
+  transform: translate(-50%, calc(-100% - var(--g-space-6)));
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard-activity-stats {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: var(--g-space-16) var(--g-space-24);
+  margin: var(--g-space-24) 0 0;
+}
+
+@container (min-width: 640px) {
+  .dashboard-activity-stats {
+    grid-template-columns: repeat(4, minmax(0, 1fr));
+  }
+}
+
+@container (max-width: 720px) {
+  .dashboard-activity {
+    --dashboard-activity-gap: var(--g-space-4);
+  }
+}
+
+@container (max-width: 520px) {
+  .dashboard-activity {
+    --dashboard-activity-gap: var(--g-space-2);
+  }
+}
+
+.dashboard-activity-stats dt {
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
+
+.dashboard-activity-stats dd {
+  margin: var(--g-space-2) 0 0;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: var(--g-weight-medium);
+  font-variant-numeric: tabular-nums;
+}
+
+.dashboard-activity-foot {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--g-space-8) var(--g-space-16);
+  margin-top: var(--g-space-20);
+}
+
+.dashboard-activity-legend {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-4);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
+
+.dashboard-activity-legend > .dashboard-activity-day {
+  width: 14px;
+}
+
+.dashboard-activity-legend > span:first-child {
+  margin-right: var(--g-space-2);
+}
+
+.dashboard-activity-legend > span:last-child {
+  margin-left: var(--g-space-2);
+}
+
+.dashboard-activity-note {
+  margin: 0;
+  color: var(--g-fg-3);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+}
+
 @media (max-width: 720px) {
   .dashboard-page {
     padding-right: var(--g-space-20);
@@ -473,11 +681,13 @@
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .dashboard-card-go {
+  .dashboard-card-go,
+  .dashboard-activity-day {
     transition: none;
   }
 }
 
-:root:is([data-motion="reduced"], [data-motion="off"]) .dashboard-card-go {
+:root:is([data-motion="reduced"], [data-motion="off"])
+  :is(.dashboard-card-go, .dashboard-activity-day) {
   transition: none;
 }

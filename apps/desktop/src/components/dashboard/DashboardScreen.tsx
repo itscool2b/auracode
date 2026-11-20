@@ -2,7 +2,7 @@ import { springs, usePrefersReducedMotion } from "@o7/ui";
 import { AgentMark, PixelLoader, StatusDot } from "@o7/ui/graphite";
 import { ArrowLeft, Check, ChevronRight, Square, X } from "lucide-react";
 import { AnimatePresence, motion } from "motion/react";
-import { useCallback, useEffect, useRef, useState, useSyncExternalStore } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState, useSyncExternalStore } from "react";
 import type { ChatProcesses, ChatSummary, ProcessesSnapshot } from "../../bindings";
 import type { AppStore } from "../../lib/chat/appStore";
 import {
@@ -18,6 +18,7 @@ import {
 import { type DashboardCleared, dashboardCleared } from "../../lib/dashboardCleared";
 import { errorMessage } from "../../lib/errors";
 import { chatStop } from "../../lib/ipc";
+import { type LineEditsApi, lineEditsApi } from "../../lib/lineEdits";
 import { ago } from "../../lib/plugins/format";
 import {
   cpuPercent,
@@ -33,6 +34,7 @@ import { EMPTY_WORKSPACE, type WorkspaceStore } from "../../lib/workspace";
 import { TaskKindIcon, TaskMark, taskFacts, useClock } from "../chat/BackgroundTasks";
 import { projectName } from "../chat/ChatList";
 import { terminalChats } from "../chat/terminalChatRuntime";
+import { LineEditsCard } from "./LineEditsCard";
 import "./dashboard.css";
 
 const noSubscribe = () => () => {};
@@ -77,11 +79,13 @@ function cardMotion(reduced: boolean) {
  * that opens its chat. A working card says what its agent and its tasks are doing, and folds the
  * programs it runs (read from the process table every two seconds while the page is open), each
  * with Stop. A lane keeps its order: a chat that changes lane arrives at the top of the new one.
+ * Under the board, AI line edits shows the lines agents' edits changed over the last year.
  */
 export function DashboardScreen({
   app,
   workspace,
   api = processesApi,
+  lineEdits = lineEditsApi,
   cleared = dashboardCleared,
   stopChat = chatStop,
   onBack,
@@ -91,6 +95,8 @@ export function DashboardScreen({
   /** Names each chat's project, and leaves archived chats off the board. */
   readonly workspace?: WorkspaceStore;
   readonly api?: ProcessesApi;
+  /** The lines agents' edits changed, for AI line edits. */
+  readonly lineEdits?: LineEditsApi;
   /** The cards cleared on this device. */
   readonly cleared?: DashboardCleared;
   /** Stops a chat's agent, as its header's Stop does. */
@@ -124,6 +130,17 @@ export function DashboardScreen({
   useSyncExternalStore(cleared.subscribe, cleared.getVersion, cleared.getVersion);
   const now = useClock(true);
   const reduced = usePrefersReducedMotion();
+  const day = new Date(now);
+  const today = new Date(day.getFullYear(), day.getMonth(), day.getDate()).getTime();
+  // Agents' names as their chats show them: the same map until a chat brings a new one, so AI
+  // line edits does not draw again with every tick of the clock.
+  const namesKey = JSON.stringify(
+    [...new Map(listed.map((chat) => [chat.agent_id, chat.agent_name] as const))].sort(),
+  );
+  const agentNames = useMemo(
+    () => new Map<string, string>(JSON.parse(namesKey) as [string, string][]),
+    [namesKey],
+  );
 
   const refresh = useCallback(async () => {
     try {
@@ -298,6 +315,7 @@ export function DashboardScreen({
             );
           })}
         </div>
+        <LineEditsCard api={lineEdits} agentNames={agentNames} today={today} />
       </div>
     </main>
   );
