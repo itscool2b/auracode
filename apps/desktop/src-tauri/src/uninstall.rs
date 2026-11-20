@@ -744,7 +744,7 @@ mod tests {
     /// whole data folder, and its quit request reached the installed app.
     #[test]
     fn a_development_build_cleans_up_only_its_own_folder() {
-        let own = PathBuf::from("/data/si.auracode.desktop.dev");
+        let own = PathBuf::from("/data/codes.o7.desktop.dev");
         let development = scoped_for_build(Options::default(), true, || Ok(own.clone())).unwrap();
         assert_eq!(development.data_dir.as_deref(), Some(own.as_path()));
 

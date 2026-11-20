@@ -7,8 +7,8 @@
 //! of the app crashing before a window exists.
 //!
 //! The data root is o7-core's [`DataRoot::resolve`] and nothing else ([`startup`]): the folder in
-//! `O7_DATA_DIR`, or `si.auracode.desktop` in the local app data folder
-//! (`si.auracode.desktop.dev` for a development build, so a build from a working copy never opens
+//! `O7_DATA_DIR`, or `codes.o7.desktop` in the local app data folder
+//! (`codes.o7.desktop.dev` for a development build, so a build from a working copy never opens
 //! the installed app's data). The CLI resolves the same one, so both always open the same profile.
 //! Tauri's path API is not consulted: its `app_data_dir()` is Roaming AppData on Windows, which
 //! managed machines copy between PCs, and `device.json` and the databases must never travel. Its
@@ -560,8 +560,8 @@ mod tests {
     const CHILD_HOME: &str = "O7_DESKTOP_TEST_THROWAWAY_HOME";
 
     /// Without `O7_DATA_DIR` the app starts in its default folder in the local app data
-    /// folder: `si.auracode.desktop`, the folder Tauri's `app_local_data_dir()` names, for an
-    /// installed build, and `si.auracode.desktop.dev` for this development build. The child gets a
+    /// folder: `codes.o7.desktop`, the folder Tauri's `app_local_data_dir()` names, for an
+    /// installed build, and `codes.o7.desktop.dev` for this development build. The child gets a
     /// throwaway home folder, which is what the local app data folder is built from on macOS and
     /// Linux, so it boots there instead of in the user's real data. Windows looks its known
     /// folders up without the environment, so this cannot run there without touching real data;

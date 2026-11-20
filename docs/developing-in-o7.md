@@ -14,8 +14,8 @@ A development build is one with debug assertions: `cargo run`, `cargo test`, `pn
 (`tauri dev`) and `tauri build --debug`. Release builds (`pnpm bundle`, `cargo build --release`)
 behave exactly like the installed app.
 
-- **Its data folder is its own.** Without `O7_DATA_DIR` it opens `si.auracode.desktop.dev`
-  next to the installed app's `si.auracode.desktop` (`DEVELOPMENT_FOLDER` in
+- **Its data folder is its own.** Without `O7_DATA_DIR` it opens `codes.o7.desktop.dev`
+  next to the installed app's `codes.o7.desktop` (`DEVELOPMENT_FOLDER` in
   `crates/o7-core/src/paths.rs`). The installed app's chats are never migrated to a newer
   schema, which the installed app would then refuse, and never cleaned up. The CLI follows the same
   rule. `O7_DATA_DIR` still points a development build anywhere, the installed app's folder
@@ -183,7 +183,7 @@ can read the log to see what happened.
 
 The installed app is an AppImage: `~/Applications/auracode.AppImage`, a link to a versioned file
 beside it (`o7_0.1.0_amd64.AppImage`), which the desktop entry starts. The development
-build's folder is `~/.local/share/si.auracode.desktop.dev`, by the same rule as elsewhere.
+build's folder is `~/.local/share/codes.o7.desktop.dev`, by the same rule as elsewhere.
 
 **Toolchain.** Rust through rustup (`rust-toolchain.toml` picks stable with rustfmt and clippy),
 pnpm 12 (`mise use -g pnpm@12`, or corepack), Node from the supported range, CMake (dictation's
@@ -288,7 +288,7 @@ sure the image has no plugin folder. Such an image uses the system's plugins: at
 again (the same single re-run as the NVIDIA switch below) with `GST_PLUGIN_SYSTEM_PATH_1_0` on the
 system's folders in place of the launcher's missing one (a value the person set after it is kept).
 Every AppImage also gets a GStreamer registry of its own under
-`~/.cache/si.auracode.desktop/gstreamer-1.0/` unless the person chose one: the image's plugins sit
+`~/.cache/codes.o7.desktop/gstreamer-1.0/` unless the person chose one: the image's plugins sit
 at a mount that moves with every launch, and in the shared registry they would make the person's
 other GStreamer apps scan everything again. Agents inherit none of these (`O7_LAUNCH_SET`,
 and `strip_launch_context` drops the GStreamer hook's variables). An image without plugins loads
@@ -358,7 +358,7 @@ in a terminal in the main checkout, fix forward, build an AppImage and run `host
 
 ## macOS
 
-A development build's folder is `~/Library/Application Support/si.auracode.desktop.dev`, by the
+A development build's folder is `~/Library/Application Support/codes.o7.desktop.dev`, by the
 same rule. WebKit keeps one website-data store per bundle identifier, so a development build shares
 it with the installed app (`LaunchOptions::webview_data_dir` has no effect there). The app keeps
 nothing in web storage except the stress view's frame log, so this is harmless today. Anything
@@ -372,7 +372,7 @@ The development build was built from this branch against the main checkout's war
 
 | Check | Result |
 |---|---|
-| A development build launched beside the running installed app stays up as its own instance, opens `si.auracode.desktop.dev` with its WebView2 profile inside, is titled `o7 dev`, and leaves the installed app's processes alone | pass |
+| A development build launched beside the running installed app stays up as its own instance, opens `codes.o7.desktop.dev` with its WebView2 profile inside, is titled `o7 dev`, and leaves the installed app's processes alone | pass |
 | A smoke run without `O7_DATA_DIR` prints a failing result naming the reason, exits 1 and opens no store | pass |
 | `--uninstall-cleanup --dry-run` from a development build plans only the development folder | pass |
 | Smoke checks with the development build in scratch folders: stream, chat (30 of 30), chat-reopen (8 of 8) | pass |

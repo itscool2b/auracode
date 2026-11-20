@@ -5,7 +5,7 @@ Each line is
 written in simple English about what changed for the person using o7: short everyday words,
 short sentences, no internal names, and the headline first (owner, 16 November 2026). Each pull
 request adds its own line in the same pull request; see "Changelog" in
-[docs/developing-in-aura.md](docs/developing-in-aura.md). `node .github/scripts/check-changelog.mjs`
+[docs/developing-in-o7.md](docs/developing-in-o7.md). `node .github/scripts/check-changelog.mjs`
 checks the format, and with `--dates` checks each day against the time GitHub says it merged.
 
 ## 2026-11-19

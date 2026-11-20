@@ -1201,7 +1201,8 @@ mod tests {
 
         // The other switches read such a value as unset, as they always have.
         let garbled = LaunchOptions::from_lookup_in(false, |name| {
-            (name != DATA_DIR_ENV).then(|| not_unicode(OsStr::new("1")))
+            (name != DATA_DIR_ENV && name != o7_core::paths::LEGACY_DATA_DIR_ENV)
+                .then(|| not_unicode(OsStr::new("1")))
         });
         assert!(garbled.smoke.is_none() && !garbled.no_glass && !garbled.own_data_dir);
         assert_eq!(garbled.stress, None);
@@ -1215,7 +1216,7 @@ mod tests {
     /// plugin, or one with its own folder would hand over and exit. So for each value a child
     /// process (this process's environment must not change) checks that `own_data_dir` holds
     /// exactly when o7-core resolves a folder other than the installed app's, the only one
-    /// named `si.auracode.desktop`. The test binary is a development build, so that is every
+    /// named `codes.o7.desktop`. The test binary is a development build, so that is every
     /// value, blank ones included. Resolving only computes the path; nothing is created.
     #[test]
     fn own_data_dir_agrees_with_where_aura_core_puts_the_data() {

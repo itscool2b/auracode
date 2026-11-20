@@ -898,48 +898,6 @@ export type AppInfo = {
 /**  Appearance belongs to the active profile on this device, just like motion preferences. */
 export type AppearancePreference = "system" | "light" | "dark";
 
-/**  One normalized event in a chat. */
-export type O7Event = 
-/**  The session actor started a turn for the queued prompt `prompt_id`. */
-({ type: "turn_started"; turn_id: string; prompt_id: string | null }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; step?: never; stop_reason?: never; task_id?: never; text?: never; thought_id?: never; usage?: never; windows?: never } | ({ type: "turn_ended"; turn_id: string; stop_reason: StopReason; usage: TokenUsage | null; duration_ms: number | null; 
-/**  Ended by recovery at startup: o7 quit or crashed while the turn ran. */
-recovered: boolean }) & { answer?: never; by?: never; decision?: never; detail?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; request_id?: never; state?: never; step?: never; task_id?: never; text?: never; thought_id?: never; windows?: never } | 
-/**  The user's prompt text, as sent. The session actor emits it; drivers never do. */
-({ type: "user_message_delta"; message_id: string; text: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; step?: never; stop_reason?: never; task_id?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "steering_status"; message_id: string; state: SteeringState; detail: string | null }) & { answer?: never; by?: never; decision?: never; duration_ms?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; step?: never; stop_reason?: never; task_id?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "message_delta"; message_id: string; text: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; step?: never; stop_reason?: never; task_id?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "message_completed"; message_id: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; step?: never; stop_reason?: never; task_id?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "thought_delta"; thought_id: string; text: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; step?: never; stop_reason?: never; task_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "thought_completed"; thought_id: string; duration_ms: number | null }) & { answer?: never; by?: never; decision?: never; detail?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; step?: never; stop_reason?: never; task_id?: never; text?: never; turn_id?: never; usage?: never; windows?: never } | {
-	type: "tool_call",
-} & ToolCall | {
-	type: "tool_update",
-} & ToolUpdate | {
-	type: "permission_requested",
-} & PermissionRequest | ({ type: "permission_resolved"; request_id: string; decision: PermissionDecision; by: ResolvedBy }) & { answer?: never; detail?: never; duration_ms?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; state?: never; step?: never; stop_reason?: never; task_id?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | {
-	type: "ui_request",
-} & UiRequest | 
-/**  The answer to a [`UiRequest`]; `None` when it was dismissed, withdrawn or closed. */
-({ type: "ui_resolved"; request_id: string; answer: UiAnswer | null; by: ResolvedBy }) & { decision?: never; detail?: never; duration_ms?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; state?: never; step?: never; stop_reason?: never; task_id?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "plan_updated"; entries: PlanEntry[] }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; held?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; step?: never; stop_reason?: never; task_id?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | 
-/**  A background task's record: a subagent or a background command ([`tasks`]). */
-{
-	type: "task_updated",
-} & BackgroundTask | 
-/**  One step of a background task's work, added or replaced by its `step_id`. */
-({ type: "task_step"; task_id: string; step: TaskStep }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | {
-	type: "usage_updated",
-} & UsageInfo | ({ type: "limits_updated"; windows: LimitWindow[] }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; step?: never; stop_reason?: never; task_id?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never } | 
-/**  Live header state; never stored. */
-{
-	type: "session_updated",
-} & SessionInfo | 
-/**  What happened to a queued prompt (the composer's queue); never stored. */
-({ type: "prompt_lifecycle"; prompt_id: string; state: PromptState; 
-/**  The prompt's first 256 characters, sent with `Queued`. */
-preview: string | null; 
-/**
- *  Exact hold when queued or when a queued row's hold changes; absent for other states
- *  and older producers.
- */
-held?: boolean | null }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; message_id?: never; recoverable?: never; recovered?: never; request_id?: never; step?: never; stop_reason?: never; task_id?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "notice"; level: NoticeLevel; message: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; held?: never; kind?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; step?: never; stop_reason?: never; task_id?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "error"; kind: ErrorKind; message: string; 
-/**  More context, such as the agent's redacted stderr tail. */
-detail: string | null; recoverable: boolean }) & { answer?: never; by?: never; decision?: never; duration_ms?: never; entries?: never; held?: never; level?: never; message_id?: never; preview?: never; prompt_id?: never; recovered?: never; request_id?: never; state?: never; step?: never; stop_reason?: never; task_id?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never };
-
 /**  A sign-in command the user runs in a terminal with their own binary. */
 export type AuthCommand = {
 	label: string,
@@ -2751,6 +2709,48 @@ export type NativeRewind = {
 };
 
 export type NoticeLevel = "info" | "warning" | "error";
+
+/**  One normalized event in a chat. */
+export type O7Event = 
+/**  The session actor started a turn for the queued prompt `prompt_id`. */
+({ type: "turn_started"; turn_id: string; prompt_id: string | null }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; step?: never; stop_reason?: never; task_id?: never; text?: never; thought_id?: never; usage?: never; windows?: never } | ({ type: "turn_ended"; turn_id: string; stop_reason: StopReason; usage: TokenUsage | null; duration_ms: number | null; 
+/**  Ended by recovery at startup: o7 quit or crashed while the turn ran. */
+recovered: boolean }) & { answer?: never; by?: never; decision?: never; detail?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; request_id?: never; state?: never; step?: never; task_id?: never; text?: never; thought_id?: never; windows?: never } | 
+/**  The user's prompt text, as sent. The session actor emits it; drivers never do. */
+({ type: "user_message_delta"; message_id: string; text: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; step?: never; stop_reason?: never; task_id?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "steering_status"; message_id: string; state: SteeringState; detail: string | null }) & { answer?: never; by?: never; decision?: never; duration_ms?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; step?: never; stop_reason?: never; task_id?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "message_delta"; message_id: string; text: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; step?: never; stop_reason?: never; task_id?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "message_completed"; message_id: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; step?: never; stop_reason?: never; task_id?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "thought_delta"; thought_id: string; text: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; step?: never; stop_reason?: never; task_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "thought_completed"; thought_id: string; duration_ms: number | null }) & { answer?: never; by?: never; decision?: never; detail?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; step?: never; stop_reason?: never; task_id?: never; text?: never; turn_id?: never; usage?: never; windows?: never } | {
+	type: "tool_call",
+} & ToolCall | {
+	type: "tool_update",
+} & ToolUpdate | {
+	type: "permission_requested",
+} & PermissionRequest | ({ type: "permission_resolved"; request_id: string; decision: PermissionDecision; by: ResolvedBy }) & { answer?: never; detail?: never; duration_ms?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; state?: never; step?: never; stop_reason?: never; task_id?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | {
+	type: "ui_request",
+} & UiRequest | 
+/**  The answer to a [`UiRequest`]; `None` when it was dismissed, withdrawn or closed. */
+({ type: "ui_resolved"; request_id: string; answer: UiAnswer | null; by: ResolvedBy }) & { decision?: never; detail?: never; duration_ms?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; state?: never; step?: never; stop_reason?: never; task_id?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "plan_updated"; entries: PlanEntry[] }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; held?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; step?: never; stop_reason?: never; task_id?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | 
+/**  A background task's record: a subagent or a background command ([`tasks`]). */
+{
+	type: "task_updated",
+} & BackgroundTask | 
+/**  One step of a background task's work, added or replaced by its `step_id`. */
+({ type: "task_step"; task_id: string; step: TaskStep }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; stop_reason?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | {
+	type: "usage_updated",
+} & UsageInfo | ({ type: "limits_updated"; windows: LimitWindow[] }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; held?: never; kind?: never; level?: never; message?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; step?: never; stop_reason?: never; task_id?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never } | 
+/**  Live header state; never stored. */
+{
+	type: "session_updated",
+} & SessionInfo | 
+/**  What happened to a queued prompt (the composer's queue); never stored. */
+({ type: "prompt_lifecycle"; prompt_id: string; state: PromptState; 
+/**  The prompt's first 256 characters, sent with `Queued`. */
+preview: string | null; 
+/**
+ *  Exact hold when queued or when a queued row's hold changes; absent for other states
+ *  and older producers.
+ */
+held?: boolean | null }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; kind?: never; level?: never; message?: never; message_id?: never; recoverable?: never; recovered?: never; request_id?: never; step?: never; stop_reason?: never; task_id?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "notice"; level: NoticeLevel; message: string }) & { answer?: never; by?: never; decision?: never; detail?: never; duration_ms?: never; entries?: never; held?: never; kind?: never; message_id?: never; preview?: never; prompt_id?: never; recoverable?: never; recovered?: never; request_id?: never; state?: never; step?: never; stop_reason?: never; task_id?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never } | ({ type: "error"; kind: ErrorKind; message: string; 
+/**  More context, such as the agent's redacted stderr tail. */
+detail: string | null; recoverable: boolean }) & { answer?: never; by?: never; decision?: never; duration_ms?: never; entries?: never; held?: never; level?: never; message_id?: never; preview?: never; prompt_id?: never; recovered?: never; request_id?: never; state?: never; step?: never; stop_reason?: never; task_id?: never; text?: never; thought_id?: never; turn_id?: never; usage?: never; windows?: never };
 
 /**  What [`Store::open`] had to do. Paths are strings so the UI can show them as they are. */
 export type OpenOutcome = 

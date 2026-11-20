@@ -10,7 +10,7 @@
 // When the person quits o7 the waiter moves the link, starts o7, and moves the link
 // back and starts the previous build if the new one does not stay up. `rollback` moves the link
 // back by hand and, with `--restore-database`, restores the databases a newer schema migrated.
-// See docs/developing-in-aura.md.
+// See docs/developing-in-o7.md.
 
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";

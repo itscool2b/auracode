@@ -153,22 +153,27 @@ pnpm dev
 rebuilds and relaunches when its code changes. Release bundles (`pnpm bundle`) and the macOS signing
 identity (`pnpm signing`) are described in [apps/desktop/README.md](apps/desktop/README.md).
 
-App data lives in a folder named `si.auracode.desktop` inside the local (never roaming) app data folder:
+App data lives in a folder named `codes.o7.desktop` inside the local (never roaming) app data folder:
 
 | OS | Folder |
 |---|---|
-| macOS | `~/Library/Application Support/si.auracode.desktop` |
-| Windows | `%LOCALAPPDATA%\si.auracode.desktop` |
-| Linux | `$XDG_DATA_HOME/si.auracode.desktop`, or `~/.local/share/si.auracode.desktop` when `XDG_DATA_HOME` is unset |
+| macOS | `~/Library/Application Support/codes.o7.desktop` |
+| Windows | `%LOCALAPPDATA%\codes.o7.desktop` |
+| Linux | `$XDG_DATA_HOME/codes.o7.desktop`, or `~/.local/share/codes.o7.desktop` when `XDG_DATA_HOME` is unset |
 
-`O7_DATA_DIR` moves it anywhere else (see [Environment switches](#environment-switches)).
+A copy updated from auracode, the app's name until 19 November 2026, keeps using the folder it
+had, `si.auracode.desktop`, because the worktrees inside it record their full paths
+([docs/name.md](docs/name.md)).
+
+`O7_DATA_DIR` moves it anywhere else (see [Environment switches](#environment-switches)); the
+old name, `AURACODE_DATA_DIR`, still works.
 Uninstalling deletes it, with everything else o7 keeps, and Settings can do the same
 without uninstalling; [docs/uninstall.md](docs/uninstall.md) lists what goes and what stays.
 
-A development build (`pnpm dev`, `cargo run`, `tauri build --debug`) uses `si.auracode.desktop.dev`
+A development build (`pnpm dev`, `cargo run`, `tauri build --debug`) uses `codes.o7.desktop.dev`
 next to it instead, runs as its own instance beside the installed app, and cleans up only its own
 folder, so working on o7 from a chat inside o7 never touches the app running that
-chat. [docs/developing-in-aura.md](docs/developing-in-aura.md) covers building, testing and
+chat. [docs/developing-in-o7.md](docs/developing-in-o7.md) covers building, testing and
 installing a change from inside the app, and recovering from a broken build.
 
 ### o7-cli
@@ -250,7 +255,7 @@ For development and automation; the app reads them once at startup. On/off switc
 
 | Variable | Effect |
 |---|---|
-| `O7_DATA_DIR` | Keeps all app data in this folder instead of the OS default (`si.auracode.desktop`, or `si.auracode.desktop.dev` for a development build), for example a throwaway folder to test a first launch. Such a launch runs as its own instance beside a running app. On Windows that includes the webview profile (`EBWebView`); such a launch does not remember the window size and position, so it never touches the installed app's. Blank values are ignored; a relative path is resolved against the current folder. |
+| `O7_DATA_DIR` | Keeps all app data in this folder instead of the OS default (`codes.o7.desktop`, or `codes.o7.desktop.dev` for a development build), for example a throwaway folder to test a first launch. Such a launch runs as its own instance beside a running app. On Windows that includes the webview profile (`EBWebView`); such a launch does not remember the window size and position, so it never touches the installed app's. Blank values are ignored; a relative path is resolved against the current folder. |
 | `O7_NO_GLASS` | Opaque window without the native glass (Liquid Glass, vibrancy, Mica): the baseline of the power spike. |
 | `O7_STRESS` | Opens straight into the stress view. Comma-separated `orbs` (1 to 24), `rate` (1 to 5000 tokens/s), `aura` (1 or 0), and `seconds` (0 to 86400, 0 streams until the window closes); missing keys default to `orbs=6,rate=200,aura=1,seconds=0`, and `1` alone means all defaults. An invalid value is ignored and the app shows a notice. See [docs/spikes/render-power.md](docs/spikes/render-power.md). |
 | `O7_SMOKE` | Runs a scripted smoke check through the real UI and prints `O7_SMOKE_RESULT <json>` on stdout, or a failing result if the UI has not reported in time (120 seconds; 300 for `chat`, 900 with `O7_SMOKE_AGENT`). `1` (or `stream`): a demo turn, a cancelled turn, a short stress burst. `chat`: the chat screens against the demo agent, every block, card and queue path, ending with the quit flow while a turn runs; `chat-reopen`: the same data folder started again, checking the stored history, the interrupted turn and Resume. Each chat check is in the result. `0`, `false`, `no` and `off` are off; any other value that names no check prints a failing result. Takes precedence over `O7_STRESS`. Every smoke run needs `O7_DATA_DIR`, a data folder of its own; without it the run prints a failing result and opens nothing, so it can never change the installed app's chats. Smoke runs keep running while the window is hidden or the screen is locked (macOS 14 and later). |

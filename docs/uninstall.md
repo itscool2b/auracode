@@ -11,9 +11,13 @@ uninstaller, Settings and a person in a terminal all run that mode.
 
 ## What is removed
 
+On a computer updated from auracode (the app's name until 19 November 2026), every folder below
+is also removed under the earlier identifier, `si.auracode.desktop`, which is where such a copy
+keeps its data ([docs/name.md](name.md)).
+
 ### Windows
 
-- `%LOCALAPPDATA%\si.auracode.desktop`, the data folder. It holds:
+- `%LOCALAPPDATA%\codes.o7.desktop`, the data folder. It holds:
   - the device identity;
   - every profile, with its chats, attachments, checkpoints, logs and backups, and with them
     anything an earlier version kept there for an o7 account (see
@@ -23,7 +27,7 @@ uninstaller, Settings and a person in a terminal all run that mode.
   - Instructions backups;
   - clone recovery journals, including those in a custom data root;
   - the WebView2 profile (`EBWebView`).
-- `%APPDATA%\si.auracode.desktop`: the window position.
+- `%APPDATA%\codes.o7.desktop`: the window position.
 - In `%TEMP%`: the updater's downloads (`auracode-<version>-updater-*`) and the CLI's probe
   folders (`o7-cli-*`).
 - In Windows Credential Manager, the entries named `auracode.agents.v1:` that hold the tokens of
@@ -34,21 +38,21 @@ uninstaller, Settings and a person in a terminal all run that mode.
   - an `auracode://` link registration an earlier version made, when it points at this install;
   - `HKCU\Software\auracode\auracode`;
   - Windows' notification settings for o7
-    (`HKCU\Software\Microsoft\Windows\CurrentVersion\Notifications\Settings\si.auracode.desktop`).
+    (`HKCU\Software\Microsoft\Windows\CurrentVersion\Notifications\Settings\codes.o7.desktop`).
 - A data folder chosen with `O7_DATA_DIR`, when the variable is set for the uninstaller.
   Only what o7 made in it goes (see [Edge cases](#edge-cases)).
 
 ### macOS
 
-- `~/Library/Application Support/si.auracode.desktop`: the data folder and the window position.
+- `~/Library/Application Support/codes.o7.desktop`: the data folder and the window position.
 - These folders and files:
-  - `~/Library/Caches/si.auracode.desktop`;
-  - `~/Library/WebKit/si.auracode.desktop`;
-  - `~/Library/HTTPStorages/si.auracode.desktop` and its `.binarycookies` file;
-  - `~/Library/Saved Application State/si.auracode.desktop.savedState`;
-  - `~/Library/Logs/si.auracode.desktop`;
-  - `~/Library/Preferences/si.auracode.desktop.plist`;
-  - a leftover single-instance socket, `/tmp/si_auracode_desktop_si.sock`.
+  - `~/Library/Caches/codes.o7.desktop`;
+  - `~/Library/WebKit/codes.o7.desktop`;
+  - `~/Library/HTTPStorages/codes.o7.desktop` and its `.binarycookies` file;
+  - `~/Library/Saved Application State/codes.o7.desktop.savedState`;
+  - `~/Library/Logs/codes.o7.desktop`;
+  - `~/Library/Preferences/codes.o7.desktop.plist`;
+  - a leftover single-instance socket, `/tmp/codes_o7_desktop_si.sock`.
 - In `$TMPDIR`: the updater's downloads and the CLI's probe folders.
 - Keychain items with the service `auracode.agents.v1`, for the agent accounts added in the
   deleted profiles.
@@ -57,10 +61,10 @@ uninstaller, Settings and a person in a terminal all run that mode.
 
 ### Linux
 
-- `~/.local/share/si.auracode.desktop`: the data folder, which also holds WebKitGTK's storage and
+- `~/.local/share/codes.o7.desktop`: the data folder, which also holds WebKitGTK's storage and
   cache.
-- `~/.config/si.auracode.desktop`: the window position.
-- `~/.cache/si.auracode.desktop`.
+- `~/.config/codes.o7.desktop`: the window position.
+- `~/.cache/codes.o7.desktop`.
 - In `/tmp` (or `$TMPDIR`): the CLI's probe folders.
 - Secret Service items with the service `auracode.agents.v1`, for the agent accounts added in the
   deleted profiles.
@@ -97,10 +101,10 @@ o7 adds no login item, Run key, launch agent or autostart entry, so there is non
   version neither reads nor removes them (see [Secure storage](#secure-storage)).
 - **Shared system components.** The WebView2 runtime, Git, Node.js and npm stay, because other
   apps use them.
-- **Developer files.** A development build's data folder (`si.auracode.desktop.dev` next to the
+- **Developer files.** A development build's data folder (`codes.o7.desktop.dev` next to the
   data folder) and `host-upgrade`'s snapshots and log (`%LOCALAPPDATA%\auracode-upgrades`) were
   made by tools for working on o7, not by the installed app. Delete them by hand; see
-  [developing-in-aura.md](developing-in-aura.md).
+  [developing-in-o7.md](developing-in-o7.md).
 
 ## Secure storage
 
@@ -239,16 +243,16 @@ Use these steps when the app is already gone.
 2. **Delete the folders.**
    - **Windows:** quit o7, then delete the folders listed above:
      ```powershell
-     Remove-Item -Recurse -Force "$env:LOCALAPPDATA\si.auracode.desktop", "$env:APPDATA\si.auracode.desktop"
+     Remove-Item -Recurse -Force "$env:LOCALAPPDATA\codes.o7.desktop", "$env:APPDATA\codes.o7.desktop"
      ```
    - **macOS:** quit o7, then delete the paths listed above:
      ```sh
-     rm -rf ~/Library/Application\ Support/si.auracode.desktop ~/Library/Caches/si.auracode.desktop ~/Library/WebKit/si.auracode.desktop ~/Library/HTTPStorages/si.auracode.desktop* ~/Library/Saved\ Application\ State/si.auracode.desktop.savedState ~/Library/Logs/si.auracode.desktop
-     defaults delete si.auracode.desktop
+     rm -rf ~/Library/Application\ Support/codes.o7.desktop ~/Library/Caches/codes.o7.desktop ~/Library/WebKit/codes.o7.desktop ~/Library/HTTPStorages/codes.o7.desktop* ~/Library/Saved\ Application\ State/codes.o7.desktop.savedState ~/Library/Logs/codes.o7.desktop
+     defaults delete codes.o7.desktop
      ```
    - **Linux:** quit o7, then delete the folders listed above:
      ```sh
-     rm -rf ~/.local/share/si.auracode.desktop ~/.config/si.auracode.desktop ~/.cache/si.auracode.desktop
+     rm -rf ~/.local/share/codes.o7.desktop ~/.config/codes.o7.desktop ~/.cache/codes.o7.desktop
      ```
 3. **Delete the agent account tokens.** In Credential Manager, Keychain Access or your keyring,
    delete the entries named `auracode.agents.v1`. They belong to o7 alone; your agents' own

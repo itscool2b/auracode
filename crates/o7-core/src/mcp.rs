@@ -877,7 +877,7 @@ pub(crate) mod tests {
             "o7_browser",
             "o7-browser",
             "o7_project",
-            "aura-project",
+            "o7-project",
         ] {
             let conn = fixture();
             let mut def = definition();

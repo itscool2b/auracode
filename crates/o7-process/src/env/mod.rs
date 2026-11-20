@@ -1139,7 +1139,6 @@ mod tests {
             strip_launch_context(&mut vars),
             [
                 "APPDIR",
-                "O7_LAUNCH_SET",
                 "GST_PLUGIN_PATH_1_0",
                 "GST_PLUGIN_SCANNER_1_0",
                 "GST_PLUGIN_SYSTEM_PATH",
@@ -1147,6 +1146,7 @@ mod tests {
                 "GST_PTP_HELPER_1_0",
                 "GST_REGISTRY_1_0",
                 "GST_REGISTRY_REUSE_PLUGIN_SCANNER",
+                "O7_LAUNCH_SET",
             ]
         );
         assert_eq!(names(&vars), ["HOME"]);

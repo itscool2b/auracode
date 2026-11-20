@@ -10,7 +10,7 @@
 // folder; see src-tauri/windows/hooks.nsh), starts o7 again, and restores the snapshot if
 // the new build does not stay up. `rollback` restores a snapshot by hand and, with
 // `--restore-database`, the databases a newer schema migrated (o7-core backs each one up first).
-// See docs/developing-in-aura.md.
+// See docs/developing-in-o7.md.
 
 import { spawn, spawnSync } from "node:child_process";
 import { createHash } from "node:crypto";
