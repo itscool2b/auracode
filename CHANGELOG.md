@@ -10,6 +10,7 @@ checks the format, and with `--dates` checks each day against the time GitHub sa
 
 ## 2026-11-20
 
+- o7 has a new front page on GitHub. It shows the logo, the app in light or dark to match your screen, what o7 does, how to install it and how it keeps your work private. The notes for people building o7 moved to their own page. ([#156](https://github.com/itscool2b/o7/pull/156))
 - Plan and build is now part of each chat, and you can watch the agent think. Open the model menu in a chat and choose, under Plan and build, the model it plans with and the agent and model it builds with; Settings no longer has Models by role. While the agent thinks you see its newest thoughts, and afterwards "Thought for 4 s" opens to all of them. Running steps shimmer, each group of steps shows icons for what it did, and plans show their numbered lists again. ([#155](https://github.com/itscool2b/o7/pull/155))
 
 ## 2026-11-19
