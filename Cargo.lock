@@ -332,264 +332,6 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "1505bd5d3d116872e7271a6d4e16d81d0c8570876c8de68093a09ac269d8aac0"
 
 [[package]]
-name = "o7-agents"
-version = "0.1.0"
-dependencies = [
- "o7-process",
- "o7-protocol",
- "futures",
- "reqwest",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "tempfile",
- "thiserror 2.0.21",
- "tokio",
- "tracing",
- "uuid",
-]
-
-[[package]]
-name = "o7-cli"
-version = "0.1.0"
-dependencies = [
- "o7-agents",
- "o7-core",
- "o7-drivers",
- "o7-process",
- "o7-protocol",
- "dirs 6.0.0",
- "futures",
- "hostname",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.21",
- "tokio",
- "tracing",
- "tracing-subscriber",
-]
-
-[[package]]
-name = "o7-config"
-version = "0.1.0"
-dependencies = [
- "cap-fs-ext",
- "cap-std",
- "same-file",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "specta",
- "specta-serde",
- "specta-typescript",
- "tempfile",
- "thiserror 2.0.21",
- "tokio",
- "toml_edit 0.25.17+spec-1.1.0",
- "url",
- "uuid",
-]
-
-[[package]]
-name = "o7-core"
-version = "0.1.0"
-dependencies = [
- "o7-agents",
- "o7-config",
- "o7-drivers",
- "o7-process",
- "o7-protocol",
- "base64 0.22.1",
- "cap-fs-ext",
- "cap-std",
- "dirs 6.0.0",
- "futures",
- "hostname",
- "image",
- "libc",
- "reqwest",
- "rusqlite",
- "rusqlite_migration",
- "same-file",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "specta",
- "specta-typescript",
- "tempfile",
- "thiserror 2.0.21",
- "tokio",
- "tracing",
- "uuid",
- "windows-sys 0.61.2",
-]
-
-[[package]]
-name = "o7-drivers"
-version = "0.1.0"
-dependencies = [
- "agent-client-protocol-schema",
- "o7-process",
- "o7-protocol",
- "base64 0.23.1",
- "futures",
- "jsonschema",
- "regex",
- "schemars 1.2.3",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "tempfile",
- "thiserror 2.0.21",
- "time",
- "tokio",
- "tokio-util",
- "tracing",
- "unicode-segmentation",
- "uuid",
-]
-
-[[package]]
-name = "o7-process"
-version = "0.1.0"
-dependencies = [
- "cap-fs-ext",
- "cap-std",
- "futures",
- "nix",
- "process-wrap",
- "regex",
- "serde",
- "serde_json",
- "tempfile",
- "thiserror 2.0.21",
- "tokio",
- "tracing",
- "uuid",
- "windows",
- "winreg",
-]
-
-[[package]]
-name = "o7-protocol"
-version = "0.1.0"
-dependencies = [
- "serde",
- "serde_json",
- "specta",
- "specta-serde",
- "specta-typescript",
-]
-
-[[package]]
-name = "o7-release"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "base64 0.22.1",
- "cap-fs-ext",
- "cap-std",
- "minisign-verify",
- "semver",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "specta",
- "specta-serde",
- "specta-typescript",
- "tempfile",
- "time",
-]
-
-[[package]]
-name = "o7-remote"
-version = "0.1.0"
-dependencies = [
- "aes-gcm",
- "o7-protocol",
- "base64 0.22.1",
- "futures",
- "getrandom 0.4.3",
- "hkdf",
- "serde",
- "serde_json",
- "sha2 0.11.1",
- "subtle",
- "tempfile",
- "thiserror 2.0.21",
- "tokio",
- "tokio-tungstenite",
- "tracing",
- "zeroize",
-]
-
-[[package]]
-name = "o7-desktop"
-version = "0.1.0"
-dependencies = [
- "apple-native-keyring-store",
- "o7-agents",
- "o7-config",
- "o7-core",
- "o7-drivers",
- "o7-process",
- "o7-protocol",
- "o7-remote",
- "base64 0.22.1",
- "cpal",
- "dlopen2",
- "embed-resource",
- "gtk",
- "image",
- "keepawake",
- "keyring-core",
- "objc2-foundation",
- "reqwest",
- "rubato",
- "serde",
- "serde_json",
- "sha2 0.10.9",
- "specta",
- "specta-typescript",
- "tauri",
- "tauri-build",
- "tauri-plugin-dialog",
- "tauri-plugin-notification",
- "tauri-plugin-opener",
- "tauri-plugin-single-instance",
- "tauri-plugin-updater",
- "tauri-plugin-window-state",
- "tauri-specta",
- "tempfile",
- "thiserror 2.0.21",
- "tokio",
- "tokio-util",
- "tracing",
- "tracing-subscriber",
- "transcribe-cpp",
- "uuid",
- "webkit2gtk",
- "webview2-com",
- "windows",
- "windows-native-keyring-store",
- "windows-sys 0.61.2",
- "windows-version",
- "wry",
- "zbus-secret-service-keyring-store",
- "zeroize",
-]
-
-[[package]]
-name = "o7-web-worker"
-version = "0.1.0"
-dependencies = [
- "sha2 0.10.9",
- "tempfile",
- "worker",
-]
-
-[[package]]
 name = "autocfg"
 version = "1.5.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -3464,6 +3206,264 @@ dependencies = [
  "proc-macro2",
  "quote",
  "syn 2.0.119",
+]
+
+[[package]]
+name = "o7-agents"
+version = "0.1.0"
+dependencies = [
+ "futures",
+ "o7-process",
+ "o7-protocol",
+ "reqwest",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+ "uuid",
+]
+
+[[package]]
+name = "o7-cli"
+version = "0.1.0"
+dependencies = [
+ "dirs 6.0.0",
+ "futures",
+ "hostname",
+ "o7-agents",
+ "o7-core",
+ "o7-drivers",
+ "o7-process",
+ "o7-protocol",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
+name = "o7-config"
+version = "0.1.0"
+dependencies = [
+ "cap-fs-ext",
+ "cap-std",
+ "same-file",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "specta",
+ "specta-serde",
+ "specta-typescript",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "toml_edit 0.25.17+spec-1.1.0",
+ "url",
+ "uuid",
+]
+
+[[package]]
+name = "o7-core"
+version = "0.1.0"
+dependencies = [
+ "base64 0.22.1",
+ "cap-fs-ext",
+ "cap-std",
+ "dirs 6.0.0",
+ "futures",
+ "hostname",
+ "image",
+ "libc",
+ "o7-agents",
+ "o7-config",
+ "o7-drivers",
+ "o7-process",
+ "o7-protocol",
+ "reqwest",
+ "rusqlite",
+ "rusqlite_migration",
+ "same-file",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "specta",
+ "specta-typescript",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+ "uuid",
+ "windows-sys 0.61.2",
+]
+
+[[package]]
+name = "o7-desktop"
+version = "0.1.0"
+dependencies = [
+ "apple-native-keyring-store",
+ "base64 0.22.1",
+ "cpal",
+ "dlopen2",
+ "embed-resource",
+ "gtk",
+ "image",
+ "keepawake",
+ "keyring-core",
+ "o7-agents",
+ "o7-config",
+ "o7-core",
+ "o7-drivers",
+ "o7-process",
+ "o7-protocol",
+ "o7-remote",
+ "objc2-foundation",
+ "reqwest",
+ "rubato",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "specta",
+ "specta-typescript",
+ "tauri",
+ "tauri-build",
+ "tauri-plugin-dialog",
+ "tauri-plugin-notification",
+ "tauri-plugin-opener",
+ "tauri-plugin-single-instance",
+ "tauri-plugin-updater",
+ "tauri-plugin-window-state",
+ "tauri-specta",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "tracing-subscriber",
+ "transcribe-cpp",
+ "uuid",
+ "webkit2gtk",
+ "webview2-com",
+ "windows",
+ "windows-native-keyring-store",
+ "windows-sys 0.61.2",
+ "windows-version",
+ "wry",
+ "zbus-secret-service-keyring-store",
+ "zeroize",
+]
+
+[[package]]
+name = "o7-drivers"
+version = "0.1.0"
+dependencies = [
+ "agent-client-protocol-schema",
+ "base64 0.23.1",
+ "futures",
+ "jsonschema",
+ "o7-process",
+ "o7-protocol",
+ "regex",
+ "schemars 1.2.3",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "tempfile",
+ "thiserror 2.0.21",
+ "time",
+ "tokio",
+ "tokio-util",
+ "tracing",
+ "unicode-segmentation",
+ "uuid",
+]
+
+[[package]]
+name = "o7-process"
+version = "0.1.0"
+dependencies = [
+ "cap-fs-ext",
+ "cap-std",
+ "futures",
+ "nix",
+ "process-wrap",
+ "regex",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tracing",
+ "uuid",
+ "windows",
+ "winreg",
+]
+
+[[package]]
+name = "o7-protocol"
+version = "0.1.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "specta",
+ "specta-serde",
+ "specta-typescript",
+]
+
+[[package]]
+name = "o7-release"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "base64 0.22.1",
+ "cap-fs-ext",
+ "cap-std",
+ "minisign-verify",
+ "semver",
+ "serde",
+ "serde_json",
+ "sha2 0.10.9",
+ "specta",
+ "specta-serde",
+ "specta-typescript",
+ "tempfile",
+ "time",
+]
+
+[[package]]
+name = "o7-remote"
+version = "0.1.0"
+dependencies = [
+ "aes-gcm",
+ "base64 0.22.1",
+ "futures",
+ "getrandom 0.4.3",
+ "hkdf",
+ "o7-protocol",
+ "serde",
+ "serde_json",
+ "sha2 0.11.1",
+ "subtle",
+ "tempfile",
+ "thiserror 2.0.21",
+ "tokio",
+ "tokio-tungstenite",
+ "tracing",
+ "zeroize",
+]
+
+[[package]]
+name = "o7-web-worker"
+version = "0.1.0"
+dependencies = [
+ "sha2 0.10.9",
+ "tempfile",
+ "worker",
 ]
 
 [[package]]

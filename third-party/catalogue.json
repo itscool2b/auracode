@@ -2,7 +2,7 @@
   "version": 1,
   "scope": "Locked production dependency closure, excluding dev/build dependencies and procedural macro executables. transcribe.cpp's vendored sources and the bundled dictation models are explicitly included. Linker-level and installer SDK qualification is separate.",
   "inputs": {
-    "Cargo.lock": "60fc12fe2b061902b3fdfa7b1792c2eedd2e1d37add967023c0fee381dcadbe3",
+    "Cargo.lock": "b1f12ec39db87a2726586b447d4c87e07670ee70d7102d8484535d72ffcc777b",
     "Cargo.toml": "9b229bc2122de074ac4a41f02c0362261d818a65fc59cc9638ee4c5f36739486",
     "apps/design-lab/package.json": "de7f4c743231878aa792ffc1d5211d60aff122e3dd43aa0c77c0c506f499835b",
     "apps/desktop/package.json": "1cfac48cf24ce2bff773ba0761546f1d4be779d8d6e5e0327be46dfdafa9a8c6",
