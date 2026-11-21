@@ -868,6 +868,51 @@ async fn planning_under_full_access_asks_only_what_a_person_must_decide() {
     h.stop().await;
 }
 
+/// Claude does not say when one part of a compound command matched an ask rule. With one
+/// written for the chat's project, such a command is shown; other requests are still answered.
+#[tokio::test(start_paused = true)]
+async fn planning_under_full_access_asks_about_compound_commands_where_an_ask_rule_exists() {
+    let project = tempfile::tempdir().expect("project");
+    std::fs::create_dir_all(project.path().join(".claude")).expect("settings folder");
+    std::fs::write(
+        project.path().join(".claude").join("settings.json"),
+        r#"{"permissions":{"ask":["Bash(git push:*)"]}}"#,
+    )
+    .expect("settings");
+    let mut settings = setup();
+    settings.folder = project.path().to_owned();
+    let mut h = Harness::start_with(settings).await;
+    h.ready().await;
+    set_control(
+        &mut h,
+        crate::controls::ACCESS,
+        "bypassPermissions",
+        "bypassPermissions",
+    )
+    .await;
+    set_control(&mut h, crate::controls::WORKFLOW, "plan", "plan").await;
+    h.prompt();
+    h.wire().await;
+    let ask = |id: &str, reason: &str| {
+        json!({"type":"control_request","request_id":id,"request":{
+            "subtype":"can_use_tool","tool_name":"Bash","decision_reason_type":reason,
+            "input":{"command":"git status && git push"}
+        }})
+    };
+    h.send(ask("several", "subcommandResults")).await;
+    loop {
+        if let DriverEvent::Permission { request, .. } = h.event().await {
+            assert_eq!(request.request_id, "several");
+            break;
+        }
+    }
+    h.send(ask("variable", "other")).await;
+    let answer = h.wire().await;
+    assert_eq!(answer["response"]["request_id"], "variable");
+    assert_eq!(answer["response"]["response"]["behavior"], "allow");
+    h.stop().await;
+}
+
 /// The same planning turn on any lower access level asks, as it always has.
 #[tokio::test(start_paused = true)]
 async fn planning_under_lower_access_still_asks() {
