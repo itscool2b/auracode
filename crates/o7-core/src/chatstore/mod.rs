@@ -915,6 +915,13 @@ pub enum Op {
         title: String,
         source: TitleSource,
     },
+    /// The line edits a terminal's turn made, from the agent's own session record, as
+    /// `(when, lines)` ([`line_edits::record`]): its stored events hold no tool calls.
+    RecordLineEdits {
+        chat_id: String,
+        turn_id: String,
+        edits: Vec<(Millis, u64)>,
+    },
     TouchChat {
         chat_id: String,
         at: Millis,
@@ -1428,9 +1435,29 @@ mod tests {
         );
         // Counted once: asking again counts nothing more.
         assert_eq!(store.line_edits(0).await.expect("again"), edits);
+        // A terminal's edits, from the agent's own record, land through the FIFO.
+        let chat_id = store.chats().await.expect("chats")[0].id.clone();
+        send(
+            store,
+            Op::RecordLineEdits {
+                chat_id,
+                turn_id: "t1".into(),
+                edits: vec![(1_800_000_000_000 + line_edits::BUCKET_MS, 4)],
+            },
+        )
+        .await;
+        let recorded = store.line_edits(0).await.expect("recorded");
+        assert_eq!(
+            recorded
+                .buckets
+                .iter()
+                .map(|bucket| bucket.lines)
+                .collect::<Vec<_>>(),
+            vec![3, 4]
+        );
         assert!(
             store
-                .line_edits(1_800_000_000_000 + line_edits::BUCKET_MS)
+                .line_edits(1_800_000_000_000 + 2 * line_edits::BUCKET_MS)
                 .await
                 .expect("later")
                 .buckets

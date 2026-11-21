@@ -385,6 +385,7 @@ impl Pending {
             }
             Op::CompactTurn { chat_id, .. }
             | Op::SetTitle { chat_id, .. }
+            | Op::RecordLineEdits { chat_id, .. }
             | Op::TouchChat { chat_id, .. }
             | Op::QueueHoldAll { chat_id }
             | Op::QueueReleaseAll { chat_id } => Attribution::Chat(chat_id.clone()),
@@ -491,6 +492,7 @@ pub(crate) fn op_bytes(op: &Op) -> usize {
         Op::PutBlob { bytes, .. } => bytes.len().saturating_add(SMALL),
         Op::QueuePut(row) => row.text.len().saturating_add(SMALL),
         Op::SetTitle { title, .. } => title.len().saturating_add(SMALL),
+        Op::RecordLineEdits { edits, .. } => edits.len().saturating_mul(16).saturating_add(SMALL),
         Op::UpdateAgentSession { patch, .. } => patch
             .config_json
             .as_ref()
@@ -754,6 +756,7 @@ pub(crate) fn op_name(op: &Op) -> &'static str {
         Op::CompactTurn { .. } => "compact_turn",
         Op::PutBlob { .. } => "put_blob",
         Op::SetTitle { .. } => "set_title",
+        Op::RecordLineEdits { .. } => "record_line_edits",
         Op::TouchChat { .. } => "touch_chat",
         Op::QueuePut(_) => "queue_put",
         Op::QueueRemove { .. } => "queue_remove",
@@ -2006,6 +2009,9 @@ fn apply(
             title,
             source,
         } => sql(rows::set_title(conn, chat_id, title, *source)),
+        Op::RecordLineEdits { turn_id, edits, .. } => {
+            sql(super::line_edits::record(conn, turn_id, edits, now))
+        }
         Op::TouchChat { chat_id, at } => sql(rows::touch_chat(conn, chat_id, *at)),
         Op::QueuePut(row) => sql(rows::queue_put(conn, device_id, row)),
         Op::QueueRemove { id } => sql(rows::queue_remove(conn, id)),
@@ -2063,6 +2069,10 @@ enum DeadOp<'a> {
     TouchChat {
         chat_id: &'a str,
         at: i64,
+    },
+    RecordLineEdits {
+        turn_id: &'a str,
+        edits: &'a [(i64, u64)],
     },
     QueuePut {
         row: &'a QueuedRow,
@@ -2124,6 +2134,9 @@ fn dead_letter<'a>(item: &'a Item, error: &'a str, at: i64) -> Option<DeadLetter
                 source: *source,
             },
             Op::TouchChat { chat_id, at } => DeadOp::TouchChat { chat_id, at: *at },
+            Op::RecordLineEdits { turn_id, edits, .. } => {
+                DeadOp::RecordLineEdits { turn_id, edits }
+            }
             Op::QueuePut(row) => DeadOp::QueuePut { row },
             Op::QueueRemove { id } => DeadOp::QueueRemove { id },
             Op::QueueHoldAll { chat_id } => DeadOp::QueueHoldAll { chat_id },

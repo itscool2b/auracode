@@ -25,10 +25,10 @@ use std::time::Duration;
 
 use o7_protocol::activity::LineEditBucket;
 use o7_protocol::{Millis, O7Event, ToolCall, ToolContent, ToolKind, ToolStatus, Truncation};
-use rusqlite::{Connection, OpenFlags, params};
+use rusqlite::{Connection, OpenFlags, OptionalExtension, params};
 use serde_json::Value;
 
-use super::compact::apply_update;
+use super::compact::{apply_update, default_tool};
 use super::files::Attachments;
 
 /// Edits are kept by the quarter hour they were made in: every time zone's day starts on one.
@@ -166,7 +166,10 @@ struct Folded {
 }
 
 /// The lines one turn's completed edits changed, by quarter hour, and how many bytes it read. Only
-/// the turn's edit calls and their updates are read: SQLite picks them out of the turn's events.
+/// the turn's edit calls and their updates are read: SQLite picks out the calls any event marks as
+/// an edit or gives a diff (an ACP agent may name the kind only in an update), then their events.
+/// A row that is not JSON (a salvaged one) reads as NULL instead of failing the turn, and with it
+/// every turn after it.
 fn count_turn(
     conn: &Connection,
     attachments: &Attachments,
@@ -174,64 +177,59 @@ fn count_turn(
 ) -> rusqlite::Result<(BTreeMap<Millis, u64>, u64)> {
     let mut calls: HashMap<String, Folded> = HashMap::new();
     let mut read = 0u64;
-    // A row that is not JSON (a salvaged one) reads as NULL here instead of failing the turn, and
-    // with it every turn after it.
-    {
-        let mut stmt = conn.prepare_cached(
-            "SELECT payload, created_at FROM events \
-             WHERE turn_id = ?1 AND kind = 'tool_call' AND json_extract(\
-             CASE WHEN json_valid(payload) THEN payload END, '$.kind') = 'edit' ORDER BY seq",
-        )?;
-        let mut rows = stmt.query(params![turn_id])?;
-        while let Some(row) = rows.next()? {
-            let payload: String = row.get(0)?;
-            let at: Millis = row.get(1)?;
-            read = read.saturating_add(payload.len() as u64);
-            let Ok(O7Event::ToolCall(call)) = serde_json::from_str::<O7Event>(&payload) else {
-                continue;
-            };
-            let at = calls.get(&call.tool_call_id).map_or(at, |folded| folded.at);
-            let cut = call.truncated.clone();
-            calls.insert(
-                call.tool_call_id.clone(),
-                Folded {
-                    call,
-                    at,
-                    input_cut: cut.clone(),
-                    content_cut: cut,
-                },
-            );
-        }
-    }
-    if calls.is_empty() {
-        return Ok((BTreeMap::new(), read));
-    }
-    let ids = serde_json::to_string(&calls.keys().collect::<Vec<_>>()).unwrap_or_default();
     let mut stmt = conn.prepare_cached(
-        "SELECT payload FROM events \
-         WHERE turn_id = ?1 AND kind = 'tool_update' AND json_extract(\
-         CASE WHEN json_valid(payload) THEN payload END, '$.tool_call_id') \
-         IN (SELECT value FROM json_each(?2)) ORDER BY seq",
+        "WITH tools AS (\
+           SELECT seq, created_at, CASE WHEN json_valid(payload) THEN payload END AS p \
+           FROM events WHERE turn_id = ?1 AND kind IN ('tool_call', 'tool_update')), \
+         edits AS (\
+           SELECT DISTINCT json_extract(p, '$.tool_call_id') AS id FROM tools \
+           WHERE json_extract(p, '$.kind') = 'edit' OR EXISTS (\
+             SELECT 1 FROM json_each(p, '$.content') \
+             WHERE json_extract(value, '$.type') = 'diff')) \
+         SELECT p, created_at FROM tools \
+         WHERE json_extract(p, '$.tool_call_id') IN (SELECT id FROM edits) ORDER BY seq",
     )?;
-    let mut rows = stmt.query(params![turn_id, ids])?;
+    let mut rows = stmt.query(params![turn_id])?;
     while let Some(row) = rows.next()? {
         let payload: String = row.get(0)?;
+        let at: Millis = row.get(1)?;
         read = read.saturating_add(payload.len() as u64);
-        let Ok(O7Event::ToolUpdate(update)) = serde_json::from_str::<O7Event>(&payload) else {
-            continue;
-        };
-        let Some(mut folded) = calls.remove(&update.tool_call_id) else {
-            continue;
-        };
-        if update.raw_input.is_some() {
-            folded.input_cut = update.truncated.clone();
+        match serde_json::from_str::<O7Event>(&payload) {
+            Ok(O7Event::ToolCall(call)) => {
+                let at = calls.get(&call.tool_call_id).map_or(at, |folded| folded.at);
+                let cut = call.truncated.clone();
+                calls.insert(
+                    call.tool_call_id.clone(),
+                    Folded {
+                        call,
+                        at,
+                        input_cut: cut.clone(),
+                        content_cut: cut,
+                    },
+                );
+            }
+            Ok(O7Event::ToolUpdate(update)) => {
+                // An update whose call is not in the turn stands in for it, as compaction's does.
+                let mut folded = calls
+                    .remove(&update.tool_call_id)
+                    .unwrap_or_else(|| Folded {
+                        call: default_tool(&update.tool_call_id),
+                        at,
+                        input_cut: None,
+                        content_cut: None,
+                    });
+                if update.raw_input.is_some() {
+                    folded.input_cut = update.truncated.clone();
+                }
+                if update.content.is_some() {
+                    folded.content_cut = update.truncated.clone();
+                }
+                let id = update.tool_call_id.clone();
+                folded.call = apply_update(folded.call, update);
+                calls.insert(id, folded);
+            }
+            _ => {}
         }
-        if update.content.is_some() {
-            folded.content_cut = update.truncated.clone();
-        }
-        let id = update.tool_call_id.clone();
-        folded.call = apply_update(folded.call, update);
-        calls.insert(id, folded);
     }
     let mut buckets = BTreeMap::new();
     for folded in calls.into_values() {
@@ -347,9 +345,26 @@ fn edit_lines(call: &ToolCall, blob: &mut impl FnMut(&Truncation) -> Option<Vec<
     call.raw_input.as_ref().map_or(0, input_lines)
 }
 
+/// The text replaced and its replacement, as each agent names them: Claude Code, Cursor and
+/// Hermes (`old_string`), Pi and oh-my-pi (`oldText`), OpenCode (`oldString`), and the
+/// `str_replace` editors (`old_str`).
+const REPLACEMENTS: [(&str, &str); 4] = [
+    ("old_string", "new_string"),
+    ("oldText", "newText"),
+    ("oldString", "newString"),
+    ("old_str", "new_str"),
+];
+
+/// A file's whole new text: Claude Code's and Pi's `content`, Cursor's `contents`, a notebook
+/// cell's `new_source`, the `str_replace` editors' `file_text`.
+const WHOLE_FILES: [&str; 4] = ["content", "contents", "new_source", "file_text"];
+
+/// A patch given as text (unified, or the `*** Begin Patch` form Codex and Hermes write).
+const PATCHES: [&str; 3] = ["patch", "patchText", "diff"];
+
 /// The lines an edit tool's input changes, read by its fields' names: the text replaced and its
-/// replacement, several of those, a file's whole new text, or Codex's changes.
-fn input_lines(input: &Value) -> u64 {
+/// replacement, several of those, a file's whole new text, a patch, or Codex's changes.
+pub(crate) fn input_lines(input: &Value) -> u64 {
     if let Some(edits) = input.get("edits").and_then(Value::as_array) {
         return edits.iter().map(input_lines).fold(0, u64::saturating_add);
     }
@@ -366,17 +381,94 @@ fn input_lines(input: &Value) -> u64 {
             })
             .fold(0, u64::saturating_add);
     }
-    for (old, new) in [("old_string", "new_string"), ("oldText", "newText")] {
+    for (old, new) in REPLACEMENTS {
         if input.get(old).is_some() || input.get(new).is_some() {
             return changed(text(input, old), text(input, new));
         }
     }
-    for whole in ["content", "new_source"] {
+    for whole in WHOLE_FILES {
         if let Some(written) = input.get(whole).and_then(Value::as_str) {
             return line_count(written);
         }
     }
+    for patch in PATCHES {
+        if let Some(patch) = input.get(patch).and_then(Value::as_str) {
+            return patch_lines(patch);
+        }
+    }
     0
+}
+
+/// Whether a tool, by its own name, edits files: what a terminal's session record calls them
+/// (`Edit`, `Write`, Cursor's `StrReplace`, Hermes' `write_file` and `patch`, ...). Case and
+/// separators do not matter.
+pub(crate) fn edit_tool(name: &str) -> bool {
+    let name: String = name
+        .chars()
+        .filter(char::is_ascii_alphanumeric)
+        .map(|c| c.to_ascii_lowercase())
+        .collect();
+    matches!(
+        name.as_str(),
+        "edit"
+            | "multiedit"
+            | "write"
+            | "notebookedit"
+            | "editnotebook"
+            | "strreplace"
+            | "strreplaceeditor"
+            | "strreplacebasededittool"
+            | "searchreplace"
+            | "replace"
+            | "applypatch"
+            | "patch"
+            | "writefile"
+            | "editfile"
+            | "createfile"
+    )
+}
+
+/// Saves the line edits a terminal's turn made, as its session record told them, in the caller's
+/// transaction, and marks the turn counted so the counter leaves it: its stored events hold the
+/// prompt and the answer only. `(when, lines)` pairs; a time of 0 takes the turn's start.
+pub(crate) fn record(
+    conn: &Connection,
+    turn_id: &str,
+    edits: &[(Millis, u64)],
+    now: Millis,
+) -> rusqlite::Result<()> {
+    let started: Option<Millis> = conn
+        .prepare_cached("SELECT started_at FROM turns WHERE id = ?1")?
+        .query_row(params![turn_id], |row| row.get(0))
+        .optional()?;
+    let Some(started) = started else {
+        return Ok(());
+    };
+    let mut buckets = BTreeMap::<Millis, u64>::new();
+    for (at, lines) in edits.iter().filter(|(_, lines)| *lines > 0) {
+        let at = if *at > 0 { *at } else { started };
+        let bucket = buckets.entry(at - at.rem_euclid(BUCKET_MS)).or_insert(0);
+        *bucket = bucket.saturating_add(*lines);
+    }
+    let mut insert = conn.prepare_cached(
+        "INSERT INTO line_edits (turn_id, chat_id, agent, at, lines) \
+         SELECT t.id, t.chat_id, COALESCE(t.source_agent, s.agent_id, c.active_agent, ''), ?2, ?3 \
+         FROM turns t JOIN chats c ON c.id = t.chat_id \
+         LEFT JOIN agent_sessions s ON s.id = t.agent_session_id WHERE t.id = ?1 \
+         ON CONFLICT (turn_id, at) DO UPDATE SET lines = excluded.lines",
+    )?;
+    for (at, lines) in buckets {
+        insert.execute(params![
+            turn_id,
+            at,
+            i64::try_from(lines).unwrap_or(i64::MAX)
+        ])?;
+    }
+    conn.prepare_cached(
+        "UPDATE turns SET edits_counted_at = COALESCE(edits_counted_at, ?2) WHERE id = ?1",
+    )?
+    .execute(params![turn_id, now])?;
+    Ok(())
 }
 
 fn text<'a>(value: &'a Value, key: &str) -> &'a str {
@@ -399,7 +491,7 @@ fn split(text: &str) -> Vec<&str> {
     lines
 }
 
-fn line_count(text: &str) -> u64 {
+pub(crate) fn line_count(text: &str) -> u64 {
     split(text).len() as u64
 }
 
@@ -461,7 +553,7 @@ pub(crate) fn changed(old: &str, new: &str) -> u64 {
 
 /// The lines a unified diff's hunks edit, counted as [`changed`] counts them. Headers before the
 /// first hunk are skipped; a diff with no header counts from its first line.
-fn patch_lines(diff: &str) -> u64 {
+pub(crate) fn patch_lines(diff: &str) -> u64 {
     let mut in_hunk = !(diff.starts_with("--- ") || diff.starts_with("diff "));
     let (mut removed, mut added, mut total) = (0u64, 0u64, 0u64);
     for line in diff.lines() {
@@ -912,6 +1004,135 @@ mod tests {
         assert!(more);
         assert_eq!(counted[0].turn.turn_id, format!("t{}", PASS_TURNS + 1));
         assert!(counted.iter().all(|turn| turn.turn.turn_id != "t1"));
+    }
+
+    /// ACP agents may name the kind only in an update, or attach a diff to a call of another
+    /// kind; an update can arrive for a call this turn does not hold.
+    #[test]
+    fn edits_named_late_or_by_their_diff_count_too() {
+        let db = TestDb::new();
+        let (_dir, attachments) = attachments();
+        let chat = db.chat("/work");
+        db.turn(&chat, "t1", 1, 0);
+        let mut late = call("t1.late", "", ToolStatus::InProgress, json!({}));
+        late.kind = ToolKind::Other;
+        late.tool_name = None;
+        let mut named = update("t1.late", ToolStatus::Completed);
+        named.kind = Some(ToolKind::Edit);
+        named.content = Some(vec![ToolContent::Diff {
+            path: "a".into(),
+            old_text: None,
+            new_text: "1\n2\n".into(),
+            truncated: None,
+        }]);
+        let mut other = call("t1.other", "", ToolStatus::Completed, json!({}));
+        other.kind = ToolKind::Other;
+        other.content = vec![ToolContent::Diff {
+            path: "b".into(),
+            old_text: Some("x\n".into()),
+            new_text: "y\n".into(),
+            truncated: None,
+        }];
+        let mut orphan = update("elsewhere.e", ToolStatus::Completed);
+        orphan.kind = Some(ToolKind::Edit);
+        orphan.raw_input = Some(json!({"filePath":"c","oldString":"p","newString":"q\nr\ns"}));
+        db.append(
+            &chat,
+            &[
+                at(0, "t1", 1, &O7Event::ToolCall(late)),
+                at(1, "t1", 2, &O7Event::ToolUpdate(named)),
+                at(2, "t1", 3, &O7Event::ToolCall(other)),
+                at(3, "t1", 4, &O7Event::ToolUpdate(orphan)),
+            ],
+        );
+        end(&db, "t1");
+        count_all(&db, &attachments);
+        assert_eq!(read_all(&db)[0].lines, 2 + 1 + 3);
+    }
+
+    #[test]
+    fn edit_inputs_in_every_agents_words() {
+        let count = |raw: Value| input_lines(&raw);
+        assert_eq!(
+            count(json!({"filePath":"a","oldString":"a","newString":"b\nc"})),
+            2
+        );
+        assert_eq!(count(json!({"path":"a","old_str":"a","new_str":"b"})), 1);
+        assert_eq!(count(json!({"path":"a","contents":"1\n2\n3"})), 3);
+        assert_eq!(
+            count(json!({"command":"create","path":"a","file_text":"1\n2"})),
+            2
+        );
+        assert_eq!(
+            count(
+                json!({"patchText":"*** Begin Patch\n*** Update File: a\n@@\n-a\n+b\n+c\n*** End Patch"})
+            ),
+            2
+        );
+        for name in [
+            "Edit",
+            "StrReplace",
+            "write_file",
+            "apply_patch",
+            "MultiEdit",
+            "patch",
+        ] {
+            assert!(edit_tool(name), "{name}");
+        }
+        for name in ["Read", "Shell", "bash", "Grep", "TodoWrite", "write_memory"] {
+            assert!(!edit_tool(name), "{name}");
+        }
+    }
+
+    /// A terminal's turn carries its edits from the agent's own record; the counter leaves it,
+    /// and a count that came first does not lose them.
+    #[test]
+    fn a_terminal_turns_recorded_edits_stand_and_the_counter_leaves_them() {
+        let db = TestDb::new();
+        let (_dir, attachments) = attachments();
+        let chat = db.chat("/work");
+        db.turn(&chat, "t1", 1, 0);
+        db.conn()
+            .execute(
+                "UPDATE turns SET status = 'completed', started_at = ?1 WHERE id = 't1'",
+                params![20 * BUCKET_MS + 5],
+            )
+            .expect("end");
+        record(
+            db.conn(),
+            "t1",
+            &[(0, 4), (21 * BUCKET_MS + 1, 3), (5, 0)],
+            9,
+        )
+        .expect("record");
+        assert!(!pass(&db, &attachments, 10));
+        assert_eq!(
+            read_all(&db),
+            vec![
+                LineEditBucket {
+                    agent: "mock".into(),
+                    at: 20 * BUCKET_MS,
+                    lines: 4
+                },
+                LineEditBucket {
+                    agent: "mock".into(),
+                    at: 21 * BUCKET_MS,
+                    lines: 3
+                },
+            ]
+        );
+        // Counted first (nothing in its events), then recorded: the edits still land.
+        db.turn(&chat, "t2", 2, 9);
+        end(&db, "t2");
+        assert!(!pass(&db, &attachments, 11));
+        record(db.conn(), "t2", &[(22 * BUCKET_MS, 6)], 12).expect("record");
+        assert_eq!(
+            read_all(&db).iter().map(|bucket| bucket.lines).sum::<u32>(),
+            13
+        );
+        // A turn that is gone records nothing.
+        record(db.conn(), "gone", &[(1, 1)], 13).expect("gone");
+        assert_eq!(read_all(&db).len(), 3);
     }
 
     fn read_all(db: &TestDb) -> Vec<LineEditBucket> {
