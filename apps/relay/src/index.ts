@@ -56,14 +56,14 @@ function listed(tools: readonly Tool[], wide: boolean): Listed[] {
  */
 const SETS = {
   first: {
-    chat: listed(FIRST_TOOLS as readonly Tool[], false),
-    full: listed(FIRST_TOOLS as readonly Tool[], true),
+    chat: listed(FIRST_TOOLS as unknown as readonly Tool[], false),
+    full: listed(FIRST_TOOLS as unknown as readonly Tool[], true),
     instructions:
       "o7 runs coding agents (Claude Code, Codex and others) on a person's computer. These tools reach the chats on that computer while o7 is open there with remote access on. Start with list_chats. After send_message or start_chat, call wait_for_chat until the agent finishes or asks for something, and answer waiting requests with respond_to_request. Agents there can edit files and run commands, so send only what the person asked for.",
   },
   current: {
-    chat: listed(TOOLS as readonly Tool[], false),
-    full: listed(TOOLS as readonly Tool[], true),
+    chat: listed(TOOLS as unknown as readonly Tool[], false),
+    full: listed(TOOLS as unknown as readonly Tool[], true),
     instructions:
       "o7 runs coding agents (Claude Code, Codex and others) on a person's computer; these tools reach its chats while o7 is open there. Hand the agent a whole task in one send and let it work: it plans, edits and tests by itself. send and wait already return the turn's result, so do not read a chat you just heard from, and do not ask more often than wait does. Agents edit files and run commands, so send only what the person asked for.",
   },
