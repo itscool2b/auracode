@@ -366,9 +366,13 @@
   bottom: auto;
   transform-origin: 0 0;
   animation-name: chat-menu-in;
-  width: max(280px, 100%);
-  max-width: 100%;
+  /*
+   * Its own width, as the composer's other menus have: inside the picker, 100% is the trigger
+   * pill's width, and a cap at it squeezed the list into a column that scrolled sideways.
+   */
+  width: min(280px, calc(100vw - 80px));
   max-height: 340px;
+  overflow-x: hidden;
   overflow-y: auto;
   padding: var(--g-space-8);
 }
@@ -383,6 +387,17 @@
   min-width: 0;
   width: 100%;
 }
+/* A long name shortens with an ellipsis rather than pushing the row wider than the list. */
+.new-chat-agent-name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.new-chat-agent > :is(.new-chat-agent-mark, small, svg) {
+  flex: none;
+}
+
 .new-chat-agent > small {
   margin-left: auto;
   font-size: var(--g-text-meta);
