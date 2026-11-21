@@ -1438,8 +1438,8 @@ async fn full_control_is_a_links_own_level_and_the_computer_enforces_it() {
     assert_eq!(
         listed,
         json!([
-            { "id": chats.0, "hash": crypto::hash(&chats.1), "full": false },
-            { "id": full.0, "hash": crypto::hash(&full.1), "full": true },
+            { "id": chats.0, "hash": crypto::hash(&chats.1), "full": false, "v": 2 },
+            { "id": full.0, "hash": crypto::hash(&full.1), "full": true, "v": 2 },
         ])
     );
     let status = rig.service.status();
@@ -1635,7 +1635,7 @@ async fn a_linked_bot_calls_tools_with_its_token() {
         listed,
         format!(
             "l{}",
-            json!([{ "id": bot, "hash": crypto::hash(token), "full": false }])
+            json!([{ "id": bot, "hash": crypto::hash(token), "full": false, "v": 2 }])
         )
     );
     assert!(
@@ -1898,4 +1898,267 @@ async fn an_open_still_waiting_when_the_browser_leaves_follows_nothing() {
         "a chat is followed for a browser that left"
     );
     assert!(!rig.service.status().devices[0].connected);
+}
+
+/// The current tools: fewer of them, one call that sends and comes back with the turn's result,
+/// and a wait that runs out in two lines. The link's level holds in each of them.
+#[tokio::test]
+async fn the_current_tools_send_and_wait_in_one_call_and_keep_a_links_level() {
+    let rig = rig().await;
+    let mut relay = online(&rig).await;
+    let address = |url: &str| {
+        let reference = url.rsplit('/').next().expect("reference").to_owned();
+        let (bot, token) = reference.split_once('.').expect("id.token");
+        (bot.to_owned(), token.to_owned())
+    };
+    let chats = address(
+        &rig.service
+            .create_bot("Chats only", false)
+            .expect("bot")
+            .url,
+    );
+    relay.next().await;
+    let full = address(&rig.service.create_bot("Full", true).expect("bot").url);
+    relay.next().await;
+
+    let mut rid = 0;
+    let mut call = async |relay: &mut Relay, link: &(String, String), tool: &str, args: Value| {
+        rid += 1;
+        relay
+            .send(format!(
+                "b{}",
+                json!({ "rid": format!("r{rid}"), "bot": link.0, "token": link.1, "tool": tool, "args": args })
+            ))
+            .await;
+        let answer: Value =
+            serde_json::from_str(relay.next().await.strip_prefix('b').expect("answer"))
+                .expect("json");
+        answer
+    };
+    let text = |answer: &Value| answer["text"].as_str().expect("text").to_owned();
+
+    let listed = call(&mut relay, &chats, "chats", json!({})).await;
+    assert_eq!(
+        text(&listed),
+        "1 chat on Studio, newest first (id | status | title | project | agent):\nc1 | idle | Fix the login form | app | Claude Code\n"
+    );
+    let none = call(&mut relay, &chats, "chats", json!({ "query": "billing" })).await;
+    assert_eq!(text(&none), "No open chat matches \"billing\".");
+    // Projects carry the ids the other tools take.
+    let projects = call(&mut relay, &chats, "projects", Value::Null).await;
+    assert_eq!(
+        text(&projects),
+        "Project p1 \"app\" (agent: claude-code)\n  folder f1 app\nAgents ready: claude-code. New chats use claude-code unless the project names another.\n"
+    );
+    let read = call(&mut relay, &chats, "read", json!({ "chat": "c1" })).await;
+    assert!(text(&read).starts_with("Chat c1 \"Fix the login form\" with Claude Code: idle."));
+
+    // One call sends and returns what the turn came to.
+    let sent = call(
+        &mut relay,
+        &chats,
+        "send",
+        json!({ "chat": "c1", "text": "Again" }),
+    )
+    .await;
+    assert_eq!(sent["error"], false);
+    assert!(
+        text(&sent).starts_with("Chat c1 \"Fix the login form\" with Claude Code: idle."),
+        "{sent}"
+    );
+    assert_eq!(
+        *rig.app.sent.lock().expect("sent"),
+        [("c1".to_owned(), "Again".to_owned())]
+    );
+
+    // A chats link cannot choose how an agent runs, and its message is not sent.
+    for args in [
+        json!({ "chat": "c1", "text": "Go", "access": "full_auto" }),
+        json!({ "chat": "c1", "text": "Go", "model": "opus" }),
+        json!({ "folder": "f1", "text": "Go", "thinking": "high" }),
+    ] {
+        let refused = call(&mut relay, &chats, "send", args).await;
+        assert_eq!(refused["error"], true);
+        assert!(text(&refused).contains("chat tools only"), "{refused}");
+    }
+    for (tool, args) in [
+        ("set", json!({ "chat": "c1", "access": "full_auto" })),
+        ("changes", json!({ "chat": "c1" })),
+        ("memory", json!({ "project": "p1" })),
+        ("new_project", json!({ "path": "/work/site" })),
+    ] {
+        let refused = call(&mut relay, &chats, tool, args).await;
+        assert_eq!(refused["error"], true, "{tool}");
+        assert!(text(&refused).contains("chat tools only"), "{tool}");
+    }
+    assert_eq!(rig.app.sent.lock().expect("sent").len(), 1);
+    assert!(rig.app.acted.lock().expect("acted").is_empty());
+    assert_eq!(*rig.app.answered.lock().expect("answered"), [""; 0]);
+
+    // A full link starts a chat with its model and access settled before the first message.
+    let started = call(
+        &mut relay,
+        &full,
+        "send",
+        json!({ "folder": "f1", "text": "Begin", "model": "opus", "access": "full_auto", "wait": 0 }),
+    )
+    .await;
+    assert_eq!(started["error"], false, "{started}");
+    assert_eq!(
+        text(&started),
+        "Started chat c2 with Claude Code. Sent to chat c2. Call wait for the result."
+    );
+    assert_eq!(
+        *rig.app.acted.lock().expect("acted"),
+        [
+            Action::SetModel {
+                chat_id: "c2".into(),
+                model: "opus".into()
+            },
+            Action::SetAccess {
+                chat_id: "c2".into(),
+                access: "full_auto".into()
+            },
+        ]
+    );
+    assert_eq!(
+        rig.app.sent.lock().expect("sent")[1],
+        ("c2".to_owned(), "Begin".to_owned())
+    );
+
+    // What a call cannot mean is said, and nothing runs.
+    for (tool, args, wanted) in [
+        (
+            "send",
+            json!({ "chat": "c1", "folder": "f1", "text": "Hi" }),
+            "not both",
+        ),
+        ("send", json!({ "text": "Hi" }), "not both"),
+        (
+            "send",
+            json!({ "chat": "c1", "text": "Hi", "access": "root" }),
+            "access is one of",
+        ),
+        ("send", json!({ "chat": "c1", "text": " " }), "empty"),
+        (
+            "send",
+            json!({ "chat_id": "c1", "text": "Hi" }),
+            "arguments are not valid",
+        ),
+        (
+            "answer",
+            json!({ "chat": "c1", "request": "r1", "option": "allow", "text": "yes" }),
+            "not both",
+        ),
+        (
+            "answer",
+            json!({ "chat": "c1", "request": "r1", "text": "yes" }),
+            "not a question",
+        ),
+        ("read", json!({ "chat": "nope" }), "no chat with that id"),
+    ] {
+        let answer = call(&mut relay, &full, tool, args).await;
+        assert_eq!(answer["error"], true, "{tool}: {answer}");
+        assert!(text(&answer).contains(wanted), "{tool}: {answer}");
+    }
+    assert_eq!(rig.app.sent.lock().expect("sent").len(), 2);
+
+    // Answering and declining, each followed by the turn's result.
+    let allowed = call(
+        &mut relay,
+        &chats,
+        "answer",
+        json!({ "chat": "c1", "request": "r1", "option": "allow" }),
+    )
+    .await;
+    assert!(text(&allowed).starts_with("Answered. Chat c1"), "{allowed}");
+    let declined = call(
+        &mut relay,
+        &chats,
+        "answer",
+        json!({ "chat": "c1", "request": "question", "wait": 0 }),
+    )
+    .await;
+    assert_eq!(text(&declined), "Declined. Call wait for the result.");
+    call(&mut relay, &chats, "stop", json!({ "chat": "c1" })).await;
+    assert_eq!(
+        *rig.app.answered.lock().expect("answered"),
+        [
+            "create f1 None",
+            "permission c1 r1 Some(\"allow\")",
+            "answer c1 question None",
+            "stop c1"
+        ]
+    );
+
+    // A wait that runs out says how far the turn is, in a line, not the turn again.
+    *rig.app.status.lock().expect("status") = Some(SessionStatus::Running);
+    let late = call(
+        &mut relay,
+        &chats,
+        "wait",
+        json!({ "chat": "c1", "seconds": 1 }),
+    )
+    .await;
+    assert_eq!(late["error"], false);
+    assert_eq!(
+        text(&late),
+        "Chat c1: working. Not done after 1 seconds: call wait again."
+    );
+    *rig.app.status.lock().expect("status") = Some(SessionStatus::Ready);
+
+    // One tool changes a chat, in order, and a handoff's new chat is the last thing said.
+    rig.app.acted.lock().expect("acted").clear();
+    let options = call(&mut relay, &full, "set", json!({ "chat": "c1" })).await;
+    assert!(text(&options).starts_with("Models"), "{options}");
+    let changed = call(
+        &mut relay,
+        &full,
+        "set",
+        json!({ "chat": "c1", "agent": "codex", "title": "Login", "archived": false }),
+    )
+    .await;
+    assert_eq!(changed["error"], false);
+    assert!(
+        text(&changed)
+            .ends_with("The chat to use from here is c9; its next message carries the handoff."),
+        "{changed}"
+    );
+    assert_eq!(
+        rig.app.acted.lock().expect("acted")[1..],
+        [
+            Action::Rename {
+                chat_id: "c1".into(),
+                title: "Login".into()
+            },
+            Action::Archive {
+                chat_id: "c1".into(),
+                archived: false
+            },
+            Action::SwitchAgent {
+                chat_id: "c1".into(),
+                agent_id: "codex".into()
+            },
+        ]
+    );
+    let made = call(
+        &mut relay,
+        &full,
+        "new_project",
+        json!({ "path": "/work/site" }),
+    )
+    .await;
+    assert_eq!(
+        text(&made),
+        "Created project p2 \"site\". Its folder is f2."
+    );
+    let long = call(
+        &mut relay,
+        &full,
+        "memory",
+        json!({ "project": "p1", "markdown": "x".repeat(16 * 1024 + 1) }),
+    )
+    .await;
+    assert_eq!(long["error"], true);
+    assert!(text(&long).contains("16 KiB"));
 }

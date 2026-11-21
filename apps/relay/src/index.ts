@@ -11,14 +11,65 @@
  * desktop's key and the hashes of its bot tokens.
  */
 import { DurableObject } from "cloudflare:workers";
-import ALL_TOOLS from "./tools.json";
+import FIRST_TOOLS from "./tools-first.json";
+import TOOLS from "./tools.json";
 
-type Tool = (typeof ALL_TOOLS)[number] & { full?: boolean };
-/** The tools as MCP lists them: `full` is this relay's own mark, not part of a tool. */
-const listed = (tools: readonly Tool[]) => tools.map(({ full: _full, ...tool }) => tool);
-/** What every bot link has, and what a full-control link has. */
-const CHAT_TOOLS = listed((ALL_TOOLS as readonly Tool[]).filter((tool) => !tool.full));
-const FULL_TOOLS = listed(ALL_TOOLS as readonly Tool[]);
+/**
+ * A tool as its file describes it. `full` is this relay's own mark, on a tool or on one of its
+ * arguments: only a full-control link is shown it. It is not part of what MCP lists.
+ */
+interface Tool {
+  readonly name: string;
+  readonly full?: boolean;
+  readonly inputSchema: {
+    readonly properties?: Record<string, { readonly full?: boolean }>;
+    readonly [key: string]: unknown;
+  };
+  readonly [key: string]: unknown;
+}
+interface Listed {
+  readonly name: string;
+  readonly [key: string]: unknown;
+}
+
+/** The tools as MCP lists them to a link of one level, without this relay's marks. */
+function listed(tools: readonly Tool[], wide: boolean): Listed[] {
+  return tools
+    .filter((tool) => wide || !tool.full)
+    .map(({ full: _full, inputSchema, ...tool }) => ({
+      ...tool,
+      inputSchema: {
+        ...inputSchema,
+        properties: Object.fromEntries(
+          Object.entries(inputSchema.properties ?? {})
+            .filter(([, argument]) => wide || !argument.full)
+            .map(([name, { full: _mark, ...argument }]) => [name, argument]),
+        ),
+      },
+    }));
+}
+
+/**
+ * The two sets of tools. A copy of the app answers the set it was built with and says which in
+ * its bot links (`v`): the current one, or, from a copy older than it, the first one. A bot is
+ * shown the set its computer answers, so the relay and the app can be updated apart.
+ */
+const SETS = {
+  first: {
+    chat: listed(FIRST_TOOLS as readonly Tool[], false),
+    full: listed(FIRST_TOOLS as readonly Tool[], true),
+    instructions:
+      "o7 runs coding agents (Claude Code, Codex and others) on a person's computer. These tools reach the chats on that computer while o7 is open there with remote access on. Start with list_chats. After send_message or start_chat, call wait_for_chat until the agent finishes or asks for something, and answer waiting requests with respond_to_request. Agents there can edit files and run commands, so send only what the person asked for.",
+  },
+  current: {
+    chat: listed(TOOLS as readonly Tool[], false),
+    full: listed(TOOLS as readonly Tool[], true),
+    instructions:
+      "o7 runs coding agents (Claude Code, Codex and others) on a person's computer; these tools reach its chats while o7 is open there. Hand the agent a whole task in one send and let it work: it plans, edits and tests by itself. send and wait already return the turn's result, so do not read a chat you just heard from, and do not ask more often than wait does. Agents edit files and run commands, so send only what the person asked for.",
+  },
+} as const;
+/** The number a copy of the app sends for the current set. */
+const CURRENT_TOOLS = 2;
 
 export interface Env {
   readonly ROOMS: DurableObjectNamespace<Room>;
@@ -82,8 +133,6 @@ const HEARD_NOTE_MS = 5_000;
 const BOT_CALL_MS = 55_000;
 
 const MCP_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
-const INSTRUCTIONS =
-  "o7 runs coding agents (Claude Code, Codex and others) on a person's computer. These tools reach the chats on that computer while o7 is open there with remote access on. Start with list_chats. After send_message or start_chat, call wait_for_chat until the agent finishes or asks for something, and answer waiting requests with respond_to_request. Agents there can edit files and run commands, so send only what the person asked for.";
 const OFFLINE =
   "The computer is not reachable: o7 is closed there, remote access is off, or it is offline. Ask its owner to open o7 and try again.";
 
@@ -156,8 +205,10 @@ export default {
       return json(200, {
         ok: true,
         protocol: 1,
-        tools: CHAT_TOOLS.length,
-        full_tools: FULL_TOOLS.length,
+        tools: SETS.current.chat.length,
+        full_tools: SETS.current.full.length,
+        first_tools: SETS.first.chat.length,
+        first_full_tools: SETS.first.full.length,
       });
     if (!hostId || !HOST_ID.test(hostId)) return notFound();
     const origin = request.headers.get("Origin");
@@ -465,23 +516,27 @@ export class Room extends DurableObject<Env> {
   }
 
   /**
-   * The desktop's current bot links, as `[{ id, hash, full }]`: what a bot's URL is checked
-   * against, and whether it is shown the full-control tools. The desktop checks each call's level
-   * itself; the mark here only keeps the list a bot is shown honest.
+   * The desktop's current bot links, as `[{ id, hash, full, v }]`: what a bot's URL is checked
+   * against, whether it is shown the full-control tools, and which set of tools its computer
+   * answers. The desktop checks each call's level itself; the marks here only keep the list a
+   * bot is shown honest.
    */
   async #saveBots(body: unknown) {
     const bots: Record<string, string> = {};
     const full: string[] = [];
+    const current: string[] = [];
     if (Array.isArray(body))
       for (const entry of body.slice(0, MAX_BOTS)) {
         const {
           id,
           hash,
           full: wide,
+          v,
         } = (entry ?? {}) as {
           id?: unknown;
           hash?: unknown;
           full?: unknown;
+          v?: unknown;
         };
         if (
           typeof id === "string" &&
@@ -491,9 +546,10 @@ export class Room extends DurableObject<Env> {
         ) {
           bots[id] = hash;
           if (wide === true) full.push(id);
+          if (v === CURRENT_TOOLS) current.push(id);
         }
       }
-    await this.ctx.storage.put({ bots, full });
+    await this.ctx.storage.put({ bots, full, current });
   }
 
   override async webSocketClose(socket: WebSocket, code: number, reason: string) {
@@ -556,9 +612,18 @@ export class Room extends DurableObject<Env> {
     if (messages.length === 0 || messages.length > 16)
       return json(400, rpcError(null, -32600, "Invalid request"), CORS);
     const wide = ((await this.ctx.storage.get<string[]>("full")) ?? []).includes(id);
+    const set = ((await this.ctx.storage.get<string[]>("current")) ?? []).includes(id)
+      ? SETS.current
+      : SETS.first;
     const replies: unknown[] = [];
     for (const message of messages) {
-      const reply = await this.#rpc(message, id, token, wide ? FULL_TOOLS : CHAT_TOOLS);
+      const reply = await this.#rpc(
+        message,
+        id,
+        token,
+        wide ? set.full : set.chat,
+        set.instructions,
+      );
       if (reply !== null) replies.push(reply);
     }
     // Notifications and responses get no body.
@@ -570,7 +635,8 @@ export class Room extends DurableObject<Env> {
     message: RpcMessage,
     bot: string,
     token: string,
-    tools: readonly { readonly name: string }[],
+    tools: readonly Listed[],
+    instructions: string,
   ): Promise<unknown> {
     if (message === null || typeof message !== "object" || message.jsonrpc !== "2.0")
       return rpcError(null, -32600, "Invalid request");
@@ -586,8 +652,8 @@ export class Room extends DurableObject<Env> {
           protocolVersion:
             typeof asked === "string" && MCP_VERSIONS.includes(asked) ? asked : MCP_VERSIONS[0],
           capabilities: { tools: { listChanged: false } },
-          serverInfo: { name: "auracode", title: "o7", version: "1.0.0" },
-          instructions: INSTRUCTIONS,
+          serverInfo: { name: "o7", title: "o7", version: "2.0.0" },
+          instructions,
         });
       }
       case "ping":

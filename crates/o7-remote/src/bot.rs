@@ -1,6 +1,12 @@
-//! The tools a linked bot calls (`apps/relay/src/tools.json` describes them to the bot). Each
-//! call is one answer in plain text; a failure is text too, marked as an error, so the bot can
-//! read why and try something else.
+//! The tools a linked bot calls. Each call is one answer in plain text; a failure is text too,
+//! marked as an error, so the bot can read why and try something else.
+//!
+//! There are two sets. The current one is in [`lean`] and `apps/relay/src/tools.json` describes
+//! it to the bot. The first one, here, is what a relay from before it lists
+//! (`apps/relay/src/tools-first.json`): a copy of the app and the relay are updated apart, so
+//! each answers the other's set.
+
+mod lean;
 
 use std::{sync::Arc, time::Duration};
 
@@ -47,14 +53,29 @@ pub const FULL_TOOLS: [&str; 13] = [
 /// What a link without full control is told when it asks for more.
 pub const NOT_ALLOWED: &str = "This link has the chat tools only. Its owner can create a full control link in o7: Settings, Remote access.";
 
+/// The current tools every bot link has, and the ones only a full-control link has.
+pub use lean::{CHAT_TOOLS as LEAN_CHAT_TOOLS, FULL_TOOLS as LEAN_FULL_TOOLS};
+
+/// The set of tools this copy of the app answers, which it tells the relay with its bot links.
+/// A relay that knows the number lists that set; one that does not lists the first.
+pub const TOOLS_VERSION: u32 = 2;
+
+fn chat_tool(tool: &str) -> bool {
+    CHAT_TOOLS.contains(&tool) || lean::CHAT_TOOLS.contains(&tool)
+}
+
+fn full_tool(tool: &str) -> bool {
+    FULL_TOOLS.contains(&tool) || lean::FULL_TOOLS.contains(&tool)
+}
+
 /// Whether `tool` is one the relay offers at all. A name outside is refused before anything runs.
 pub fn known(tool: &str) -> bool {
-    CHAT_TOOLS.contains(&tool) || FULL_TOOLS.contains(&tool)
+    chat_tool(tool) || full_tool(tool)
 }
 
 /// Whether a link of this level may call `tool`.
 pub fn allowed(tool: &str, full: bool) -> bool {
-    CHAT_TOOLS.contains(&tool) || (full && FULL_TOOLS.contains(&tool))
+    chat_tool(tool) || (full && full_tool(tool))
 }
 
 /// The longest project memory a bot may write, in bytes: the app's own limit.
@@ -247,7 +268,12 @@ pub async fn call(
     if known(tool) && !allowed(tool, full) {
         return Answer::failed(NOT_ALLOWED);
     }
-    match run(backend, owner, tool, args).await {
+    let answer = if lean::CHAT_TOOLS.contains(&tool) || lean::FULL_TOOLS.contains(&tool) {
+        lean::run(backend, owner, tool, args, full).await
+    } else {
+        run(backend, owner, tool, args).await
+    };
+    match answer {
         Ok(answer) | Err(answer) => answer,
     }
 }
