@@ -111,6 +111,23 @@ impl ChatActor {
             .unwrap_or_default()
     }
 
+    /// Whether this chat is in the agent's Plan workflow with Full access as its execution
+    /// access. An agent's Plan mode takes the place of its access mode, so the planning turn asks
+    /// for every command although the person chose not to be asked (`policy::decide`).
+    pub(super) fn planning_freely(&self) -> bool {
+        let controls = self.control_lists();
+        if controls.workflow.effective.as_deref() != Some("plan") {
+            return false;
+        }
+        match self.controls.access.as_deref() {
+            Some(access) => {
+                o7_drivers::controls::full_access(access)
+                    || legacy_level(access) == Some(Autonomy::FullAuto)
+            }
+            None => self.autonomy == Autonomy::FullAuto,
+        }
+    }
+
     /// Control `id` as the agent last listed it in this run, else as its connection did.
     fn last_control<'a>(
         &'a self,

@@ -1319,6 +1319,13 @@ impl Session {
             }
             return;
         }
+        if self.plans_unasked(&request) {
+            self.response(
+                &id,
+                json!({"behavior":"allow","updatedInput":request["input"]}),
+            );
+            return;
+        }
         let title = request["title"]
             .as_str()
             .or(request["description"].as_str())
@@ -1382,6 +1389,35 @@ impl Session {
             turn: self.turn.clone(),
             request: card,
         });
+    }
+    /// Whether a request made while planning is answered here instead of shown. Claude's Plan mode
+    /// takes the place of the chat's access mode, so under Full access every read, search and
+    /// command of a planning turn would otherwise ask, which that access level never does while
+    /// executing. Such a request is allowed as Full access would allow it, except:
+    /// - leaving Plan, which is the person's approval of the plan;
+    /// - a file edit, which a planning turn has no business making;
+    /// - a request Claude says needs a person, or raises for a reason other than the mode (an
+    ///   ask rule, a hook, a safety check): those ask under Full access too.
+    fn plans_unasked(&self, request: &Value) -> bool {
+        if self.mode != "plan" || self.execution_mode != "bypassPermissions" {
+            return false;
+        }
+        if request["requires_user_interaction"] == true || request["default_to_no"] == true {
+            return false;
+        }
+        if !matches!(
+            request["decision_reason_type"].as_str(),
+            None | Some("mode")
+        ) {
+            return false;
+        }
+        let Some(tool) = request["tool_name"].as_str() else {
+            return false;
+        };
+        !matches!(
+            super::translate::tool_kind(tool),
+            o7_protocol::ToolKind::SwitchMode | o7_protocol::ToolKind::Edit
+        )
     }
     fn control_reply(&mut self, id: String, response: Value) {
         let Some(pending) = self.pending.remove(&id) else {

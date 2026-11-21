@@ -4667,7 +4667,7 @@ The person continues this conversation here, in your terminal. Reply only that y
     fn answer_open_cards(&mut self) {
         let cards: Vec<OpenCard> = self.normalizer.cards().to_vec();
         for card in cards {
-            if let Decision::AutoAllow { option_id } = decide(&self.autonomy_state, &card.request) {
+            if let Decision::AutoAllow { option_id } = decide(&self.autonomy_state, self.planning_freely(), &card.request) {
                 self.auto_answer(&card.request, option_id, card.tag.as_deref());
             }
         }
@@ -5969,7 +5969,10 @@ The person continues this conversation here, in your terminal. Reply only that y
         for event in events {
             let decision = match &event {
                 O7Event::PermissionRequested(request) => {
-                    Some((request.clone(), decide(&self.autonomy_state, request)))
+                    Some((
+                        request.clone(),
+                        decide(&self.autonomy_state, self.planning_freely(), request),
+                    ))
                 }
                 _ => None,
             };

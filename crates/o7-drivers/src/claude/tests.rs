@@ -756,6 +756,113 @@ async fn the_plan_approval_card_is_a_mode_switch_with_its_plan() {
     h.stop().await;
 }
 
+/// Sets a native control and answers Claude's mode change.
+async fn set_control(h: &mut Harness, id: &str, value: &str, native: &str) {
+    let (reply, result) = tokio::sync::oneshot::channel();
+    h.tx.send(DriverCommand::SetOption {
+        option_id: id.into(),
+        value: o7_protocol::session::ConfigValue::Choice {
+            value: value.into(),
+        },
+        reply,
+    })
+    .unwrap();
+    let request = h.wire().await;
+    assert_eq!(
+        request["request"],
+        json!({"subtype":"set_permission_mode","mode":native})
+    );
+    h.send(json!({"type":"control_response","response":{"subtype":"success","request_id":request["request_id"],"response":{"mode":native}}})).await;
+    result.await.unwrap().unwrap();
+}
+
+/// Plan takes the place of Claude's access mode, so a planning turn asks for every command. A
+/// chat on Full access answers those itself, as that level does while executing, and still shows
+/// what a person must decide: leaving Plan, a file edit, and anything Claude marks as needing one.
+#[tokio::test(start_paused = true)]
+async fn planning_under_full_access_asks_only_what_a_person_must_decide() {
+    let mut h = Harness::start().await;
+    h.ready().await;
+    set_control(
+        &mut h,
+        crate::controls::ACCESS,
+        "bypassPermissions",
+        "bypassPermissions",
+    )
+    .await;
+    set_control(&mut h, crate::controls::WORKFLOW, "plan", "plan").await;
+    h.prompt();
+    h.wire().await;
+    let ask = |id: &str, tool: &str, extra: Value| {
+        let mut request = json!({"subtype":"can_use_tool","tool_name":tool,"input":{"command":"git status","future":1}});
+        for (key, value) in extra.as_object().expect("an object") {
+            request[key] = value.clone();
+        }
+        json!({"type":"control_request","request_id":id,"request":request})
+    };
+    for (id, tool, extra) in [
+        ("run", "Bash", json!({})),
+        ("mcp", "mcp__docs__search", json!({})),
+        ("agent", "Agent", json!({"decision_reason_type":"mode"})),
+    ] {
+        h.send(ask(id, tool, extra)).await;
+        let answer = h.wire().await;
+        assert_eq!(answer["response"]["request_id"], id);
+        assert_eq!(
+            answer["response"]["response"],
+            json!({"behavior":"allow","updatedInput":{"command":"git status","future":1}}),
+            "{tool} is allowed with its input as received"
+        );
+    }
+    for (id, tool, extra) in [
+        ("edit", "Write", json!({})),
+        ("leave", "ExitPlanMode", json!({})),
+        ("person", "Bash", json!({"requires_user_interaction":true})),
+        ("no", "Bash", json!({"default_to_no":true})),
+        ("rule", "Bash", json!({"decision_reason_type":"rule"})),
+    ] {
+        h.send(ask(id, tool, extra)).await;
+        loop {
+            if let DriverEvent::Permission { request, .. } = h.event().await {
+                assert_eq!(request.request_id, id, "{tool} is shown to the person");
+                break;
+            }
+        }
+    }
+    assert!(
+        timeout(Duration::from_millis(5), h.end.from_client.recv())
+            .await
+            .is_err(),
+        "none of the shown requests was answered"
+    );
+    h.stop().await;
+}
+
+/// The same planning turn on any lower access level asks, as it always has.
+#[tokio::test(start_paused = true)]
+async fn planning_under_lower_access_still_asks() {
+    let mut h = Harness::start().await;
+    h.ready().await;
+    set_control(
+        &mut h,
+        crate::controls::ACCESS,
+        "acceptEdits",
+        "acceptEdits",
+    )
+    .await;
+    set_control(&mut h, crate::controls::WORKFLOW, "plan", "plan").await;
+    h.prompt();
+    h.wire().await;
+    h.send(json!({"type":"control_request","request_id":"run","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"git status"}}})).await;
+    loop {
+        if let DriverEvent::Permission { request, .. } = h.event().await {
+            assert_eq!(request.request_id, "run");
+            break;
+        }
+    }
+    h.stop().await;
+}
+
 #[tokio::test(start_paused = true)]
 async fn unsupported_effort_never_reaches_the_cli() {
     let mut h = Harness::start().await;
