@@ -10,6 +10,7 @@ checks the format, and with `--dates` checks each day against the time GitHub sa
 
 ## 2026-11-21
 
+- The website now links to o7's source on GitHub. Every page has a GitHub button beside Download at the top, and GitHub is in the phone menu and the footer. ([#160](https://github.com/itscool2b/o7/pull/160))
 - Your own assistant can run your coding agents, and setup looks better. Link Grok Bot, Muse, Hermes or OpenClaw in Settings > Remote access or during setup: pick yours and o7 shows what to paste and where. A linked assistant now needs fewer steps, so it uses far less of its own allowance: one request sends your message and brings back the answer. Setup has a picture that fills in as you go, and the website has a flock of coloured wings. Plan mode no longer asks you to allow every command when the chat is on Full access; it still asks before any file edit. ([#159](https://github.com/itscool2b/o7/pull/159))
 - New chat's agent menu shows every agent in full again. It had shrunk to the width of the agent button, cutting off names and the search box and scrolling sideways. ([#158](https://github.com/itscool2b/o7/pull/158))
 
