@@ -2110,7 +2110,13 @@ async fn the_current_tools_send_and_wait_in_one_call_and_keep_a_links_level() {
     // One tool changes a chat, in order, and a handoff's new chat is the last thing said.
     rig.app.acted.lock().expect("acted").clear();
     let options = call(&mut relay, &full, "set", json!({ "chat": "c1" })).await;
-    assert!(text(&options).starts_with("Models"), "{options}");
+    assert_eq!(
+        text(&options),
+        "model: opus, sonnet (current)
+thinking: no choice.
+access: full_auto (current)
+"
+    );
     let changed = call(
         &mut relay,
         &full,
