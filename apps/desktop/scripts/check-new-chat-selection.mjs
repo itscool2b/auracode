@@ -20,6 +20,26 @@ for (const [engine, launcher] of Object.entries({ chromium, webkit })) {
       await page.goto(`${url}/?preview=new-worktree`);
       const trigger = page.locator(".new-chat-agent-picker > summary");
       await trigger.click();
+      // The list has its own width, not the trigger pill's: it once shrank to the pill and
+      // scrolled sideways, cutting off every name and the search field.
+      const list = await page
+        .locator(".new-chat-agent-picker > .chat-popover-panel")
+        .evaluate((panel) => ({
+          width: panel.getBoundingClientRect().width,
+          trigger: panel.parentElement.querySelector("summary").getBoundingClientRect().width,
+          sideways: panel.scrollWidth > panel.clientWidth,
+          search: panel.querySelector("input[type=search]").getBoundingClientRect().width,
+          cut: [...panel.querySelectorAll(".new-chat-agent")].some(
+            (row) => row.scrollWidth > row.clientWidth,
+          ),
+        }));
+      assert.ok(
+        list.width >= 260 && list.width > list.trigger,
+        `${engine}: list width ${list.width}`,
+      );
+      assert.equal(list.sideways, false, `${engine}/${theme}: the agent list scrolls sideways`);
+      assert.equal(list.cut, false, `${engine}/${theme}: an agent row is cut off`);
+      assert.ok(list.search >= 180, `${engine}: search field width ${list.search}`);
       const radios = page.locator(".new-chat-choices input[type=radio]");
       await radios.first().focus();
       const next = await radios.nth(1).getAttribute("value");
