@@ -122,8 +122,6 @@ test("the changelog page lists every pull request in CHANGELOG.md, newest first"
     [...html.matchAll(/<time dateTime="(\d{4}-\d{2}-\d{2})"/gi)].map((match) => match[1]),
     days,
   );
-  // The repository is private: no page or script may carry a link into it.
-  assert.doesNotMatch(html, /github\.com/);
   // The home page shows the three newest days as cards, each leading to its day on this page.
   const home = await readFile(new URL("index.html", root), "utf8");
   assert.deepEqual(
@@ -132,7 +130,18 @@ test("the changelog page lists every pull request in CHANGELOG.md, newest first"
     ),
     days.slice(0, 3),
   );
-  assert.doesNotMatch(home, /github\.com/);
+});
+test("every page links the public repository from its header, menu and footer", async () => {
+  for (const path of ["", "download/", "privacy/", "terms/", "changelog/"]) {
+    const html = await readFile(new URL(`${path}index.html`, root), "utf8");
+    const links = html.match(/href="https:\/\/github\.com\/itscool2b\/o7"/g) ?? [];
+    assert.ok(links.length >= 3, `${path}: ${links.length} links to the repository`);
+    assert.match(
+      html,
+      /class="btn btn-quiet btn-sm nav-github"[^>]*aria-label="o7 on GitHub"/,
+      path,
+    );
+  }
 });
 test("static CSP authorizes only the emitted inline framework scripts", async () => {
   const headers = await readFile(new URL("_headers", root), "utf8");

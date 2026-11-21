@@ -203,6 +203,19 @@ o7 as bots (`BotMark`, `packages/ui/src/graphite/bots.ts`). Used at the owner's 
   flat-shape loader; only the published file's animation and comments were removed, and the role,
   aria-label and title added.
 
+## GitHub
+
+The website's header, phone menu and footer link the public repository; the header's link wears
+GitHub's mark (`GitHubMark`, `apps/web/app/repo.tsx`), only to say where the source is. Used at the
+owner's direction (2026-11-21); no endorsement is implied.
+
+- The exact path of Octicons `mark-github-16` (https://github.com/primer/octicons, MIT, which
+  covers the icon files, not the trademark), `icons/mark-github-16.svg` at commit
+  `ea8e6bb79894cc7e85564ee9b53d86b418738d04`, retrieved 2026-11-21, SHA-256
+  `7421820090b50ac79d7c2bf7c951a433d7098a8a9c474809207bdd45f62d9d46` as downloaded. It is drawn in
+  `currentColor`, as GitHub's own pages draw it, at 16px. GitHub's logo guidelines:
+  https://github.com/logos.
+
 ## Agents without a mark
 
 Any other ACP or custom agent shows the first two letters of its id (`agentCode()`), and an
