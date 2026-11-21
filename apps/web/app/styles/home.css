@@ -232,7 +232,7 @@
   align-items: center;
   justify-content: center;
   gap: 20px 32px;
-  margin-top: 80px;
+  margin-top: 56px;
 }
 
 /* On one line across the full column, the agents spread to its edges as dot.com's bots do. */
@@ -268,6 +268,96 @@ html.js .statement-roster[data-reveal] .statement-agent {
 html.js .statement-roster[data-reveal]:not([data-revealed]) .statement-agent {
   opacity: 0;
   transform: translateY(22px) scale(0.86) rotate(-4deg);
+}
+
+/*
+ * A flock of o7's wing in nine colours across the column (Flock.tsx), where dot.com sets its row
+ * of coloured bots. Each wing has its own colour, height and bank; together they are the page's
+ * one run of colour that is not an agent's mark. The eyes are holes, so they show the page.
+ */
+.flock {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  gap: 28px 20px;
+  margin-top: 80px;
+  /* Room for the wings that fly above and below the row's line. */
+  padding-block: 20px;
+}
+
+@media (min-width: 1280px) {
+  .flock {
+    flex-wrap: nowrap;
+    justify-content: space-between;
+  }
+}
+
+.flock-wing {
+  display: block;
+  flex: none;
+  width: calc(clamp(76px, 8.6vw, 116px) * var(--size, 1));
+  color: var(--flock);
+  transform: translateY(calc(var(--rise, 0) * 100%)) rotate(var(--tilt, 0deg));
+}
+
+/* On white a pure hue reads thin, so each is mixed a little toward the ink. */
+@media (prefers-color-scheme: light) {
+  :root:not([data-theme="dark"]) .flock-wing {
+    color: color-mix(in srgb, var(--flock) 86%, #0a0a0a);
+  }
+}
+
+:root[data-theme="light"] .flock-wing {
+  color: color-mix(in srgb, var(--flock) 86%, #0a0a0a);
+}
+
+/* Each hovers at its own pace, out of step with its neighbours. */
+.flock-float {
+  display: block;
+  animation: flock-hover calc(4200ms + var(--i, 0) * 310ms) ease-in-out infinite;
+  animation-delay: calc(var(--i, 0) * -730ms);
+  transition: transform 420ms cubic-bezier(0.2, 1.6, 0.4, 1);
+}
+
+@keyframes flock-hover {
+  50% {
+    translate: 0 -9%;
+  }
+}
+
+/* And blinks in its own time. */
+.flock-wing .wing-eye {
+  animation-delay: calc(900ms + var(--i, 0) * 610ms);
+}
+
+.flock-wing .wing-look {
+  transform: translate(calc(var(--look-x, 0) * 22px), calc(var(--look-y, 0) * 12px));
+}
+
+/* The pointer over one makes it hop. */
+@media (hover: hover) {
+  .flock-wing:hover .flock-float {
+    transform: translateY(-16%) rotate(calc(var(--tilt, 0deg) * -1.4)) scale(1.06);
+  }
+}
+
+/*
+ * The wings land one after another when the row scrolls in, each dropping in from above its
+ * place with a small overshoot. Only once scripts are in (html.js), so the row is whole without
+ * them.
+ */
+html.js .flock[data-reveal] .flock-wing {
+  transition:
+    opacity 420ms var(--s-swift),
+    transform 1000ms cubic-bezier(0.2, 1.5, 0.4, 1);
+  transition-delay: calc(var(--i, 0) * 80ms);
+}
+
+html.js .flock[data-reveal]:not([data-revealed]) .flock-wing {
+  opacity: 0;
+  transform: translateY(calc(var(--rise, 0) * 100% - 90%)) rotate(calc(var(--tilt, 0deg) + 14deg))
+    scale(0.7);
 }
 
 /*
@@ -1040,8 +1130,18 @@ html.js .finale-art[data-reveal]:not([data-revealed]) :is(.wing-body, .wing-eye)
 @media (prefers-reduced-motion: reduce) {
   .hero-wing,
   .hero-wing-float,
+  .flock-float,
   .wing-eye {
     animation: none;
+  }
+
+  .flock-float,
+  html.js .flock[data-reveal] .flock-wing {
+    transition: none;
+  }
+
+  .flock-wing:hover .flock-float {
+    transform: none;
   }
 
   .wing-look {
