@@ -8,6 +8,10 @@ request adds its own line in the same pull request; see "Changelog" in
 [docs/developing-in-o7.md](docs/developing-in-o7.md). `node .github/scripts/check-changelog.mjs`
 checks the format, and with `--dates` checks each day against the time GitHub says it merged.
 
+## 2026-11-21
+
+- New chat's agent menu shows every agent in full again. It had shrunk to the width of the agent button, cutting off names and the search box and scrolling sideways. ([#158](https://github.com/itscool2b/o7/pull/158))
+
 ## 2026-11-20
 
 - The Dashboard shows how many lines your agents changed over the past year. Each day is a square that gets brighter the more lines were changed, with the year's total, your busiest month and day, and your longest and current streaks. It counts every agent, in chats and in terminal chats, but only work done in o7. Pick All or one agent to see only theirs, and point at a square to see that day's count. ([#157](https://github.com/itscool2b/o7/pull/157))
