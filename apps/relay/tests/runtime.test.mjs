@@ -712,7 +712,8 @@ test("lists the current tools to a bot whose computer answers them", async () =>
   );
   // What only a full-control link may choose is not offered to another, and no mark of this
   // relay's is in what either is shown.
-  const send = (list) => Object.keys(list.find((tool) => tool.name === "send").inputSchema.properties);
+  const send = (list) =>
+    Object.keys(list.find((tool) => tool.name === "send").inputSchema.properties);
   assert.deepEqual(send(few), ["chat", "folder", "agent", "text", "wait"]);
   assert.deepEqual(send(all), [
     "chat",
@@ -744,7 +745,10 @@ test("lists the current tools to a bot whose computer answers them", async () =>
   const hello = await ask(chats, { method: "initialize", params: {} });
   assert.match(hello.result.instructions, /one send/);
   assert.doesNotMatch(hello.result.instructions, /list_chats/);
-  assert.match((await ask(older, { method: "initialize", params: {} })).result.instructions, /list_chats/);
+  assert.match(
+    (await ask(older, { method: "initialize", params: {} })).result.instructions,
+    /list_chats/,
+  );
 
   // A tool of the other set, or above the link's level, does not exist for it.
   for (const [link, name] of [

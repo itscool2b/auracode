@@ -11,8 +11,8 @@
  * desktop's key and the hashes of its bot tokens.
  */
 import { DurableObject } from "cloudflare:workers";
-import FIRST_TOOLS from "./tools-first.json";
 import TOOLS from "./tools.json";
+import FIRST_TOOLS from "./tools-first.json";
 
 /**
  * A tool as its file describes it. `full` is this relay's own mark, on a tool or on one of its

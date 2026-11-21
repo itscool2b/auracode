@@ -1,0 +1,212 @@
+/*
+ * Setup's picture (SetupMap.tsx): a 440 by 400 drawing that scales to its pane, the hub and the
+ * tiles placed over it in percentages of the same box. It wears the agents' own drawing's lines,
+ * tiles and checks (agent-connect.css), so the two read as one hand.
+ */
+.setup-map {
+  position: relative;
+  width: 100%;
+  max-width: 440px;
+  aspect-ratio: 440 / 400;
+  margin: 0 auto;
+}
+
+.setup-map-lines {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+}
+
+.setup-map-line,
+.setup-map-flow {
+  fill: none;
+  stroke-linecap: round;
+  stroke-width: 1.5;
+}
+
+/* Not joined yet: a dashed line, as something that could be. */
+.setup-map-line {
+  stroke: var(--g-glass-rim-strong);
+  stroke-dasharray: 0.02 0.03;
+}
+
+/* Joined: the line settles whole, at the ink's quiet tone, and draws itself in once. */
+.setup-map-link[data-state="joined"] .setup-map-line {
+  stroke: color-mix(in srgb, var(--g-fg-1) 26%, transparent);
+  stroke-dasharray: 1;
+  stroke-dashoffset: 0;
+  animation: setup-map-draw var(--g-dur-glide) var(--g-ease-out) both;
+  animation-delay: calc(var(--g-dur-base) + var(--map-order, 0) * var(--g-dur-wave));
+}
+
+/*
+ * A short stretch of ink runs along a line toward o7, on the lines the open step is about and on
+ * an agent still being looked for. Everywhere else it is not drawn.
+ */
+.setup-map-flow {
+  display: none;
+  stroke: var(--g-fg-1);
+  stroke-width: 2;
+  stroke-dasharray: 0.14 0.86;
+  animation: setup-map-flow var(--g-dur-tick) linear infinite;
+  animation-delay: calc(var(--map-order, 0) * var(--g-dur-wave));
+}
+
+.setup-map:where([data-focus="bots"]) .setup-map-link[data-group="bots"] .setup-map-flow,
+.setup-map:where([data-focus="agents"]) .setup-map-link[data-group="agents"] .setup-map-flow,
+.setup-map:where([data-focus="project"]) .setup-map-link[data-group="project"] .setup-map-flow,
+.setup-map-link[data-state="joining"] .setup-map-flow {
+  display: inline;
+}
+
+.setup-map-check > circle {
+  fill: var(--g-green);
+}
+
+.setup-map-check > svg {
+  color: var(--g-on-light);
+}
+
+.setup-map-check {
+  animation: setup-map-land var(--g-dur-glide) var(--g-ease-expo) both;
+  animation-delay: calc(
+    var(--g-dur-glide) +
+    var(--g-dur-base) +
+    var(--map-order, 0) *
+    var(--g-dur-wave)
+  );
+  transform-box: fill-box;
+  transform-origin: center;
+}
+
+.setup-map-hub,
+.setup-map-tile {
+  position: absolute;
+  display: grid;
+  place-items: center;
+  box-sizing: border-box;
+  border-radius: var(--g-radius-14);
+  background-color: var(--g-glass-pop);
+  box-shadow:
+    inset 0 0 0 1px var(--g-glass-rim),
+    var(--g-shadow-control);
+}
+
+.setup-map-hub {
+  top: 50%;
+  left: 50%;
+  width: 72px;
+  height: 72px;
+  border-radius: var(--g-radius-18);
+  color: var(--g-fg-1);
+  transform: translate(-50%, -50%);
+}
+
+.setup-map-tile {
+  top: var(--map-y);
+  left: var(--map-x);
+  width: 44px;
+  height: 44px;
+  transform: translate(-50%, -50%);
+  animation: setup-map-rise var(--g-dur-glide) var(--g-ease-out) both;
+  animation-delay: calc(var(--map-order, 0) * var(--g-dur-wave));
+}
+
+/* An agent still being looked for: its whole tile breathes, never its mark. */
+.setup-map-tile[data-state="joining"] {
+  animation:
+    setup-map-rise var(--g-dur-glide) var(--g-ease-out) both,
+    setup-map-breathe var(--g-dur-tick) var(--g-ease-in-out) infinite;
+  animation-delay: calc(var(--map-order, 0) * var(--g-dur-wave)), var(--g-dur-glide);
+}
+
+/* The first project: an outline until one is chosen. */
+.setup-map-folder {
+  color: var(--g-fg-3);
+}
+
+.setup-map-folder[data-state="open"] {
+  background-color: transparent;
+  box-shadow: none;
+  outline: 1px dashed var(--g-line-strong);
+  outline-offset: -1px;
+}
+
+.setup-map-folder[data-state="joined"] {
+  color: var(--g-fg-1);
+}
+
+@keyframes setup-map-rise {
+  from {
+    opacity: 0;
+    transform: translate(-50%, calc(-50% + 6px)) scale(0.94);
+  }
+  to {
+    opacity: 1;
+    transform: translate(-50%, -50%);
+  }
+}
+
+@keyframes setup-map-breathe {
+  0%,
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+  }
+  50% {
+    transform: translate(-50%, -50%) scale(1.05);
+  }
+}
+
+@keyframes setup-map-draw {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes setup-map-flow {
+  from {
+    stroke-dashoffset: 1;
+  }
+  to {
+    stroke-dashoffset: 0;
+  }
+}
+
+@keyframes setup-map-land {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+/* Reduced motion and the app's own setting: the picture as it stands, still. */
+@media (prefers-reduced-motion: reduce) {
+  .setup-map-line,
+  .setup-map-check,
+  .setup-map-tile,
+  .setup-map-tile[data-state="joining"] {
+    animation: none;
+  }
+
+  .setup-map .setup-map-flow {
+    display: none;
+  }
+}
+
+:root:is([data-motion="reduced"], [data-motion="off"])
+  :is(.setup-map-line, .setup-map-check, .setup-map-tile) {
+  animation: none;
+}
+
+:root:is([data-motion="reduced"], [data-motion="off"]) .setup-map .setup-map-flow {
+  display: none;
+}

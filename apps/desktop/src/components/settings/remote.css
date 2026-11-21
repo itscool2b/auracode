@@ -147,7 +147,7 @@
   cursor: default;
 }
 
-.remote-bot-pick > span:last-child {
+.remote-bot-pick > span:not([data-logo]) {
   display: grid;
   min-width: 0;
 }

@@ -19,6 +19,7 @@ import { createAccountsFixture } from "./accountsFixture";
 import { cloneFixture } from "./cloneFixture";
 import { fixtureFolderMatches } from "./folderMatches";
 import { installFixture } from "./installFixture";
+import { remoteFixture } from "./remoteFixture";
 
 const install = installFixture();
 
@@ -259,6 +260,9 @@ let stored: SetupSnapshot = JSON.parse(
 );
 stored.preferences.appearance = getAppearancePreference();
 const persist = () => sessionStorage.setItem(storageKey, JSON.stringify(stored));
+/** Remote access for the page that links an assistant: nothing connects anywhere. */
+const remote = remoteFixture();
+
 const api: SetupApi = {
   snapshot: async () => {
     const value = structuredClone(stored);
@@ -392,6 +396,7 @@ function Preview() {
   return (
     <Onboarding
       api={api}
+      remote={remote}
       app={app}
       transport={transport}
       workspace={workspace}

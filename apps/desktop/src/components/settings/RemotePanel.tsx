@@ -313,7 +313,7 @@ export function QrCode({ text, label }: { readonly text: string; readonly label:
 }
 
 /** A named assistant, or any other that takes an MCP server. */
-type BotChoice = BotId | "other";
+export type BotChoice = BotId | "other";
 
 /** A bot link's mark: its assistant's, when its name names one of the four. */
 function LinkMark({ name }: { readonly name: string }) {
@@ -367,10 +367,7 @@ const SETUP: Readonly<
   openclaw: {
     label: "Command for OpenClaw",
     paste: (url) => `openclaw mcp add o7 --url ${url} --transport streamable-http --timeout 300`,
-    steps: [
-      "Run this command on the computer OpenClaw runs on.",
-      "Ask it to list your o7 chats.",
-    ],
+    steps: ["Run this command on the computer OpenClaw runs on.", "Ask it to list your o7 chats."],
   },
   other: {
     label: "Bot address",
@@ -501,7 +498,11 @@ function PairingDialog({
   );
 }
 
-function BotDialog({
+/**
+ * The dialog that makes a bot link: which assistant, what it may do and its name, then the
+ * address, shown once, the way that assistant takes it. Setup opens it too.
+ */
+export function BotDialog({
   initial,
   create,
   onClose,
