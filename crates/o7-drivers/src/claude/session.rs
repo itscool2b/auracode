@@ -428,8 +428,9 @@ struct Session {
     /// Whether Claude itself has reported or accepted Full access while this process ran. A
     /// saved setting alone does not count: a policy may refuse it.
     full_access_seen: bool,
-    /// The settings files Claude takes this chat's permission rules from (`rules`).
-    rule_files: Vec<std::path::PathBuf>,
+    /// The places Claude takes this chat's permission rules from, or `None` when they cannot
+    /// be worked out (`rules`).
+    rule_files: Option<Vec<std::path::PathBuf>>,
     observed_mode: Option<String>,
     init_deadline: Instant,
     commands_due: Option<Instant>,
@@ -1429,8 +1430,9 @@ impl Session {
     ///
     /// One case cannot be told apart from the request: an ask rule that matches one part of a
     /// compound command is reported as `subcommandResults` too. So such a request is answered
-    /// only while no ask rule is written in any settings file Claude reads for this chat
-    /// (`rules`), looked at when it arrives; with one written, it is shown.
+    /// only while no ask rule can exist in any place Claude takes this chat's rules from
+    /// (`rules`), looked at when it arrives. With one written, or a place that cannot be
+    /// looked at, it is shown.
     fn plans_unasked(&self, request: &Value) -> bool {
         if self.mode != "plan"
             || self.execution_mode != "bypassPermissions"
@@ -1457,7 +1459,7 @@ impl Session {
             return false;
         }
         request["decision_reason_type"] != "subcommandResults"
-            || !super::rules::asks_by_rule(&self.rule_files)
+            || !super::rules::asks_by_rule(self.rule_files.as_deref())
     }
     fn control_reply(&mut self, id: String, response: Value) {
         let Some(pending) = self.pending.remove(&id) else {
@@ -2012,8 +2014,7 @@ pub(super) async fn run(ctx: DriverContext) -> DriverExit {
     for (_, command) in &held {
         log_command(&process.log, command);
     }
-    let rule_files =
-        super::rules::settings_files(super::rules::config_dir(&setup).as_deref(), &setup.folder);
+    let rule_files = super::rules::sources(&setup);
     let mut s = Session {
         sink: process.io.stdin,
         log: process.log,

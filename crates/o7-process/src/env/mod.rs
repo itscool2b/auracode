@@ -41,7 +41,7 @@ pub(crate) use which::is_program;
 #[cfg(windows)]
 pub(crate) use which::pathext;
 pub use which::{find_exe, find_program};
-pub use windows::{expand_env_strings, merge_windows_path};
+pub use windows::{expand_env_strings, merge_windows_path, policy_key_exists};
 
 /// An environment variable name. `Eq`, `Ord` and `Hash` ignore ASCII case on Windows, where
 /// `Path` and `PATH` are one variable; elsewhere names compare exactly.
