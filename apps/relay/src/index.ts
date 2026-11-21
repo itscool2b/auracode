@@ -130,7 +130,12 @@ const MAX_BOT_CALLS = 8;
 const HOST_SILENT_MS = 75_000;
 /** How often, at most, the time the desktop was last heard is written beside its socket. */
 const HEARD_NOTE_MS = 5_000;
-const BOT_CALL_MS = 55_000;
+/**
+ * How long the desktop has to answer one tool call. A call may wait for an agent's turn, for up
+ * to four minutes when the bot asks (`WAIT_MAX` in crates/o7-remote/src/bot/lean.rs), so that a
+ * long turn costs a bot a few calls and not one every half minute.
+ */
+const BOT_CALL_MS = 250_000;
 
 const MCP_VERSIONS = ["2025-11-25", "2025-06-18", "2025-03-26", "2024-11-05"];
 const OFFLINE =

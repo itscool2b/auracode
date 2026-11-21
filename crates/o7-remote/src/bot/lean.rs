@@ -11,7 +11,7 @@ use o7_protocol::{UiAnswer, UiPrompt, UiQuestion, UiQuestionAnswer};
 use serde::Deserialize;
 use serde_json::Value;
 
-use super::{Answer, MAX_DIFF, MAX_MEMORY, WAIT_MAX, act, arguments, count, find, message};
+use super::{Answer, MAX_DIFF, MAX_MEMORY, act, arguments, count, find, message};
 use crate::{
     backend::{Action, Backend, ChatOptions, Choice, Outcome, Statuses},
     render::{self, Limits, Waiting},
@@ -28,8 +28,13 @@ pub const FULL_TOOLS: [&str; 4] = ["set", "changes", "memory", "new_project"];
 const FULL_SEND: &str = "This link has the chat tools only, so it cannot choose a chat's model, thinking or access. Its owner can create a full control link in o7: Settings, Remote access.";
 
 const PAGE: usize = 30;
-/// How long `send` and `answer` wait for the turn when the bot does not say.
-const WAIT_SENT: u64 = 40;
+/// How long a call waits for the turn when the bot does not say: under the shortest time the
+/// assistants o7 names give a tool before they give up on it.
+const WAIT_SENT: u64 = 30;
+/// The longest a call waits. Each time a wait runs out the bot takes another step of its own,
+/// reading everything it holds again, so a bot whose tool timeout allows it waits minutes at a
+/// time. The relay gives a call a little longer than this (`BOT_CALL_MS`).
+const WAIT_MAX: u64 = 240;
 
 #[derive(Deserialize)]
 #[serde(deny_unknown_fields)]

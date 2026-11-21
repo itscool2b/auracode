@@ -60,8 +60,8 @@
         "wait": {
           "type": "integer",
           "minimum": 0,
-          "maximum": 45,
-          "description": "Seconds to wait for the result. Default 40; 0 returns at once."
+          "maximum": 240,
+          "description": "Seconds to wait for the result, within your own tool timeout. Default 30; 0 returns at once."
         },
         "model": {
           "type": "string",
@@ -91,7 +91,7 @@
       "type": "object",
       "properties": {
         "chat": { "type": "string" },
-        "seconds": { "type": "integer", "minimum": 1, "maximum": 45, "description": "Default 40." }
+        "seconds": { "type": "integer", "minimum": 1, "maximum": 240, "description": "Default 30." }
       },
       "required": ["chat"],
       "additionalProperties": false
@@ -111,7 +111,7 @@
           "type": "string",
           "description": "The answer in words, or a choice word for word. Several questions: one line each."
         },
-        "wait": { "type": "integer", "minimum": 0, "maximum": 45 }
+        "wait": { "type": "integer", "minimum": 0, "maximum": 240 }
       },
       "required": ["chat", "request"],
       "additionalProperties": false
