@@ -81,6 +81,11 @@
   display: none;
 }
 
+/* The public repository: a quiet pill with GitHub's mark before Download (header.tsx). */
+.nav-github .github-mark {
+  flex: none;
+}
+
 @media (max-width: 1023px) {
   .nav-links {
     display: none;
@@ -89,6 +94,16 @@
   .nav-end .btn-sm {
     height: 40px;
     padding: 0 18px;
+  }
+
+  /* Under 1024px it is GitHub's mark alone, on a 40px disc beside Download. */
+  .nav-end .nav-github {
+    width: 40px;
+    padding: 0;
+  }
+
+  .nav-github-text {
+    display: none;
   }
 
   /* While the hero's own Download is in view, the bar's waits (header.tsx). */

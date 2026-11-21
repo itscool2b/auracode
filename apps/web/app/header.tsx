@@ -1,5 +1,6 @@
 import { Wordmark } from "@o7/ui/graphite";
 import { useEffect, useRef } from "react";
+import { GitHubMark, REPOSITORY } from "./repo";
 
 const SECTIONS = [
   { href: "/#features", text: "Features" },
@@ -11,7 +12,7 @@ const SECTIONS = [
 
 /**
  * The bar dot.com has: the wordmark, the page's sections beside it, and the primary Download at
- * right. Under 1024px the links fold into a menu built on <details>, so it opens without
+ * right, with the public repository as a quiet GitHub pill before it (its mark alone under 1024px). Under 1024px the links fold into a menu built on <details>, so it opens without
  * JavaScript too: a quiet disc beside Download, opening a sheet that covers the page with the
  * sections and Download at its foot.
  */
@@ -80,6 +81,14 @@ export function SiteHeader() {
           ))}
         </nav>
         <div className="nav-end">
+          <a
+            className="btn btn-quiet btn-sm nav-github"
+            href={REPOSITORY}
+            aria-label="o7 on GitHub"
+          >
+            <GitHubMark />
+            <span className="nav-github-text">GitHub</span>
+          </a>
           <a className="btn btn-primary btn-sm nav-cta" href="/download">
             Download
           </a>
@@ -98,6 +107,7 @@ export function SiteHeader() {
                     {link.text}
                   </a>
                 ))}
+                <a href={REPOSITORY}>GitHub</a>
               </nav>
               <a className="btn btn-primary btn-lg" href="/download">
                 Download o7

@@ -1,4 +1,5 @@
 import catalog from "#release-catalog";
+import { REPOSITORY } from "../repo";
 import { AppTile, Arrow, Page } from "../ui";
 
 export const meta = () => [{ title: "Download o7 · Windows, macOS and Linux" }];
@@ -24,9 +25,6 @@ const PLATFORMS = [
       "glibc 2.35 or newer and WebKitGTK 4.1: Ubuntu 22.04, Debian 12, Fedora 36 or newer",
   },
 ] as const;
-
-/** The public source every preview build is made from. */
-const SOURCE = "https://github.com/itscool2b/o7";
 
 /**
  * How to open a build nobody has signed, system by system. Shown only for such a build: a signed
@@ -182,7 +180,7 @@ export default function Download() {
               <p>
                 No publisher has signed these builds and Apple has not notarized them, so your
                 system warns you before one runs. Each is built from{" "}
-                <a href={SOURCE}>the public source</a> by its own workflow.{" "}
+                <a href={REPOSITORY}>the public source</a> by its own workflow.{" "}
                 {updates
                   ? "You install once: after that o7 shows Update when a newer version is out."
                   : "They do not update themselves: come back here for a newer one."}

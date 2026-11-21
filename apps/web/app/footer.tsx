@@ -1,4 +1,5 @@
 import { Wordmark } from "@o7/ui/graphite";
+import { REPOSITORY } from "./repo";
 
 const COLUMNS: readonly { heading: string; links: readonly { href: string; text: string }[] }[] = [
   {
@@ -8,6 +9,7 @@ const COLUMNS: readonly { heading: string; links: readonly { href: string; text:
       { href: "/#agents", text: "Agents" },
       { href: "/#faq", text: "FAQ" },
       { href: "/changelog", text: "Changelog" },
+      { href: REPOSITORY, text: "GitHub" },
     ],
   },
   {
