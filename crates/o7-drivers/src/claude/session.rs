@@ -342,6 +342,8 @@ enum Purpose {
         reply: oneshot::Sender<Result<o7_protocol::mcp::McpActionResult, DriverError>>,
     },
     Initialize,
+    /// Asks Claude for Full access before a chat that opens in Plan takes its planning turn.
+    ConfirmAccess,
     InitialMode,
     InitialEffort,
     Interrupt,
@@ -423,6 +425,9 @@ struct Session {
     effort: Option<String>,
     mode: String,
     execution_mode: String,
+    /// Whether Claude itself has reported or accepted Full access while this process ran. A
+    /// saved setting alone does not count: a policy may refuse it.
+    full_access_seen: bool,
     observed_mode: Option<String>,
     init_deadline: Instant,
     commands_due: Option<Instant>,
@@ -603,6 +608,9 @@ impl Session {
             .filter(|value| !value.is_empty())
         {
             self.observed_mode = Some(native.into());
+            if native == "bypassPermissions" {
+                self.full_access_seen = true;
+            }
             if self.mode != native {
                 self.mode = native.into();
                 if native != "plan" {
@@ -1390,16 +1398,30 @@ impl Session {
             request: card,
         });
     }
+    /// Takes the mode Claude now runs in as the chat's execution access, unless it is Plan, and
+    /// notes Full access once Claude has granted it.
+    fn adopt_mode(&mut self) {
+        if self.mode != "plan" {
+            self.execution_mode = self.mode.clone();
+        }
+        if self.mode == "bypassPermissions" {
+            self.full_access_seen = true;
+        }
+    }
     /// Whether a request made while planning is answered here instead of shown. Claude's Plan mode
     /// takes the place of the chat's access mode, so under Full access every read, search and
     /// command of a planning turn would otherwise ask, which that access level never does while
-    /// executing. Such a request is allowed as Full access would allow it, except:
+    /// executing. Where Claude has granted Full access in this process, such a request is allowed
+    /// as that level would allow it, except:
     /// - leaving Plan, which is the person's approval of the plan;
     /// - a file edit, which a planning turn has no business making;
     /// - a request Claude says needs a person, or raises for a reason other than the mode (an
     ///   ask rule, a hook, a safety check): those ask under Full access too.
     fn plans_unasked(&self, request: &Value) -> bool {
-        if self.mode != "plan" || self.execution_mode != "bypassPermissions" {
+        if self.mode != "plan"
+            || self.execution_mode != "bypassPermissions"
+            || !self.full_access_seen
+        {
             return false;
         }
         if request["requires_user_interaction"] == true || request["default_to_no"] == true {
@@ -1519,13 +1541,54 @@ impl Session {
                     Some(ConfigValue::Choice { value }) => value.clone(),
                     _ => mode(self.setup.autonomy).into(),
                 };
-                if self.mode != startup_mode {
+                if self.mode == "bypassPermissions" {
+                    self.full_access_seen = true;
+                }
+                if startup_mode == "plan"
+                    && self.execution_mode == "bypassPermissions"
+                    && !self.full_access_seen
+                {
+                    // A chat that opens in Plan remembers Full access without Claude having
+                    // granted it in this process. Ask for it first, so planning goes unasked
+                    // only where Claude allows that level.
+                    self.request(
+                        json!({"subtype":"set_permission_mode","mode":"bypassPermissions"}),
+                        Purpose::ConfirmAccess,
+                    );
+                } else if self.mode != startup_mode {
                     self.request(
                         json!({"subtype":"set_permission_mode","mode":startup_mode}),
                         Purpose::InitialMode,
                     );
                 } else {
                     self.configure_effort();
+                }
+            }
+            Purpose::ConfirmAccess => {
+                if let Some(err) = failure {
+                    self.notice(format!(
+                        "Claude refused Full access, so planning asks before each command: {}",
+                        err.message
+                    ));
+                    self.execution_mode = if self.mode == "plan" {
+                        "default".into()
+                    } else {
+                        self.mode.clone()
+                    };
+                } else {
+                    self.mode = payload["mode"]
+                        .as_str()
+                        .unwrap_or("bypassPermissions")
+                        .into();
+                    self.adopt_mode();
+                }
+                if self.mode == "plan" {
+                    self.configure_effort();
+                } else {
+                    self.request(
+                        json!({"subtype":"set_permission_mode","mode":"plan"}),
+                        Purpose::InitialMode,
+                    );
                 }
             }
             Purpose::InitialMode => {
@@ -1548,9 +1611,7 @@ impl Session {
                         .as_str()
                         .map(str::to_owned)
                         .unwrap_or_else(|| self.startup_mode().unwrap_or_else(|_| "plan".into()));
-                    if self.mode != "plan" {
-                        self.execution_mode = self.mode.clone();
-                    }
+                    self.adopt_mode();
                 }
                 self.configure_effort();
             }
@@ -1582,9 +1643,7 @@ impl Session {
                                 &self.execution_mode
                             };
                             self.mode = payload["mode"].as_str().unwrap_or(expected).into();
-                            if self.mode != "plan" {
-                                self.execution_mode = self.mode.clone();
-                            }
+                            self.adopt_mode();
                             self.outbox.push_back(DriverEvent::Autonomy(autonomy(
                                 self.setup.autonomy,
                                 &self.mode,
@@ -1605,9 +1664,7 @@ impl Session {
                 } else {
                     self.mode = payload["mode"].as_str().unwrap_or(mode(value)).into();
                     self.setup.autonomy = value;
-                    if self.mode != "plan" {
-                        self.execution_mode = self.mode.clone();
-                    }
+                    self.adopt_mode();
                     self.options();
                     let state = autonomy(value, &self.mode);
                     self.outbox.push_back(DriverEvent::Autonomy(state.clone()));
@@ -1958,6 +2015,7 @@ pub(super) async fn run(ctx: DriverContext) -> DriverExit {
         effort: None,
         mode: "default".into(),
         execution_mode: "default".into(),
+        full_access_seen: false,
         observed_mode: None,
         init_deadline: Instant::now(),
         commands_due: None,

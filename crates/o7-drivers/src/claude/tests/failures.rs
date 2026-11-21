@@ -456,6 +456,12 @@ async fn a_failed_saved_plan_restore_never_uses_the_legacy_full_auto_downgrade()
     let mut h = Harness::start_with(settings).await;
     let initialize = h.wire().await;
     reply(&h, &initialize, initialized("acceptEdits")).await;
+    let access = h.wire().await;
+    assert_eq!(
+        access["request"],
+        json!({"subtype":"set_permission_mode","mode":"bypassPermissions"})
+    );
+    reply(&h, &access, json!({"mode":"bypassPermissions"})).await;
     let change = h.wire().await;
     assert_eq!(
         change["request"],
@@ -463,4 +469,61 @@ async fn a_failed_saved_plan_restore_never_uses_the_legacy_full_auto_downgrade()
     );
     rejected(&h, &change).await;
     assert_eq!(start_failed(h).await.kind, ErrorKind::AgentError);
+}
+
+/// A chat that opens in Plan remembers Full access, which Claude has not granted in this
+/// process. It is asked for first: granted, planning goes unasked; refused, every command asks.
+#[tokio::test(start_paused = true)]
+async fn a_chat_opening_in_plan_plans_unasked_only_once_claude_grants_full_access() {
+    for granted in [true, false] {
+        let mut settings = setup();
+        settings.autonomy = Autonomy::FullAuto;
+        settings.desired.insert(
+            crate::controls::WORKFLOW.into(),
+            ConfigValue::Choice {
+                value: "plan".into(),
+            },
+        );
+        let mut h = Harness::start_with(settings).await;
+        let initialize = h.wire().await;
+        reply(&h, &initialize, initialized("acceptEdits")).await;
+        let access = h.wire().await;
+        assert_eq!(
+            access["request"],
+            json!({"subtype":"set_permission_mode","mode":"bypassPermissions"})
+        );
+        if granted {
+            reply(&h, &access, json!({"mode":"bypassPermissions"})).await;
+        } else {
+            rejected(&h, &access).await;
+        }
+        let plan = h.wire().await;
+        assert_eq!(
+            plan["request"],
+            json!({"subtype":"set_permission_mode","mode":"plan"})
+        );
+        reply(&h, &plan, json!({"mode":"plan"})).await;
+        ready_event(&mut h).await;
+        h.prompt();
+        h.wire().await;
+        h.send(
+            json!({"type":"control_request","request_id":"run","request":{
+                "subtype":"can_use_tool","tool_name":"Bash","input":{"command":"git status"}
+            }}),
+        )
+        .await;
+        if granted {
+            let answer = h.wire().await;
+            assert_eq!(answer["response"]["request_id"], "run");
+            assert_eq!(answer["response"]["response"]["behavior"], "allow");
+        } else {
+            loop {
+                if let DriverEvent::Permission { request, .. } = h.event().await {
+                    assert_eq!(request.request_id, "run");
+                    break;
+                }
+            }
+        }
+        h.stop().await;
+    }
 }
