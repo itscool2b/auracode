@@ -1,5 +1,6 @@
 //! Native Claude Code driver and protocol mapping.
 
+mod rules;
 mod session;
 mod tasks;
 pub mod translate;

@@ -32,6 +32,7 @@ pub(super) fn bot_links(shared: &Shared) -> String {
             id: &bot.id,
             hash: &bot.token_hash,
             full: bot.full,
+            v: crate::bot::TOOLS_VERSION,
         })
         .collect();
     format!(

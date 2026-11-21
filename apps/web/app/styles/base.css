@@ -557,6 +557,15 @@ svg {
 
 /* Offscreen zones, and the whole page in a hidden tab, hold their ambient loops (enhance.tsx). */
 :is([data-off], [data-hidden])
-  :is(.m-loader rect, .m-caret, .m-shimmer, .m-steer, .tm-cursor, .wing-eye, .hero-wing-float) {
+  :is(
+    .m-loader rect,
+    .m-caret,
+    .m-shimmer,
+    .m-steer,
+    .tm-cursor,
+    .wing-eye,
+    .hero-wing-float,
+    .flock-float
+  ) {
   animation-play-state: paused;
 }

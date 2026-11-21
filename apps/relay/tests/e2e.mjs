@@ -413,6 +413,16 @@ async function botFlow(address) {
     assert.equal(body.id, id);
     return body.result;
   };
+  /** One call whose answer may be an error of the protocol's own. */
+  const rpcRaw = async (method, params) => {
+    id += 1;
+    const response = await fetch(url, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ jsonrpc: "2.0", id, method, params }),
+    });
+    return response.json();
+  };
   const tool = async (name, args = {}) => {
     const result = await rpc("tools/call", { name, arguments: args });
     return { text: result.content[0].text, error: result.isError };
@@ -432,50 +442,62 @@ async function botFlow(address) {
     capabilities: {},
     clientInfo: { name: "e2e", version: "1" },
   });
-  assert.equal(hello.serverInfo.name, "auracode");
-  // The demo's link has the chat tools: the wider ones are not shown to it.
-  assert.equal((await rpc("tools/list")).tools.length, 8);
+  assert.equal(hello.serverInfo.name, "o7");
+  // The demo's link has the chat tools: the wider ones are not shown to it, and neither is
+  // what only a full-control link may choose when it sends.
+  const listed = (await rpc("tools/list")).tools;
+  assert.deepEqual(
+    listed.map((entry) => entry.name),
+    ["chats", "projects", "read", "send", "wait", "answer", "stop"],
+  );
+  assert.deepEqual(
+    Object.keys(listed.find((entry) => entry.name === "send").inputSchema.properties),
+    ["chat", "folder", "agent", "text", "wait"],
+  );
 
-  const chats = await tool("list_chats");
+  const chats = await tool("chats");
   assert.equal(chats.error, false);
-  assert.match(chats.text, /^Chats on Demo computer, most recently active first:\n/);
-  assert.match(chats.text, /- c1 "Fix the login form" in demo with Demo agent: idle\n/);
-  const projects = await tool("list_projects");
-  assert.match(projects.text, /- folder f1: demo\n/);
+  assert.match(chats.text, /^\d+ chats? on Demo computer, newest first/);
+  assert.match(chats.text, /\nc1 \| idle \| Fix the login form \| demo \| Demo agent\n/);
+  const projects = await tool("projects");
+  assert.match(projects.text, /\n {2}folder f1 demo\n/);
 
-  // Start a chat, wait until it asks, allow it, wait until it is done, and read the result.
-  const started = await tool("start_chat", { folder_id: "f1", text: "Tidy the tests" });
-  assert.equal(started.error, false, started.text);
-  const chat = /^Started chat (\S+) with Demo agent\./.exec(started.text)?.[1];
-  assert.ok(chat, started.text);
-  const asking = await tool("wait_for_chat", { chat_id: chat, timeout_seconds: 20 });
+  // One call starts a chat and comes back when the agent asks; one more allows it and comes
+  // back with what the turn came to. Two calls where the first tools took five.
+  const asking = await tool("send", { folder: "f1", text: "Tidy the tests", wait: 20 });
+  assert.equal(asking.error, false, asking.text);
+  const chat = /^Started chat (\S+) with Demo agent\./.exec(asking.text)?.[1];
+  assert.ok(chat, asking.text);
   assert.match(asking.text, /: working, waiting for an answer\./);
   const request = /Waiting request (\S+) \(permission\): Run `npm test`/.exec(asking.text)?.[1];
   assert.ok(request, asking.text);
-  assert.match(asking.text, /Options for respond_to_request: allow = Allow once; reject = Reject/);
-  const answered = await tool("respond_to_request", {
-    chat_id: chat,
-    request_id: request,
-    option_id: "allow",
-  });
-  assert.equal(answered.error, false, answered.text);
-  const finished = await tool("wait_for_chat", { chat_id: chat, timeout_seconds: 20 });
+  assert.match(asking.text, /Options for answer: allow = Allow once; reject = Reject/);
+  const finished = await tool("answer", { chat, request, option: "allow", wait: 20 });
+  assert.equal(finished.error, false, finished.text);
+  assert.match(finished.text, /^Answered\. Chat /);
   assert.match(finished.text, /: idle\./);
   assert.match(finished.text, /User: Tidy the tests\n/);
   assert.match(finished.text, /Steps: Read src\/login\.ts\n/);
   assert.match(finished.text, /Agent: [\s\S]*Done\. The form now checks the email/);
   assert.match(finished.text, /The turn finished\.\n/);
   assert.doesNotMatch(finished.text, /Waiting request/);
+  // Reading it again is the same turn, and a wait on a chat at rest returns at once.
+  assert.match((await tool("read", { chat })).text, /The turn finished\.\n/);
+  assert.match((await tool("wait", { chat, seconds: 5 })).text, /: idle\./);
 
   // What a bot gets wrong comes back as words it can act on.
-  const twice = await tool("respond_to_request", {
-    chat_id: chat,
-    request_id: request,
-    option_id: "allow",
-  });
+  const twice = await tool("answer", { chat, request, option: "allow" });
   assert.equal(twice.error, true);
   assert.match(twice.text, /not waiting any more/);
-  assert.equal((await tool("read_chat", { chat_id: "nope" })).error, true);
+  assert.equal((await tool("read", { chat: "nope" })).error, true);
+  // A chats link cannot choose how the agent runs, and a tool of the first set is not there.
+  const chosen = await tool("send", { chat, text: "Again", access: "full_auto" });
+  assert.equal(chosen.error, true);
+  assert.match(chosen.text, /chat tools only/);
+  assert.equal(
+    (await rpcRaw("tools/call", { name: "list_chats", arguments: {} })).error.code,
+    -32602,
+  );
 
   // A link with another token does not exist.
   const forged = url.replace(/\.[A-Za-z0-9_-]{43}$/, `.${"A".repeat(43)}`);

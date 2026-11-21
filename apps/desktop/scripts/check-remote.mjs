@@ -52,6 +52,27 @@ export async function checkRemote(browser, url, out, engine) {
     assert.deepEqual(await calls(), []);
     assert.equal(await toggle.isChecked(), false);
 
+    // With no bot linked, the list names the four assistants. Picking one opens the dialog for
+    // it, and the link's name follows the assistant until its owner writes one.
+    for (const assistant of ["Grok Bot", "Muse", "Hermes", "OpenClaw"])
+      await page.getByRole("button", { name: new RegExp(`^${assistant}`) }).waitFor();
+    assert.equal(await page.locator(".remote-bot-pick .g-agent-mark").count(), 4);
+    await page.getByTestId("remote-link-hermes").click();
+    const picked = page.getByRole("dialog", { name: "Link a bot" });
+    const assistants = picked.getByRole("group", { name: "Your assistant" });
+    assert.equal(await assistants.getByRole("radio").count(), 5);
+    assert.equal(await assistants.getByRole("radio", { name: "Hermes" }).isChecked(), true);
+    assert.equal(await picked.getByRole("textbox", { name: "Name" }).inputValue(), "Hermes");
+    await assistants.getByRole("radio", { name: "OpenClaw" }).check();
+    assert.equal(await picked.getByRole("textbox", { name: "Name" }).inputValue(), "OpenClaw");
+    await picked.getByRole("textbox", { name: "Name" }).fill("Home server");
+    await assistants.getByRole("radio", { name: "Muse" }).check();
+    assert.equal(await picked.getByRole("textbox", { name: "Name" }).inputValue(), "Home server");
+    await page.screenshot({ path: resolve(out, `${engine}-${colorScheme}-remote-link.png`) });
+    await page.keyboard.press("Escape");
+    await picked.waitFor({ state: "detached" });
+    assert.deepEqual(await calls(), []);
+
     // Pairing turns remote access on by itself and shows the link once, as a code and as text.
     await page.getByRole("button", { name: "Pair a device", exact: true }).click();
     const dialog = page.getByRole("dialog", { name: "Pair a device" });
@@ -154,6 +175,34 @@ export async function checkRemote(browser, url, out, engine) {
     assert.equal(await page.getByText(/t{43}/).count(), 0, "the address stayed on the page");
     await page.getByRole("button", { name: "Remove Research bot" }).click();
     assert.equal((await calls()).at(-1), "remove-bot:bot-1");
+
+    // Each assistant is given the address the way it takes one: Hermes as lines for its
+    // config, OpenClaw as a command, both with room to wait for a turn. A link named for an
+    // assistant wears its mark in the list.
+    for (const [assistant, label, wanted] of [
+      [
+        "Hermes",
+        "Lines for Hermes' config",
+        /^mcp_servers:\n {2}o7:\n {4}url: "https:\/\/o7\.codes\/api\/remote\/v1\/mcp\/h{22}\/b{11}\.t{43}"\n {4}timeout: 300$/,
+      ],
+      [
+        "OpenClaw",
+        "Command for OpenClaw",
+        /^openclaw mcp add o7 --url https:\/\/o7\.codes\/api\/remote\/v1\/mcp\/h{22}\/b{11}\.t{43} --transport streamable-http --timeout 300$/,
+      ],
+    ]) {
+      await page.getByRole("button", { name: "Link a bot", exact: true }).click();
+      await bot.getByRole("radio", { name: assistant }).check();
+      await bot.getByRole("button", { name: "Create link" }).click();
+      assert.match(await bot.getByRole("textbox", { name: label }).inputValue(), wanted);
+      assert.equal(await bot.getByText("grok.com/connectors").count(), 0);
+      if (assistant === "Hermes")
+        await page.screenshot({ path: resolve(out, `${engine}-${colorScheme}-remote-hermes.png`) });
+      await bot.getByRole("button", { name: "Done" }).click();
+      const row = page.locator(".settings-row", { hasText: assistant });
+      assert.equal(await row.locator(".g-agent-mark").count(), 1, assistant);
+      await page.getByRole("button", { name: `Remove ${assistant}` }).click();
+    }
 
     // When the relay cannot be reached the row says so and why; turning it off says off.
     await page.evaluate(() => window.remoteFixture.offline("The relay could not be reached."));

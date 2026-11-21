@@ -330,6 +330,9 @@ pub struct BotLink<'a> {
     /// Whether the relay may offer this link the full-control tools. The computer checks each
     /// call itself; this only keeps the list a bot is shown honest.
     pub full: bool,
+    /// Which set of tools this copy of the app answers ([`crate::bot::TOOLS_VERSION`]), for the
+    /// relay to list that one. A relay from before the number ignores it.
+    pub v: u32,
 }
 
 #[cfg(test)]

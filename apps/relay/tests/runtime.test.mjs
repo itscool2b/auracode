@@ -132,7 +132,14 @@ const mcp = (hostId, reference, body, init = {}) =>
 test("reports health and hides everything else", async () => {
   const health = await runtime.dispatchFetch(`${BASE}/health`);
   assert.equal(health.status, 200);
-  assert.deepEqual(await health.json(), { ok: true, protocol: 1, tools: 8, full_tools: 21 });
+  assert.deepEqual(await health.json(), {
+    ok: true,
+    protocol: 1,
+    tools: 7,
+    full_tools: 11,
+    first_tools: 8,
+    first_full_tools: 21,
+  });
   assert.equal(health.headers.get("cache-control"), "no-store");
   for (const path of ["", "nothing", "host", "host/short", `other/${id(16)}`])
     assert.equal((await runtime.dispatchFetch(`${BASE}/${path}`)).status, 404, path);
@@ -431,6 +438,8 @@ test("refuses what a browser should not send", async () => {
   desk.close();
 });
 
+// A copy of the app from before the current tools sends its links without a set: its bots are
+// listed the first tools, which are the ones it answers.
 test("serves a bot's MCP calls through the desktop", async () => {
   const hostKey = id(32);
   const hostId = idOf(hostKey);
@@ -468,7 +477,7 @@ test("serves a bot's MCP calls through the desktop", async () => {
   const hello = await started.json();
   assert.equal(hello.result.protocolVersion, "2025-06-18");
   assert.deepEqual(hello.result.capabilities, { tools: { listChanged: false } });
-  assert.equal(hello.result.serverInfo.name, "auracode");
+  assert.equal(hello.result.serverInfo.name, "o7");
   assert.match(hello.result.instructions, /list_chats/);
   // An unknown protocol version gets the newest one this server speaks.
   const newer = await (
@@ -670,6 +679,108 @@ test("serves a bot's MCP calls through the desktop", async () => {
     (await mcp(hostId, reference, { jsonrpc: "2.0", id: 12, method: "tools/list" })).status,
     200,
   );
+});
+
+test("lists the current tools to a bot whose computer answers them", async () => {
+  const hostKey = id(32);
+  const hostId = idOf(hostKey);
+  const [chats, wide, older, odd] = [0, 1, 2, 3].map(() => ({ id: id(8), token: id(32) }));
+  const desk = await host(hostId, hostKey);
+  desk.send(
+    `l${JSON.stringify([
+      { id: chats.id, hash: hash(chats.token), full: false, v: 2 },
+      { id: wide.id, hash: hash(wide.token), full: true, v: 2 },
+      // No set named, and a set this relay does not know: the first tools.
+      { id: older.id, hash: hash(older.token), full: true },
+      { id: odd.id, hash: hash(odd.token), full: true, v: "2" },
+    ])}`,
+  );
+  await desk.quiet(100);
+  const ask = async (link, body) =>
+    (await mcp(hostId, `${link.id}.${link.token}`, { jsonrpc: "2.0", id: 1, ...body })).json();
+  const tools = async (link) => (await ask(link, { method: "tools/list" })).result.tools;
+
+  const few = await tools(chats);
+  assert.deepEqual(
+    few.map((tool) => tool.name),
+    ["chats", "projects", "read", "send", "wait", "answer", "stop"],
+  );
+  const all = await tools(wide);
+  assert.deepEqual(
+    all.map((tool) => tool.name),
+    [...few.map((tool) => tool.name), "set", "changes", "memory", "new_project"],
+  );
+  // What only a full-control link may choose is not offered to another, and no mark of this
+  // relay's is in what either is shown.
+  const send = (list) =>
+    Object.keys(list.find((tool) => tool.name === "send").inputSchema.properties);
+  assert.deepEqual(send(few), ["chat", "folder", "agent", "text", "wait"]);
+  assert.deepEqual(send(all), [
+    "chat",
+    "folder",
+    "agent",
+    "text",
+    "wait",
+    "model",
+    "thinking",
+    "access",
+  ]);
+  for (const tool of all) {
+    assert.equal("full" in tool, false, tool.name);
+    for (const [name, argument] of Object.entries(tool.inputSchema.properties))
+      assert.equal("full" in argument, false, `${tool.name}.${name}`);
+    assert.equal(tool.inputSchema.type, "object", tool.name);
+    assert.equal(tool.inputSchema.additionalProperties, false, tool.name);
+    assert.ok(tool.description.length > 20, tool.name);
+  }
+  // The point of the set: it costs a bot well under half of what the first one did to carry.
+  const size = (list) => JSON.stringify({ tools: list }).length;
+  const first = await tools(older);
+  assert.equal(first.length, 21);
+  assert.equal((await tools(odd)).length, 21);
+  assert.ok(size(all) * 2 < size(first), `${size(all)} of ${size(first)}`);
+  assert.ok(size(few) < 3400, String(size(few)));
+  assert.ok(size(all) < 5400, String(size(all)));
+
+  const hello = await ask(chats, { method: "initialize", params: {} });
+  assert.match(hello.result.instructions, /one send/);
+  assert.doesNotMatch(hello.result.instructions, /list_chats/);
+  assert.match(
+    (await ask(older, { method: "initialize", params: {} })).result.instructions,
+    /list_chats/,
+  );
+
+  // A tool of the other set, or above the link's level, does not exist for it.
+  for (const [link, name] of [
+    [chats, "set"],
+    [chats, "list_chats"],
+    [older, "send"],
+  ]) {
+    const refused = await ask(link, { method: "tools/call", params: { name, arguments: {} } });
+    assert.equal(refused.error.code, -32602, name);
+  }
+  await desk.quiet(100);
+  const calling = ask(chats, {
+    method: "tools/call",
+    params: { name: "send", arguments: { chat: "c1", text: "Run the tests" } },
+  });
+  const call = JSON.parse((await desk.message()).slice(1));
+  assert.deepEqual(
+    { ...call, rid: "" },
+    {
+      rid: "",
+      bot: chats.id,
+      token: chats.token,
+      tool: "send",
+      args: { chat: "c1", text: "Run the tests" },
+    },
+  );
+  desk.send(`b${JSON.stringify({ rid: call.rid, text: "The turn finished.", error: false })}`);
+  assert.deepEqual((await calling).result, {
+    content: [{ type: "text", text: "The turn finished." }],
+    isError: false,
+  });
+  desk.close();
 });
 
 test("a removed bot link stops working", async () => {

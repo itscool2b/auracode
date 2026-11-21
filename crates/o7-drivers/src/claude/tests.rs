@@ -756,6 +756,248 @@ async fn the_plan_approval_card_is_a_mode_switch_with_its_plan() {
     h.stop().await;
 }
 
+/// A chat whose Claude keeps the person's settings in `config`.
+fn with_settings(mut setup: SessionSetup, config: &std::path::Path) -> SessionSetup {
+    setup
+        .launch
+        .set_env
+        .push(("CLAUDE_CONFIG_DIR".into(), config.as_os_str().to_owned()));
+    setup
+}
+
+/// Where the person's settings cannot be found, an ask rule cannot be ruled out: a command made
+/// of several is shown, and the requests that hide nothing are still answered.
+#[tokio::test(start_paused = true)]
+async fn planning_under_full_access_asks_about_compound_commands_when_settings_cannot_be_found() {
+    for folder in [None, Some("settings/not/in/full")] {
+        let mut settings = setup();
+        if let Some(folder) = folder {
+            settings
+                .launch
+                .set_env
+                .push(("CLAUDE_CONFIG_DIR".into(), folder.into()));
+        }
+        let mut h = Harness::start_with(settings).await;
+        h.ready().await;
+        set_control(
+            &mut h,
+            crate::controls::ACCESS,
+            "bypassPermissions",
+            "bypassPermissions",
+        )
+        .await;
+        set_control(&mut h, crate::controls::WORKFLOW, "plan", "plan").await;
+        h.prompt();
+        h.wire().await;
+        h.send(json!({"type":"control_request","request_id":"several","request":{
+            "subtype":"can_use_tool","tool_name":"Bash","decision_reason_type":"subcommandResults",
+            "input":{"command":"git status && git log"}
+        }}))
+        .await;
+        loop {
+            if let DriverEvent::Permission { request, .. } = h.event().await {
+                assert_eq!(request.request_id, "several");
+                break;
+            }
+        }
+        h.send(
+            json!({"type":"control_request","request_id":"run","request":{
+                "subtype":"can_use_tool","tool_name":"Bash","input":{"command":"git status"}
+            }}),
+        )
+        .await;
+        let answer = h.wire().await;
+        assert_eq!(answer["response"]["request_id"], "run");
+        assert_eq!(answer["response"]["response"]["behavior"], "allow");
+        h.stop().await;
+    }
+}
+
+/// Sets a native control and answers Claude's mode change.
+async fn set_control(h: &mut Harness, id: &str, value: &str, native: &str) {
+    let (reply, result) = tokio::sync::oneshot::channel();
+    h.tx.send(DriverCommand::SetOption {
+        option_id: id.into(),
+        value: o7_protocol::session::ConfigValue::Choice {
+            value: value.into(),
+        },
+        reply,
+    })
+    .unwrap();
+    let request = h.wire().await;
+    assert_eq!(
+        request["request"],
+        json!({"subtype":"set_permission_mode","mode":native})
+    );
+    h.send(json!({"type":"control_response","response":{"subtype":"success","request_id":request["request_id"],"response":{"mode":native}}})).await;
+    result.await.unwrap().unwrap();
+}
+
+/// Plan takes the place of Claude's access mode, so a planning turn asks for every command. A
+/// chat on Full access answers those itself, as that level does while executing, and still shows
+/// what a person must decide: leaving Plan, a file edit, and anything Claude marks as needing one.
+#[tokio::test(start_paused = true)]
+async fn planning_under_full_access_asks_only_what_a_person_must_decide() {
+    // The person's settings are a folder that is there and holds no ask rule.
+    let config = tempfile::tempdir().expect("settings");
+    let mut h = Harness::start_with(with_settings(setup(), config.path())).await;
+    h.ready().await;
+    set_control(
+        &mut h,
+        crate::controls::ACCESS,
+        "bypassPermissions",
+        "bypassPermissions",
+    )
+    .await;
+    set_control(&mut h, crate::controls::WORKFLOW, "plan", "plan").await;
+    h.prompt();
+    h.wire().await;
+    let ask = |id: &str, tool: &str, extra: Value| {
+        let mut request = json!({"subtype":"can_use_tool","tool_name":tool,"input":{"command":"git status","future":1}});
+        for (key, value) in extra.as_object().expect("an object") {
+            request[key] = value.clone();
+        }
+        json!({"type":"control_request","request_id":id,"request":request})
+    };
+    for (id, tool, extra) in [
+        ("run", "Bash", json!({})),
+        ("mcp", "mcp__docs__search", json!({})),
+        ("agent", "Agent", json!({"decision_reason_type":"mode"})),
+        // As Claude asked in real planning turns: a subagent's command it could not prove
+        // read-only, and one made of several.
+        (
+            "variable",
+            "Bash",
+            json!({"agent_id":"a1","decision_reason_type":"other",
+                "decision_reason":"A variable in this command can't be checked before it runs"}),
+        ),
+        (
+            "several",
+            "Bash",
+            json!({"agent_id":"a1","decision_reason_type":"subcommandResults"}),
+        ),
+        (
+            "outside",
+            "Read",
+            json!({"decision_reason_type":"workingDir"}),
+        ),
+    ] {
+        h.send(ask(id, tool, extra)).await;
+        let answer = h.wire().await;
+        assert_eq!(answer["response"]["request_id"], id);
+        assert_eq!(
+            answer["response"]["response"],
+            json!({"behavior":"allow","updatedInput":{"command":"git status","future":1}}),
+            "{tool} is allowed with its input as received"
+        );
+    }
+    for (id, tool, extra) in [
+        ("edit", "Write", json!({})),
+        ("leave", "ExitPlanMode", json!({})),
+        ("person", "Bash", json!({"requires_user_interaction":true})),
+        ("no", "Bash", json!({"default_to_no":true})),
+        ("rule", "Bash", json!({"decision_reason_type":"rule"})),
+        ("hook", "Bash", json!({"decision_reason_type":"hook"})),
+        (
+            "safety",
+            "Bash",
+            json!({"decision_reason_type":"safetyCheck"}),
+        ),
+        // A reason this build does not know is never answered for the person.
+        (
+            "unknown",
+            "Bash",
+            json!({"decision_reason_type":"a_reason_from_later"}),
+        ),
+    ] {
+        h.send(ask(id, tool, extra)).await;
+        loop {
+            if let DriverEvent::Permission { request, .. } = h.event().await {
+                assert_eq!(request.request_id, id, "{tool} is shown to the person");
+                break;
+            }
+        }
+    }
+    assert!(
+        timeout(Duration::from_millis(5), h.end.from_client.recv())
+            .await
+            .is_err(),
+        "none of the shown requests was answered"
+    );
+    h.stop().await;
+}
+
+/// Claude does not say when one part of a compound command matched an ask rule. With one
+/// written for the chat's project, such a command is shown; other requests are still answered.
+#[tokio::test(start_paused = true)]
+async fn planning_under_full_access_asks_about_compound_commands_where_an_ask_rule_exists() {
+    let project = tempfile::tempdir().expect("project");
+    std::fs::create_dir_all(project.path().join(".claude")).expect("settings folder");
+    std::fs::write(
+        project.path().join(".claude").join("settings.json"),
+        r#"{"permissions":{"ask":["Bash(git push:*)"]}}"#,
+    )
+    .expect("settings");
+    let config = tempfile::tempdir().expect("settings");
+    let mut settings = with_settings(setup(), config.path());
+    settings.folder = project.path().to_owned();
+    let mut h = Harness::start_with(settings).await;
+    h.ready().await;
+    set_control(
+        &mut h,
+        crate::controls::ACCESS,
+        "bypassPermissions",
+        "bypassPermissions",
+    )
+    .await;
+    set_control(&mut h, crate::controls::WORKFLOW, "plan", "plan").await;
+    h.prompt();
+    h.wire().await;
+    let ask = |id: &str, reason: &str| {
+        json!({"type":"control_request","request_id":id,"request":{
+            "subtype":"can_use_tool","tool_name":"Bash","decision_reason_type":reason,
+            "input":{"command":"git status && git push"}
+        }})
+    };
+    h.send(ask("several", "subcommandResults")).await;
+    loop {
+        if let DriverEvent::Permission { request, .. } = h.event().await {
+            assert_eq!(request.request_id, "several");
+            break;
+        }
+    }
+    h.send(ask("variable", "other")).await;
+    let answer = h.wire().await;
+    assert_eq!(answer["response"]["request_id"], "variable");
+    assert_eq!(answer["response"]["response"]["behavior"], "allow");
+    h.stop().await;
+}
+
+/// The same planning turn on any lower access level asks, as it always has.
+#[tokio::test(start_paused = true)]
+async fn planning_under_lower_access_still_asks() {
+    let mut h = Harness::start().await;
+    h.ready().await;
+    set_control(
+        &mut h,
+        crate::controls::ACCESS,
+        "acceptEdits",
+        "acceptEdits",
+    )
+    .await;
+    set_control(&mut h, crate::controls::WORKFLOW, "plan", "plan").await;
+    h.prompt();
+    h.wire().await;
+    h.send(json!({"type":"control_request","request_id":"run","request":{"subtype":"can_use_tool","tool_name":"Bash","input":{"command":"git status"}}})).await;
+    loop {
+        if let DriverEvent::Permission { request, .. } = h.event().await {
+            assert_eq!(request.request_id, "run");
+            break;
+        }
+    }
+    h.stop().await;
+}
+
 #[tokio::test(start_paused = true)]
 async fn unsupported_effort_never_reaches_the_cli() {
     let mut h = Harness::start().await;

@@ -1138,3 +1138,53 @@ html[data-motion="off"] * {
     letter-spacing: var(--g-tracking-title);
   }
 }
+
+/* ------------------------------------------------- the picture beside the steps */
+
+/*
+ * A window with room shows setup's picture (SetupMap) beside the steps, in the same card: the
+ * steps keep their column and the picture a flat well of its own. Narrower, the card is the
+ * column alone, as it always was.
+ */
+.setup-side {
+  display: none;
+}
+
+@media (min-width: 1100px) and (min-height: 640px) {
+  .setup-column {
+    display: grid;
+    grid-template-columns: minmax(0, 480px) minmax(0, 1fr);
+    gap: var(--g-space-40);
+    align-items: start;
+    width: min(1040px, calc(100% - var(--g-space-48)));
+  }
+
+  .setup-side {
+    display: block;
+    box-sizing: border-box;
+    padding: var(--g-space-24);
+    border-radius: var(--g-radius-16);
+    background-color: var(--ui-card-flat);
+  }
+
+  /* The picture already shows the agents joined to o7; the roster keeps its list. */
+  .setup-column .agent-connect {
+    display: none;
+  }
+}
+
+/* The four assistants, two to a row in the steps' column. */
+.setup-column .setup-bots {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  margin-top: var(--g-space-24);
+}
+
+.setup-bots .remote-bot-pick {
+  position: relative;
+}
+
+.setup-bot-linked {
+  flex: none;
+  margin-left: auto;
+  color: var(--g-green);
+}

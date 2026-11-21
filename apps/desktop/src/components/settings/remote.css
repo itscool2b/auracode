@@ -101,3 +101,174 @@
   font-size: var(--g-text-ui);
   line-height: var(--g-leading-ui);
 }
+
+/*
+ * No bot is linked yet: the well names the four assistants, each a button that opens the link
+ * dialog for it, so the page says what can be linked before anything is.
+ */
+.remote-bots > p {
+  margin: 0;
+}
+
+.remote-bot-picks {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: var(--g-space-8);
+  margin: var(--g-space-12) 0 0;
+  padding: 0;
+  list-style: none;
+}
+
+.remote-bot-pick {
+  display: flex;
+  align-items: center;
+  gap: var(--g-space-12);
+  width: 100%;
+  padding: var(--g-space-8) var(--g-space-12) var(--g-space-8) var(--g-space-8);
+  border: 0;
+  border-radius: var(--g-radius-12);
+  background-color: var(--ui-card-flat);
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: background-color var(--g-dur-fast) var(--g-ease);
+}
+
+.remote-bot-pick:hover:not(:disabled) {
+  background-color: var(--g-glass-control-hover);
+}
+
+.remote-bot-pick:active:not(:disabled) {
+  background-color: var(--g-glass-control-active);
+}
+
+.remote-bot-pick:disabled {
+  cursor: default;
+}
+
+.remote-bot-pick > span:not([data-logo]) {
+  display: grid;
+  min-width: 0;
+}
+
+.remote-bot-pick strong {
+  overflow: hidden;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: var(--g-weight-medium);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.remote-bot-pick strong + span {
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+/* The dialog's first choice: which assistant, each with its mark. */
+.remote-kinds {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--g-space-8);
+  margin: 0 0 var(--g-space-16);
+  padding: 0;
+  border: 0;
+}
+
+.remote-kinds > legend {
+  margin-bottom: var(--g-space-8);
+  padding: 0;
+  color: var(--g-fg-1);
+  font-weight: var(--g-weight-medium);
+}
+
+.remote-kind {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--g-space-8);
+  padding: var(--g-space-6) var(--g-space-12) var(--g-space-6) var(--g-space-6);
+  border-radius: var(--g-radius-pill);
+  background-color: var(--ui-card-flat);
+  color: var(--g-fg-2);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  cursor: pointer;
+  transition: background-color var(--g-dur-fast) var(--g-ease);
+}
+
+.remote-kind:hover {
+  background-color: var(--g-glass-control-hover);
+}
+
+.remote-kind > input {
+  position: absolute;
+  /* Over the mark and the name, so the whole pill is the radio. */
+  z-index: 1;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  border-radius: inherit;
+  opacity: 0;
+  cursor: pointer;
+}
+
+.remote-kind:has(> input:checked) {
+  background-color: var(--g-glass-control-active);
+  color: var(--g-fg-1);
+}
+
+.remote-kind:has(> input:focus-visible) {
+  outline: 2px solid var(--g-focus);
+  outline-offset: 2px;
+}
+
+.remote-kind > .g-agent-mark {
+  border-radius: var(--g-radius-pill);
+}
+
+.remote-kind-glyph {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 28px;
+  height: 28px;
+  color: var(--g-fg-2);
+}
+
+.remote-fine {
+  margin-top: var(--g-space-12);
+  color: var(--g-fg-3);
+  font-size: var(--g-text-meta);
+  line-height: var(--g-leading-meta);
+}
+
+/* A few lines to paste: shown whole, never wrapped, so what is copied reads as it will be used. */
+textarea.remote-secret {
+  height: auto;
+  padding-block: var(--g-space-8);
+  resize: none;
+  line-height: var(--g-leading-meta);
+  white-space: pre;
+}
+
+.remote-bots > p > strong {
+  display: block;
+  color: var(--g-fg-1);
+  font-size: var(--g-text-ui);
+  line-height: var(--g-leading-ui);
+  font-weight: var(--g-weight-medium);
+}
+
+/* Lines to paste get the dialog width; Copy sits under them at its own size. */
+.remote-copy:where([data-lines]) {
+  flex-direction: column;
+}
+
+.remote-copy:where([data-lines]) > .g-button {
+  align-self: flex-end;
+}

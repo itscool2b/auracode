@@ -163,6 +163,40 @@ try {
       // Setup offers no account and no sign-in: the first project follows the agents.
       assert.equal(await page.getByRole("button", { name: "Open Account" }).count(), 0);
       await page.getByRole("button", { name: "Continue", exact: true }).click();
+      // Linking an assistant follows the agents: the four are named with their marks, the dialog
+      // opens for the one picked, and closing it links nothing and turns nothing on.
+      await page.getByRole("heading", { name: /^Bring your assistant./ }).waitFor();
+      assert.equal(await page.locator(".setup-bots .remote-bot-pick .g-agent-mark").count(), 4);
+      await page.getByTestId("setup-link-openclaw").click();
+      const linking = page.getByRole("dialog", { name: "Link a bot" });
+      assert.equal(await linking.getByRole("radio", { name: "OpenClaw" }).isChecked(), true);
+      await page.keyboard.press("Escape");
+      await linking.waitFor({ state: "detached" });
+      assert.deepEqual(await page.evaluate(() => window.remoteFixture.calls()), []);
+      // A link made here shows as linked, on its button and in the picture.
+      await page.getByTestId("setup-link-hermes").click();
+      await linking.getByRole("button", { name: "Create link" }).click();
+      await linking.getByRole("textbox", { name: "Lines for Hermes' config" }).waitFor();
+      await linking.getByRole("button", { name: "Done" }).click();
+      await page.getByRole("button", { name: /^Hermess*Linked/ }).waitFor();
+      assert.deepEqual(await page.evaluate(() => window.remoteFixture.calls()), [
+        "enabled:true",
+        "create-bot:Hermes",
+      ]);
+      await settled(page);
+      await page.screenshot({ path: resolve(out, `${engine}-assistant.png`) });
+      assert.deepEqual(
+        (await new AxeBuilder({ page }).analyze()).violations,
+        [],
+        `${engine} assistant accessibility`,
+      );
+      // It is a page of the agents step: a setup left here resumes at the agents.
+      await page.reload();
+      await page.getByRole("heading", { name: /^Found 3 agents./ }).waitFor();
+      await page.waitForFunction(() => !document.querySelector("[data-cinematic]"));
+      await page.getByRole("button", { name: "Continue", exact: true }).click();
+      await page.getByRole("heading", { name: /^Bring your assistant./ }).waitFor();
+      await page.getByRole("button", { name: "Continue", exact: true }).click();
       // The step survives a restart, and a setup saved at the retired motion step resumes at the
       // step that followed it.
       await page.getByRole("heading", { name: /^Add a first project\./ }).waitFor();

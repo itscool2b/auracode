@@ -97,6 +97,26 @@ pub fn merge_windows_path(
     merged.join(";")
 }
 
+/// Whether the registry holds a key at `subkey`, for the machine or for this user: where an
+/// organisation's policy for a program lives. A key that is there but may not be opened counts
+/// as there. Never, off Windows.
+pub fn policy_key_exists(subkey: &str) -> bool {
+    #[cfg(windows)]
+    {
+        [winreg::HKLM, winreg::HKCU]
+            .iter()
+            .any(|root| match root.open_subkey(subkey) {
+                Ok(_) => true,
+                Err(error) => error.kind() != std::io::ErrorKind::NotFound,
+            })
+    }
+    #[cfg(not(windows))]
+    {
+        let _ = subkey;
+        false
+    }
+}
+
 /// The registry's environment over `base` (o7's own env without its launch context).
 #[cfg(windows)]
 pub(crate) fn registry_env(base: &EnvMap) -> std::io::Result<EnvMap> {

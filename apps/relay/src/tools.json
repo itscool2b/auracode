@@ -1,512 +1,196 @@
 [
   {
-    "name": "list_chats",
-    "title": "List chats",
-    "description": "List the coding-agent chats on the connected computer, most recently active first. Each line gives the chat id, its title, project, agent, status (working, idle, stopped, failed or needs sign-in) and whether it is waiting for an answer from a person. Call this first to find a chat id.",
-    "inputSchema": {
-      "type": "object",
-      "properties": {},
-      "additionalProperties": false
-    },
-    "annotations": {
-      "readOnlyHint": true,
-      "openWorldHint": false
-    }
-  },
-  {
-    "name": "list_projects",
-    "title": "List projects and agents",
-    "description": "List the projects on the connected computer with their folders, and the coding agents installed there. Use a folder id and an agent id from this list with start_chat.",
-    "inputSchema": {
-      "type": "object",
-      "properties": {},
-      "additionalProperties": false
-    },
-    "annotations": {
-      "readOnlyHint": true,
-      "openWorldHint": false
-    }
-  },
-  {
-    "name": "read_chat",
-    "title": "Read a chat",
-    "description": "Read the most recent turns of one chat: what was asked, the steps the agent took, its answer, and any request still waiting for an answer (with the request id and the option ids respond_to_request accepts).",
+    "name": "chats",
+    "description": "List the open chats on the computer, newest first: id, status, title, project, agent.",
     "inputSchema": {
       "type": "object",
       "properties": {
-        "chat_id": {
+        "query": {
           "type": "string",
-          "description": "The chat's id, from list_chats."
+          "description": "Only chats whose title, project or agent contains this."
         },
+        "page": { "type": "integer", "minimum": 1 }
+      },
+      "additionalProperties": false
+    },
+    "annotations": { "readOnlyHint": true }
+  },
+  {
+    "name": "projects",
+    "description": "List the projects with their ids, their folder ids (send starts a chat in one) and the agents ready to start one.",
+    "inputSchema": { "type": "object", "properties": {}, "additionalProperties": false },
+    "annotations": { "readOnlyHint": true }
+  },
+  {
+    "name": "read",
+    "description": "Read a chat's latest turn: what was asked, the agent's last steps, its answer, and any request it waits on.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "chat": { "type": "string", "description": "The chat's id." },
         "turns": {
           "type": "integer",
           "minimum": 1,
           "maximum": 10,
-          "description": "How many of the latest turns to read. Defaults to 2."
-        }
+          "description": "How many of the latest turns. Default 1."
+        },
+        "full": { "type": "boolean", "description": "Longer excerpts." }
       },
-      "required": ["chat_id"],
+      "required": ["chat"],
       "additionalProperties": false
     },
-    "annotations": {
-      "readOnlyHint": true,
-      "openWorldHint": false
-    }
+    "annotations": { "readOnlyHint": true }
   },
   {
-    "name": "send_message",
-    "title": "Send a message",
-    "description": "Send a message to a chat's coding agent, as the person at the computer would. It starts a turn, or waits in the chat's queue when the agent is already working. The agent can edit files and run commands on that computer. Follow with wait_for_chat to get the result.",
+    "name": "send",
+    "description": "Send a message to a chat's coding agent, or start a chat in a folder with it, then wait for the turn and return its result. The agent can edit files and run commands on that computer. If the turn is not done in time, call wait.",
     "inputSchema": {
       "type": "object",
       "properties": {
-        "chat_id": {
+        "chat": { "type": "string", "description": "An existing chat's id." },
+        "folder": {
           "type": "string",
-          "description": "The chat's id, from list_chats."
+          "description": "Instead of chat: a folder id from projects, to start a new chat there."
         },
-        "text": {
+        "agent": {
           "type": "string",
-          "minLength": 1,
-          "description": "The message to send."
-        }
-      },
-      "required": ["chat_id", "text"],
-      "additionalProperties": false
-    },
-    "annotations": {
-      "readOnlyHint": false,
-      "destructiveHint": true,
-      "openWorldHint": false
-    }
-  },
-  {
-    "name": "wait_for_chat",
-    "title": "Wait for a chat",
-    "description": "Wait until a chat's agent finishes its turn or needs an answer, then report its status, its latest answer and any waiting request. Returns after at most timeout_seconds even if the agent is still working; call it again to keep waiting.",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "chat_id": {
-          "type": "string",
-          "description": "The chat's id, from list_chats."
+          "description": "With folder: an agent id. Default: the project's agent."
         },
-        "timeout_seconds": {
+        "text": { "type": "string", "minLength": 1 },
+        "wait": {
           "type": "integer",
-          "minimum": 1,
-          "maximum": 45,
-          "description": "The longest to wait. Defaults to 30."
-        }
-      },
-      "required": ["chat_id"],
-      "additionalProperties": false
-    },
-    "annotations": {
-      "readOnlyHint": true,
-      "openWorldHint": false
-    }
-  },
-  {
-    "name": "respond_to_request",
-    "title": "Answer a waiting request",
-    "description": "Answer a request a chat's agent is waiting on. For a permission request, pass one of its option ids from read_chat (for example to allow or reject a command). Leave option_id out to decline the request or dismiss a question; then send your answer as a message.",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "chat_id": {
-          "type": "string",
-          "description": "The chat's id, from list_chats."
-        },
-        "request_id": {
-          "type": "string",
-          "description": "The request's id, from read_chat."
-        },
-        "option_id": {
-          "type": "string",
-          "description": "The chosen option's id. Leave it out to decline or dismiss."
-        }
-      },
-      "required": ["chat_id", "request_id"],
-      "additionalProperties": false
-    },
-    "annotations": {
-      "readOnlyHint": false,
-      "destructiveHint": true,
-      "openWorldHint": false
-    }
-  },
-  {
-    "name": "stop_chat",
-    "title": "Stop a turn",
-    "description": "Stop the turn a chat's agent is working on. The chat and its history stay; the agent stops what it was doing.",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "chat_id": {
-          "type": "string",
-          "description": "The chat's id, from list_chats."
-        }
-      },
-      "required": ["chat_id"],
-      "additionalProperties": false
-    },
-    "annotations": {
-      "readOnlyHint": false,
-      "destructiveHint": false,
-      "openWorldHint": false
-    }
-  },
-  {
-    "name": "start_chat",
-    "title": "Start a chat",
-    "description": "Start a new chat with a coding agent in one of a project's folders and send its first message. Returns the new chat's id. Follow with wait_for_chat to get the result.",
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "folder_id": {
-          "type": "string",
-          "description": "A folder id from list_projects."
-        },
-        "agent_id": {
-          "type": "string",
-          "description": "An agent id from list_projects. Leave it out to use the project's usual agent."
-        },
-        "text": {
-          "type": "string",
-          "minLength": 1,
-          "description": "The first message to send."
-        }
-      },
-      "required": ["folder_id", "text"],
-      "additionalProperties": false
-    },
-    "annotations": {
-      "readOnlyHint": false,
-      "destructiveHint": true,
-      "openWorldHint": false
-    }
-  },
-  {
-    "name": "create_project",
-    "title": "Create a project",
-    "description": "Make a new project on the connected computer from a folder that already exists there. Returns the project's id and its folder id, which start_chat takes. An agent started in that folder can read and change the files in it, so use the folder the person named.",
-    "full": true,
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "path": {
-          "type": "string",
-          "minLength": 1,
-          "description": "The folder's full path on the computer."
-        },
-        "name": {
-          "type": "string",
-          "description": "The project's name. Leave it out to use the folder's name."
-        }
-      },
-      "required": ["path"],
-      "additionalProperties": false
-    },
-    "annotations": {
-      "openWorldHint": false,
-      "readOnlyHint": false,
-      "destructiveHint": true
-    }
-  },
-  {
-    "name": "chat_options",
-    "title": "Show a chat's options",
-    "description": "List the models, thinking levels and access levels a chat offers, with the current choice of each marked. Call this before set_model, set_thinking or set_access.",
-    "full": true,
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "chat_id": {
-          "type": "string",
-          "description": "A chat id from list_chats."
-        }
-      },
-      "required": ["chat_id"],
-      "additionalProperties": false
-    },
-    "annotations": {
-      "openWorldHint": false,
-      "readOnlyHint": true
-    }
-  },
-  {
-    "name": "set_model",
-    "title": "Choose a chat's model",
-    "description": "Change the model a chat's agent uses, to one of the values chat_options lists. It applies from the next message.",
-    "full": true,
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "chat_id": {
-          "type": "string",
-          "description": "A chat id from list_chats."
+          "minimum": 0,
+          "maximum": 240,
+          "description": "Seconds to wait for the result, within your own tool timeout. Default 30; 0 returns at once."
         },
         "model": {
           "type": "string",
-          "minLength": 1,
-          "description": "A model value from chat_options."
-        }
-      },
-      "required": ["chat_id", "model"],
-      "additionalProperties": false
-    },
-    "annotations": {
-      "openWorldHint": false,
-      "readOnlyHint": false,
-      "destructiveHint": false
-    }
-  },
-  {
-    "name": "set_thinking",
-    "title": "Choose a chat's thinking level",
-    "description": "Change how much a chat's agent thinks before answering, to one of the levels chat_options lists.",
-    "full": true,
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "chat_id": {
-          "type": "string",
-          "description": "A chat id from list_chats."
+          "description": "A model value from set, for this chat from now on.",
+          "full": true
         },
-        "level": {
+        "thinking": {
           "type": "string",
-          "minLength": 1,
-          "description": "A thinking level from chat_options."
-        }
-      },
-      "required": ["chat_id", "level"],
-      "additionalProperties": false
-    },
-    "annotations": {
-      "openWorldHint": false,
-      "readOnlyHint": false,
-      "destructiveHint": false
-    }
-  },
-  {
-    "name": "set_access",
-    "title": "Choose a chat's access level",
-    "description": "Change what a chat's agent may do without asking: ask (it asks before editing or running commands), auto_edit (it edits files and asks before commands) or full_auto (it works without asking). Use the level the person asked for.",
-    "full": true,
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "chat_id": {
-          "type": "string",
-          "description": "A chat id from list_chats."
+          "description": "A thinking level from set.",
+          "full": true
         },
         "access": {
           "type": "string",
-          "enum": ["ask", "auto_edit", "full_auto"]
+          "enum": ["ask", "auto_edit", "full_auto"],
+          "description": "What the agent may do without asking: nothing, edit files, or everything.",
+          "full": true
         }
       },
-      "required": ["chat_id", "access"],
+      "required": ["text"],
       "additionalProperties": false
-    },
-    "annotations": {
-      "openWorldHint": false,
-      "readOnlyHint": false,
-      "destructiveHint": true
     }
   },
   {
-    "name": "switch_agent",
-    "title": "Hand a chat to another agent",
-    "description": "Continue a chat with a different coding agent. The chat's agent is stopped and the conversation so far is handed to the new one. Returns the chat id to use from then on; the next send_message carries the handoff.",
-    "full": true,
+    "name": "wait",
+    "description": "Wait until a chat's agent finishes its turn or asks for something, then return the result. If the turn is not done in time, call it again.",
     "inputSchema": {
       "type": "object",
       "properties": {
-        "chat_id": {
+        "chat": { "type": "string" },
+        "seconds": { "type": "integer", "minimum": 1, "maximum": 240, "description": "Default 30." }
+      },
+      "required": ["chat"],
+      "additionalProperties": false
+    },
+    "annotations": { "readOnlyHint": true }
+  },
+  {
+    "name": "answer",
+    "description": "Answer a request a chat's agent waits on, then wait for the turn as send does. Give option for a permission request or text for a question; give neither to decline it.",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "chat": { "type": "string" },
+        "request": { "type": "string", "description": "The request's id." },
+        "option": { "type": "string", "description": "One of the request's option ids." },
+        "text": {
           "type": "string",
-          "description": "A chat id from list_chats."
+          "description": "The answer in words, or a choice word for word. Several questions: one line each."
         },
-        "agent_id": {
-          "type": "string",
-          "minLength": 1,
-          "description": "An agent id from list_projects."
-        }
+        "wait": { "type": "integer", "minimum": 0, "maximum": 240 }
       },
-      "required": ["chat_id", "agent_id"],
+      "required": ["chat", "request"],
       "additionalProperties": false
-    },
-    "annotations": {
-      "openWorldHint": false,
-      "readOnlyHint": false,
-      "destructiveHint": true
     }
   },
   {
-    "name": "rename_chat",
-    "title": "Rename a chat",
-    "description": "Give a chat a new title.",
+    "name": "stop",
+    "description": "Stop the turn a chat's agent is working on. The chat stays.",
+    "inputSchema": {
+      "type": "object",
+      "properties": { "chat": { "type": "string" } },
+      "required": ["chat"],
+      "additionalProperties": false
+    }
+  },
+  {
+    "name": "set",
     "full": true,
+    "description": "Change a chat. With only chat, list the models, thinking levels and access levels it offers.",
     "inputSchema": {
       "type": "object",
       "properties": {
-        "chat_id": {
+        "chat": { "type": "string" },
+        "model": { "type": "string" },
+        "thinking": { "type": "string" },
+        "access": { "type": "string", "enum": ["ask", "auto_edit", "full_auto"] },
+        "title": { "type": "string", "maxLength": 200 },
+        "agent": {
           "type": "string",
-          "description": "A chat id from list_chats."
+          "description": "Hand the chat to this agent. Returns the chat id to use from then on."
         },
-        "title": {
-          "type": "string",
-          "minLength": 1,
-          "maxLength": 200
-        }
+        "archived": { "type": "boolean" },
+        "start": { "type": "boolean", "description": "Start a stopped chat's agent." }
       },
-      "required": ["chat_id", "title"],
+      "required": ["chat"],
       "additionalProperties": false
-    },
-    "annotations": {
-      "openWorldHint": false,
-      "readOnlyHint": false,
-      "destructiveHint": false
     }
   },
   {
-    "name": "archive_chat",
-    "title": "Archive a chat",
-    "description": "Move a chat out of the list of open chats, or bring it back with archived false. Nothing is deleted.",
+    "name": "changes",
     "full": true,
+    "description": "List the files a chat's last turn changed, or with path show that file's changed lines.",
     "inputSchema": {
       "type": "object",
       "properties": {
-        "chat_id": {
-          "type": "string",
-          "description": "A chat id from list_chats."
-        },
-        "archived": {
-          "type": "boolean",
-          "description": "false restores it. Defaults to true."
-        }
+        "chat": { "type": "string" },
+        "path": { "type": "string" }
       },
-      "required": ["chat_id"],
+      "required": ["chat"],
       "additionalProperties": false
     },
-    "annotations": {
-      "openWorldHint": false,
-      "readOnlyHint": false,
-      "destructiveHint": false
+    "annotations": { "readOnlyHint": true }
+  },
+  {
+    "name": "memory",
+    "full": true,
+    "description": "Read a project's memory, the notes each of its chats starts with. With markdown, replace all of it (16 KiB at most).",
+    "inputSchema": {
+      "type": "object",
+      "properties": {
+        "project": { "type": "string", "description": "A project id from projects." },
+        "markdown": { "type": "string" }
+      },
+      "required": ["project"],
+      "additionalProperties": false
     }
   },
   {
-    "name": "start_agent",
-    "title": "Start a stopped chat's agent",
-    "description": "Start the agent of a chat that is stopped, without sending a message.",
+    "name": "new_project",
     "full": true,
+    "description": "Make a project from a folder that exists on the computer. Returns its folder id for send.",
     "inputSchema": {
       "type": "object",
       "properties": {
-        "chat_id": {
-          "type": "string",
-          "description": "A chat id from list_chats."
-        }
+        "path": { "type": "string", "description": "The folder's full path." },
+        "name": { "type": "string" }
       },
-      "required": ["chat_id"],
+      "required": ["path"],
       "additionalProperties": false
-    },
-    "annotations": {
-      "openWorldHint": false,
-      "readOnlyHint": false,
-      "destructiveHint": false
-    }
-  },
-  {
-    "name": "list_changes",
-    "title": "List a chat's changed files",
-    "description": "List the files a chat's last turn added, modified or deleted.",
-    "full": true,
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "chat_id": {
-          "type": "string",
-          "description": "A chat id from list_chats."
-        }
-      },
-      "required": ["chat_id"],
-      "additionalProperties": false
-    },
-    "annotations": {
-      "openWorldHint": false,
-      "readOnlyHint": true
-    }
-  },
-  {
-    "name": "read_change",
-    "title": "Read one changed file",
-    "description": "Show one file from list_changes as it was before the chat's last turn and as it is after. Only files that turn changed can be read.",
-    "full": true,
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "chat_id": {
-          "type": "string",
-          "description": "A chat id from list_chats."
-        },
-        "path": {
-          "type": "string",
-          "minLength": 1,
-          "description": "A path from list_changes."
-        }
-      },
-      "required": ["chat_id", "path"],
-      "additionalProperties": false
-    },
-    "annotations": {
-      "openWorldHint": false,
-      "readOnlyHint": true
-    }
-  },
-  {
-    "name": "read_memory",
-    "title": "Read a project's memory",
-    "description": "Read the notes every chat in a project starts with.",
-    "full": true,
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "project_id": {
-          "type": "string",
-          "description": "A project id from list_projects."
-        }
-      },
-      "required": ["project_id"],
-      "additionalProperties": false
-    },
-    "annotations": {
-      "openWorldHint": false,
-      "readOnlyHint": true
-    }
-  },
-  {
-    "name": "write_memory",
-    "title": "Replace a project's memory",
-    "description": "Replace the notes every chat in a project starts with. Send the whole new text (read_memory first, then change it), at most 16 KiB. It is refused when the owner has turned off edits to project memory.",
-    "full": true,
-    "inputSchema": {
-      "type": "object",
-      "properties": {
-        "project_id": {
-          "type": "string",
-          "description": "A project id from list_projects."
-        },
-        "markdown": {
-          "type": "string",
-          "description": "The complete new notes, as Markdown."
-        }
-      },
-      "required": ["project_id", "markdown"],
-      "additionalProperties": false
-    },
-    "annotations": {
-      "openWorldHint": false,
-      "readOnlyHint": false,
-      "destructiveHint": true
     }
   }
 ]

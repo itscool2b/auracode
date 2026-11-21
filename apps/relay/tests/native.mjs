@@ -229,27 +229,29 @@ try {
     }
   };
   const call = async (name, args = {}) => (await ask(mcp, name, args)).result.content[0].text;
-  const listed = await call("list_chats");
+  const listed = await call("chats");
   console.log(listed.trim());
-  assert.match(listed, new RegExp(`- ${created.id} "`));
-  const projects = await call("list_projects");
+  assert.match(listed, new RegExp(`\\n${created.id} \\| `));
+  const projects = await call("projects");
   console.log(projects.trim());
-  assert.match(projects, /- folder \S+: /);
-  assert.match(await call("read_chat", { chat_id: created.id }), /No turns yet\./);
+  assert.match(projects, /^Project \S+ "/);
+  assert.match(projects, /\n {2}folder \S+ /);
+  assert.match(await call("read", { chat: created.id }), /No turns yet\./);
 
   // A chat link has no tool for the rest of the app; a full control link does.
-  const refused = await ask(mcp, "chat_options", { chat_id: created.id });
+  const refused = await ask(mcp, "set", { chat: created.id });
   const refusal = JSON.stringify(refused);
   assert.ok(
     refused.error || refused.result?.isError,
     `a chat link reached a full control tool: ${refusal.slice(0, 200)}`,
   );
-  console.log(`a chat link asking for chat_options: ${refusal.slice(0, 160)}`);
+  console.log(`a chat link asking for set: ${refusal.slice(0, 160)}`);
   const wide = await invoke("remote_create_bot", { name: "Full bot", full: true });
-  const options = await ask(local(wide.url), "chat_options", { chat_id: created.id });
+  const options = await ask(local(wide.url), "set", { chat: created.id });
   const shown = options.result.content[0].text;
   assert.ok(!options.result.isError, shown);
-  console.log(`a full control link asking for chat_options: ${shown.trim().slice(0, 300)}`);
+  assert.match(shown, /^model: /);
+  console.log(`a full control link asking for set: ${shown.trim().slice(0, 300)}`);
 
   if (prompt) {
     // One short message to the real agent, sent from the phone.
@@ -295,7 +297,7 @@ try {
       ),
       "the app recorded the message sent from the phone",
     );
-    const read = await call("wait_for_chat", { chat_id: created.id, timeout_seconds: 30 });
+    const read = await call("wait", { chat: created.id, seconds: 30 });
     console.log(read.trim());
     assert.match(read, /User: Say hello from the remote page/);
     assert.match(read, /Agent: /);
@@ -329,15 +331,10 @@ try {
   await tab.screenshot({ path: join(shots, "phone-pickers.png") });
   await pickers.getByRole("button", { name: "Done" }).click();
   await pickers.waitFor({ state: "detached" });
-  const after = (await ask(local(wide.url), "chat_options", { chat_id: created.id })).result
-    .content[0].text;
-  assert.match(
-    after,
-    new RegExp(`\\(${wanted.name.replace(/[.*+?^${}()|[\]\\]/g, "\\$&")}\\) \\[current\\]`),
-  );
-  console.log(
-    `the app now reports: ${after.split("\n").find((line) => line.includes("[current]"))}`,
-  );
+  const after = (await ask(local(wide.url), "set", { chat: created.id })).result.content[0].text;
+  const models = after.split("\n").find((line) => line.startsWith("model: ")) ?? "";
+  assert.ok(models.includes(`${wanted.value} (current)`), models);
+  console.log(`the app now reports: ${models}`);
 
   // Removing the device ends the phone's session at once.
   await invoke("remote_remove_device", { id: paired.devices[0].id });

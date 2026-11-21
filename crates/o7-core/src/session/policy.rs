@@ -6,7 +6,11 @@
 //!    the user's call, and agents ask questions with kind `other` (Hermes' clarify and guarded-model
 //!    prompts among them).
 //! 2. `AutoAnswer::Never` asks; `All` covers the eight tool kinds; `Kinds` covers the listed ones.
-//! 3. The first option of kind `allow_once` is chosen; without one the request is asked
+//! 3. A chat that plans on Full access (`planning_freely`) has the kinds a planning turn needs
+//!    answered whatever the state says: the agent's Plan mode took the place of its access mode,
+//!    and with it the auto-answers, so the turn would ask for every read and command. Edits,
+//!    deletes and moves are still asked: a planning turn has no business making them.
+//! 4. The first option of kind `allow_once` is chosen; without one the request is asked
 //!    (`allow_always` writes persistent rules into the user's agent settings, and an unknown kind is
 //!    never chosen).
 
@@ -33,7 +37,21 @@ const TOOL_KINDS: [ToolKind; 8] = [
     ToolKind::Fetch,
 ];
 
-pub(crate) fn decide(state: &AutonomyState, req: &PermissionRequest) -> Decision {
+/// The tool kinds a planning turn is allowed on Full access: looking, running and fetching, never
+/// a change to a file.
+const PLANNING_KINDS: [ToolKind; 5] = [
+    ToolKind::Read,
+    ToolKind::Search,
+    ToolKind::Execute,
+    ToolKind::Think,
+    ToolKind::Fetch,
+];
+
+pub(crate) fn decide(
+    state: &AutonomyState,
+    planning_freely: bool,
+    req: &PermissionRequest,
+) -> Decision {
     let Some(kind) = req.kind else {
         return Decision::Ask;
     };
@@ -45,7 +63,7 @@ pub(crate) fn decide(state: &AutonomyState, req: &PermissionRequest) -> Decision
         AutoAnswer::All => TOOL_KINDS.contains(&kind),
         AutoAnswer::Kinds { kinds } => kinds.contains(&kind),
     };
-    if !covered {
+    if !covered && !(planning_freely && PLANNING_KINDS.contains(&kind)) {
         return Decision::Ask;
     }
     match req
@@ -65,6 +83,52 @@ mod tests {
     use o7_protocol::{Autonomy, PermissionOption};
 
     use super::*;
+
+    /// The policy for a chat that is not planning on Full access.
+    fn decide(state: &AutonomyState, req: &PermissionRequest) -> Decision {
+        super::decide(state, false, req)
+    }
+
+    #[test]
+    fn planning_on_full_access_answers_looking_and_running_and_asks_the_rest() {
+        // The agent's Plan mode turned its auto-answers off.
+        let plan = state(AutoAnswer::Never);
+        for kind in PLANNING_KINDS {
+            assert_eq!(
+                super::decide(&plan, true, &request(Some(kind), standard_options())),
+                allow("once"),
+                "{kind:?}"
+            );
+            assert_eq!(
+                decide(&plan, &request(Some(kind), standard_options())),
+                Decision::Ask,
+                "{kind:?} asks when the chat is not planning on Full access"
+            );
+        }
+        for kind in [
+            Some(ToolKind::Edit),
+            Some(ToolKind::Delete),
+            Some(ToolKind::Move),
+            Some(ToolKind::SwitchMode),
+            Some(ToolKind::Other),
+            None,
+        ] {
+            assert_eq!(
+                super::decide(&plan, true, &request(kind, standard_options())),
+                Decision::Ask,
+                "{kind:?}"
+            );
+        }
+        // Never a persistent rule, and never a request with nothing to allow once.
+        let only_always = vec![
+            option("always", PermissionOptionKind::AllowAlways),
+            option("no", PermissionOptionKind::RejectOnce),
+        ];
+        assert_eq!(
+            super::decide(&plan, true, &request(Some(ToolKind::Execute), only_always)),
+            Decision::Ask
+        );
+    }
 
     fn state(auto_answer: AutoAnswer) -> AutonomyState {
         AutonomyState {

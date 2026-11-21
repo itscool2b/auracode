@@ -15,8 +15,13 @@ command (owner, 17 November 2026: an agent that needed a sign-in did not say so 
 sign-in" was found in a menu). Sign in opens the existing terminal sheet whose Start action is
 separately explicit, and the sign-in is checked again when the sheet closes.
 
-Setup is three steps (Welcome, Your agents, First project) in one calm, centred column on one card
-(docs/design/visual-language.md). Every step is
+Setup is four pages (Welcome, Your agents, Your assistant, First project) on one centred card
+(docs/design/visual-language.md). Where the window has room (1100 by 640 or more) the card has two
+panes: the steps' column, and one picture that is the same on every page and fills in as setup
+goes (`SetupMap.tsx`): the four assistants above o7's logo, the coding agents on this computer
+below it and the first project beside it. An agent that is found, a bot that is linked and the
+project that is chosen each gain a settled line; the open page's lines run toward o7. Narrower,
+the card is the column alone. Every page is
 skippable: Continue never requires anything, the progress bars visit any step and Skip setup
 finishes from anywhere. The step is saved on every move, so quitting halfway resumes there. Motion is not a
 step: Full already follows the system's reduced motion and Settings changes it; a setup saved at
@@ -25,8 +30,16 @@ had while o7 had accounts (removed on 16 November 2026). Keyboard focus moves to
 Enter advances except inside controls, editable content, menus and dialogs. Motion preferences
 also stop the shared frame clock, rather than merely hiding its animation with CSS.
 
-Welcome says it plainly: o7 itself needs no account or network, and each agent keeps its
-own sign-in. Setup offers no account and no sign-in of o7's own.
+Welcome says it plainly: the agents on this computer run side by side and can be steered from a
+phone or the person's own assistant, o7 itself needs no account, and each agent keeps its own
+sign-in. Setup offers no account and no sign-in of o7's own.
+
+Your assistant (owner, 21 November 2026) names Grok Bot, Muse, Hermes and OpenClaw with their
+marks. Picking one opens Settings' own link dialog for it (docs/remote-sessions.md), which is
+where remote access turns on, when the link is made and not before; a link made here shows as
+linked on its button and in the picture. It is a page of the agents step, not a saved step of
+its own: a setup left there resumes at Your agents, and nothing new is written that a copy of the
+app from before it would misread.
 
 First project offers a folder (chosen or dropped), an existing project, or Clone a repository,
 which replaces the step's content in place, X Money style: "Clone a repository." / "Git copies it

@@ -8,10 +8,41 @@ use o7_protocol::{
     session::{ChatSummary, HistoryItem},
 };
 
-/// The most of a prompt, of an agent's words and of a turn's steps one reading carries.
-const PROMPT_CHARS: usize = 2_000;
-const ANSWER_CHARS: usize = 6_000;
-const STEPS: usize = 12;
+/// The most of a prompt, of an agent's words and of a turn's steps one reading carries. A bot
+/// pays for every character it reads, on every later step of its own turn, so the tools a
+/// current relay lists read less unless more is asked for.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct Limits {
+    pub prompt: usize,
+    pub answer: usize,
+    pub steps: usize,
+    /// The short tool names (`answer`, `wait`) in what a reading says to do next.
+    pub lean: bool,
+}
+
+impl Limits {
+    /// What the first tools read (`read_chat`, `wait_for_chat`).
+    pub const FIRST: Self = Self {
+        prompt: 2_000,
+        answer: 6_000,
+        steps: 12,
+        lean: false,
+    };
+    /// A reading for a bot that follows a chat: the end of the answer, the last few steps.
+    pub const LEAN: Self = Self {
+        prompt: 400,
+        answer: 3_000,
+        steps: 5,
+        lean: true,
+    };
+    /// The same reading when the bot asks for all of it.
+    pub const WIDE: Self = Self {
+        prompt: 2_000,
+        answer: 12_000,
+        steps: 20,
+        lean: true,
+    };
+}
 /// How o7 begins the project memory it attaches after a prompt
 /// (`crates/o7-core/src/chatstore/memory.rs`). It is reference context, not the person's words.
 const MEMORY: &str = "\n\nProject memory (Aura reference context, revision ";
@@ -179,6 +210,90 @@ pub fn title(chat: &ChatSummary) -> String {
 
 /// The last `turns` turns of a chat and what it waits on.
 pub fn chat(chat: &ChatSummary, items: &[HistoryItem], turns: usize) -> String {
+    chat_with(chat, items, turns, &Limits::FIRST)
+}
+
+/// A turn in progress in two lines: how far it is, not what it has said so far. A bot that waits
+/// reads this each time it asks, so it is short; the whole turn is read once, when it ends.
+pub fn progress(chat: &ChatSummary, items: &[HistoryItem]) -> String {
+    let digest = digest(items);
+    let mut out = format!("Chat {}: {}.", chat.id, status(chat));
+    if let Some(turn) = digest.turns.last() {
+        let done = turn.steps.len();
+        if done > 0 {
+            let latest: Vec<String> = turn.steps[done.saturating_sub(3)..]
+                .iter()
+                .map(|(title, _)| one_line(title, 80))
+                .collect();
+            out.push_str(&format!(
+                " {done} step{} so far; latest: {}.",
+                if done == 1 { "" } else { "s" },
+                latest.join("; ")
+            ));
+        }
+    }
+    out
+}
+
+/// The request a chat waits on, by id.
+pub fn request(items: &[HistoryItem], request_id: &str) -> Option<Waiting> {
+    digest(items)
+        .waiting
+        .into_iter()
+        .find(|request| request.id() == request_id)
+}
+
+/// One changed file as the lines that differ, with two lines around them: what is the same at
+/// the file's start and end is left out, so a small edit to a large file reads small.
+pub fn change(before: Option<&str>, after: Option<&str>, chars: usize) -> String {
+    const AROUND: usize = 2;
+    let old: Vec<&str> = before
+        .map(|text| text.lines().collect())
+        .unwrap_or_default();
+    let new: Vec<&str> = after.map(|text| text.lines().collect()).unwrap_or_default();
+    let same_start = old
+        .iter()
+        .zip(&new)
+        .take_while(|(old, new)| old == new)
+        .count();
+    let same_end = old[same_start..]
+        .iter()
+        .rev()
+        .zip(new[same_start..].iter().rev())
+        .take_while(|(old, new)| old == new)
+        .count();
+    if same_start == old.len() && same_start == new.len() {
+        return "The file reads the same before and after.\n".into();
+    }
+    let from = same_start.saturating_sub(AROUND);
+    let mut out = match (before, after) {
+        (None, _) => "New file:\n".to_owned(),
+        (_, None) => "Deleted file:\n".to_owned(),
+        _ => format!("From line {}:\n", from + 1),
+    };
+    for line in &old[from..same_start] {
+        out.push_str(&format!("  {line}\n"));
+    }
+    for line in &old[same_start..old.len() - same_end] {
+        out.push_str(&format!("- {line}\n"));
+    }
+    for line in &new[same_start..new.len() - same_end] {
+        out.push_str(&format!("+ {line}\n"));
+    }
+    let after_end = new.len() - same_end;
+    for line in &new[after_end..(after_end + AROUND).min(new.len())] {
+        out.push_str(&format!("  {line}\n"));
+    }
+    head(&out, chars)
+}
+
+/// The last `turns` turns of a chat and what it waits on, within `limits`.
+pub fn chat_with(
+    chat: &ChatSummary,
+    items: &[HistoryItem],
+    turns: usize,
+    limits: &Limits,
+) -> String {
     let digest = digest(items);
     let mut out = format!(
         "Chat {} \"{}\" with {}: {}.\n",
@@ -196,17 +311,17 @@ pub fn chat(chat: &ChatSummary, items: &[HistoryItem], turns: usize) -> String {
         if !turn.prompt.is_empty() {
             out.push_str(&format!(
                 "User: {}\n",
-                head(person(&turn.prompt), PROMPT_CHARS)
+                head(person(&turn.prompt), limits.prompt)
             ));
         }
         for steer in &turn.steers {
             out.push_str(&format!(
                 "User, during the turn: {}\n",
-                head(steer, PROMPT_CHARS)
+                head(steer, limits.prompt)
             ));
         }
         if !turn.steps.is_empty() {
-            let shown = turn.steps.len().min(STEPS);
+            let shown = turn.steps.len().min(limits.steps);
             let earlier = turn.steps.len() - shown;
             let steps: Vec<String> = turn.steps[earlier..]
                 .iter()
@@ -228,7 +343,7 @@ pub fn chat(chat: &ChatSummary, items: &[HistoryItem], turns: usize) -> String {
         }
         let said = turn.said.join("\n\n");
         if !said.trim().is_empty() {
-            out.push_str(&format!("Agent: {}\n", tail(said.trim(), ANSWER_CHARS)));
+            out.push_str(&format!("Agent: {}\n", tail(said.trim(), limits.answer)));
         }
         for error in &turn.errors {
             out.push_str(&format!("Error: {}\n", head(error, 500)));
@@ -247,12 +362,12 @@ pub fn chat(chat: &ChatSummary, items: &[HistoryItem], turns: usize) -> String {
     }
     for request in &digest.waiting {
         out.push('\n');
-        out.push_str(&waiting(request));
+        out.push_str(&waiting(request, limits.lean));
     }
     out
 }
 
-fn waiting(request: &Waiting) -> String {
+fn waiting(request: &Waiting, lean: bool) -> String {
     match request {
         Waiting::Permission(request) => {
             let options: Vec<String> = request
@@ -261,9 +376,14 @@ fn waiting(request: &Waiting) -> String {
                 .map(|option| format!("{} = {}", option.option_id, one_line(&option.label, 80)))
                 .collect();
             format!(
-                "Waiting request {} (permission): {}\nOptions for respond_to_request: {}\n",
+                "Waiting request {} (permission): {}\n{}: {}\n",
                 request.request_id,
                 one_line(&request.title, 300),
+                if lean {
+                    "Options for answer"
+                } else {
+                    "Options for respond_to_request"
+                },
                 options.join("; ")
             )
         }
@@ -297,9 +417,14 @@ fn waiting(request: &Waiting) -> String {
                 }
             };
             format!(
-                "Waiting request {} (question): {}\nTo answer, dismiss it with respond_to_request (no option_id), then send the answer with send_message.\n",
+                "Waiting request {} (question): {}\n{}\n",
                 request.request_id,
-                head(text.trim(), 1_500)
+                head(text.trim(), 1_500),
+                if lean {
+                    "Answer it with answer and text."
+                } else {
+                    "To answer, dismiss it with respond_to_request (no option_id), then send the answer with send_message."
+                }
             )
         }
     }
@@ -544,8 +669,8 @@ mod tests {
     fn long_text_is_cut_on_characters_and_keeps_an_answers_end() {
         let history = items(vec![
             started("t"),
-            user("u", &"é".repeat(PROMPT_CHARS + 10)),
-            said("m", &format!("{}the end", "ü".repeat(ANSWER_CHARS))),
+            user("u", &"é".repeat(Limits::FIRST.prompt + 10)),
+            said("m", &format!("{}the end", "ü".repeat(Limits::FIRST.answer))),
             ended("t", StopReason::Cancelled),
         ]);
         let text = chat(&summary(SessionStatus::Ready, false), &history, 1);
@@ -553,13 +678,19 @@ mod tests {
             .lines()
             .find(|line| line.starts_with("User: "))
             .expect("prompt");
-        assert_eq!(prompt.chars().count(), "User: ".len() + PROMPT_CHARS + 1);
+        assert_eq!(
+            prompt.chars().count(),
+            "User: ".len() + Limits::FIRST.prompt + 1
+        );
         let answer = text
             .lines()
             .find(|line| line.starts_with("Agent: "))
             .expect("answer");
         assert!(answer.starts_with("Agent: …ü") && answer.ends_with("the end"));
-        assert_eq!(answer.chars().count(), "Agent: ".len() + ANSWER_CHARS + 1);
+        assert_eq!(
+            answer.chars().count(),
+            "Agent: ".len() + Limits::FIRST.answer + 1
+        );
         assert!(text.ends_with("The turn was stopped.\n"));
         let many: Vec<O7Event> = std::iter::once(started("t"))
             .chain((0..20).map(|n| {
@@ -573,6 +704,66 @@ mod tests {
         let text = chat(&summary(SessionStatus::Running, false), &items(many), 1);
         assert!(text.contains("Steps: 8 earlier, then Step 8; Step 9;"));
         assert!(text.contains("Step 19\n"));
+    }
+
+    #[test]
+    fn a_lean_reading_is_shorter_and_names_the_current_tools() {
+        let history = items(vec![
+            started("t1"),
+            user("u", &"a".repeat(1_000)),
+            tool("1", "Read a.rs", ToolStatus::Completed),
+            tool("2", "Read b.rs", ToolStatus::Completed),
+            tool("3", "Read c.rs", ToolStatus::Completed),
+            tool("4", "Read d.rs", ToolStatus::Completed),
+            tool("5", "Read e.rs", ToolStatus::Completed),
+            tool("6", "Run tests", ToolStatus::InProgress),
+            said("m", &"b".repeat(5_000)),
+            permission("p1"),
+        ]);
+        let chat = summary(SessionStatus::Running, true);
+        let first = super::chat(&chat, &history, 1);
+        let lean = chat_with(&chat, &history, 1, &Limits::LEAN);
+        assert!(
+            lean.len() < first.len() * 3 / 4,
+            "{} of {}",
+            lean.len(),
+            first.len()
+        );
+        assert!(lean.contains("Steps: 1 earlier, then Read b.rs;"), "{lean}");
+        assert!(lean.contains("Options for answer: "), "{lean}");
+        assert!(first.contains("Options for respond_to_request: "));
+        // A turn in progress is a line, whatever it has said so far.
+        assert_eq!(
+            progress(&chat, &history),
+            format!(
+                "Chat {}: working, waiting for an answer. 6 steps so far; latest: Read d.rs; Read e.rs; Run tests.",
+                chat.id
+            )
+        );
+        assert!(request(&history, "p1").is_some());
+        assert!(request(&history, "p2").is_none());
+    }
+
+    #[test]
+    fn a_change_is_its_differing_lines_with_two_around_them() {
+        let before = "one\ntwo\nthree\nfour\nfive\nsix\nseven\n";
+        let after = "one\ntwo\nthree\nFOUR\nfour and a half\nfive\nsix\nseven\n";
+        assert_eq!(
+            change(Some(before), Some(after), 1_000),
+            "From line 2:\n  two\n  three\n- four\n+ FOUR\n+ four and a half\n  five\n  six\n"
+        );
+        assert_eq!(change(None, Some("a\nb\n"), 1_000), "New file:\n+ a\n+ b\n");
+        assert_eq!(change(Some("a\n"), None, 1_000), "Deleted file:\n- a\n");
+        assert_eq!(
+            change(Some("a\n"), Some("a\n"), 1_000),
+            "The file reads the same before and after.\n"
+        );
+        // Lines repeated around an insertion are not counted twice.
+        assert_eq!(
+            change(Some("x\nx\n"), Some("x\nx\nx\n"), 1_000),
+            "From line 1:\n  x\n  x\n+ x\n"
+        );
+        assert!(change(None, Some(&"long line\n".repeat(500)), 100).ends_with('…'));
     }
 
     #[test]
