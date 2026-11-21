@@ -8,11 +8,21 @@
 //! Only what the terminal added is read (from the file's length when it opened), as turns of a
 //! prompt and the agent's answer text; tool calls, thinking, injected context and lines that do not
 //! parse are left out and counted. Reads are bounded; nothing here writes.
+//!
+//! Each turn also keeps the line edits its agent's edit tools made, for the Dashboard's AI line
+//! edits (`chatstore::line_edits`), counted as Chat counts them: Claude Code's edits that got a
+//! result without an error, Codex's completed file changes, Pi's and oh-my-pi's edits whose result
+//! is not an error, and Cursor's, Hermes' and OpenCode's edit tools (Cursor and Hermes record no
+//! result to check). Grok Build's history records no tool calls, and Antigravity's is not read.
 use std::io::{Read, Seek, SeekFrom};
 use std::path::{Path, PathBuf};
 
+use std::collections::HashMap;
+
 use o7_protocol::Millis;
 use serde_json::Value;
+
+use crate::chatstore::line_edits::{edit_tool, input_lines, line_count, patch_lines};
 
 /// The most a terminal's session can add that one import reads.
 pub(crate) const READ_LIMIT: u64 = 64 * 1024 * 1024;
@@ -43,6 +53,33 @@ pub(crate) struct ImportedTurn {
     pub answer: String,
     pub started_at: Millis,
     pub ended_at: Millis,
+    /// The lines each completed edit changed, with when it was made (0 when the record does not
+    /// say: the turn's start stands in).
+    pub edits: Vec<(Millis, u64)>,
+}
+
+/// The lines an edit call's input changes, by its tool's name: 0 for a tool that does not edit.
+fn tool_edit(name: &str, input: &Value) -> u64 {
+    if edit_tool(name) {
+        input_lines(input)
+    } else {
+        0
+    }
+}
+
+/// The lines Codex's file changes made: a hunk per updated file, a new or deleted file's text.
+fn codex_changes(changes: &Value) -> u64 {
+    let list: Vec<&Value> = match changes {
+        Value::Object(map) => map.values().collect(),
+        Value::Array(list) => list.iter().collect(),
+        _ => Vec::new(),
+    };
+    list.into_iter()
+        .map(|change| match change["type"].as_str() {
+            Some("update") => patch_lines(change["unified_diff"].as_str().unwrap_or("")),
+            _ => line_count(change["content"].as_str().unwrap_or("")),
+        })
+        .fold(0, u64::saturating_add)
 }
 
 /// The turns read, and how many lines were left out because they did not parse.
@@ -151,6 +188,8 @@ pub(crate) fn read_since(vendor: Vendor, path: &Path, from: u64) -> Imported {
 pub(crate) fn parse_claude(text: &str) -> Imported {
     let mut out = Imported::default();
     let mut open: Option<ImportedTurn> = None;
+    // Edit calls waiting for their result: id, when, lines.
+    let mut pending: HashMap<String, (Millis, u64)> = HashMap::new();
     for line in text.lines().filter(|line| !line.trim().is_empty()) {
         let Ok(value) = serde_json::from_str::<Value>(line) else {
             out.skipped += 1;
@@ -164,8 +203,18 @@ pub(crate) fn parse_claude(text: &str) -> Imported {
             .and_then(rfc3339_millis)
             .unwrap_or(0);
         let content = &value["message"]["content"];
+        let parts = content.as_array().map(Vec::as_slice).unwrap_or_default();
         match value["type"].as_str() {
             Some("user") => {
+                for part in parts.iter().filter(|part| part["type"] == "tool_result") {
+                    let done = part["tool_use_id"]
+                        .as_str()
+                        .and_then(|id| pending.remove(id))
+                        .filter(|_| part["is_error"] != true);
+                    if let (Some(edit), Some(turn)) = (done, open.as_mut()) {
+                        turn.edits.push(edit);
+                    }
+                }
                 let prompt = match content {
                     Value::String(text) => text.clone(),
                     Value::Array(parts) => joined(parts, "text"),
@@ -183,9 +232,16 @@ pub(crate) fn parse_claude(text: &str) -> Imported {
                     answer: String::new(),
                     started_at: at,
                     ended_at: at,
+                    edits: Vec::new(),
                 });
             }
             Some("assistant") => {
+                for part in parts.iter().filter(|part| part["type"] == "tool_use") {
+                    let lines = tool_edit(part["name"].as_str().unwrap_or(""), &part["input"]);
+                    if let (Some(id), true) = (part["id"].as_str(), lines > 0) {
+                        pending.insert(id.to_owned(), (at, lines));
+                    }
+                }
                 let Some(turn) = open.as_mut() else {
                     continue;
                 };
@@ -219,6 +275,20 @@ pub(crate) fn parse_codex(text: &str) -> Imported {
             .and_then(rfc3339_millis)
             .unwrap_or(0);
         let payload = &value["payload"];
+        if value["type"] == "event_msg" && payload["type"] == "item_completed" {
+            let item = &payload["item"];
+            if item["type"] == "FileChange"
+                && item["status"] == "completed"
+                && let Some(turn) = open.as_mut()
+            {
+                let lines = codex_changes(&item["changes"]);
+                if lines > 0 {
+                    let when = payload["completed_at_ms"].as_i64().unwrap_or(at);
+                    turn.edits.push((when, lines));
+                }
+            }
+            continue;
+        }
         if value["type"] != "response_item" || payload["type"] != "message" {
             continue;
         }
@@ -246,6 +316,7 @@ pub(crate) fn parse_codex(text: &str) -> Imported {
                     answer: String::new(),
                     started_at: at,
                     ended_at: at,
+                    edits: Vec::new(),
                 });
             }
             Some("assistant") => {
@@ -647,6 +718,7 @@ pub(crate) fn parse_grok(text: &str) -> Imported {
                     answer: String::new(),
                     started_at: 0,
                     ended_at: 0,
+                    edits: Vec::new(),
                 });
             }
             Some("assistant") => {
@@ -666,6 +738,7 @@ pub(crate) fn parse_grok(text: &str) -> Imported {
 pub(crate) fn parse_pi(text: &str) -> Imported {
     let mut out = Imported::default();
     let mut open: Option<ImportedTurn> = None;
+    let mut pending: HashMap<String, (Millis, u64)> = HashMap::new();
     for line in text.lines().filter(|line| !line.trim().is_empty()) {
         let Ok(value) = serde_json::from_str::<Value>(line) else {
             out.skipped += 1;
@@ -695,12 +768,31 @@ pub(crate) fn parse_pi(text: &str) -> Imported {
                     answer: String::new(),
                     started_at: at,
                     ended_at: at,
+                    edits: Vec::new(),
                 });
             }
             Some("assistant") => {
+                for part in message["content"].as_array().into_iter().flatten() {
+                    if part["type"] != "toolCall" {
+                        continue;
+                    }
+                    let lines = tool_edit(part["name"].as_str().unwrap_or(""), &part["arguments"]);
+                    if let (Some(id), true) = (part["id"].as_str(), lines > 0) {
+                        pending.insert(id.to_owned(), (at, lines));
+                    }
+                }
                 if let Some(turn) = open.as_mut() {
                     append(&mut turn.answer, &text_of(&message["content"]));
                     turn.ended_at = turn.ended_at.max(at);
+                }
+            }
+            Some("toolResult") => {
+                let done = message["toolCallId"]
+                    .as_str()
+                    .and_then(|id| pending.remove(id))
+                    .filter(|_| message["isError"] != true);
+                if let (Some(edit), Some(turn)) = (done, open.as_mut()) {
+                    turn.edits.push(edit);
                 }
             }
             _ => {}
@@ -867,12 +959,28 @@ pub(crate) fn hermes_export(
                     answer: String::new(),
                     started_at: at,
                     ended_at: at,
+                    edits: Vec::new(),
                 });
             }
             Some("assistant") => {
                 if let Some(turn) = open.as_mut() {
                     append(&mut turn.answer, &text);
                     turn.ended_at = turn.ended_at.max(at);
+                    for call in message["tool_calls"].as_array().into_iter().flatten() {
+                        let function = if call["function"].is_object() {
+                            &call["function"]
+                        } else {
+                            call
+                        };
+                        let arguments = match &function["arguments"] {
+                            Value::String(json) => serde_json::from_str(json).unwrap_or_default(),
+                            other => other.clone(),
+                        };
+                        let lines = tool_edit(function["name"].as_str().unwrap_or(""), &arguments);
+                        if lines > 0 {
+                            turn.edits.push((at, lines));
+                        }
+                    }
                 }
             }
             _ => {}
@@ -973,6 +1081,7 @@ pub(crate) fn opencode_export(text: &str, from: Millis) -> Imported {
                     answer: String::new(),
                     started_at: at,
                     ended_at: at,
+                    edits: Vec::new(),
                 });
             }
             Some("assistant") => {
@@ -980,6 +1089,17 @@ pub(crate) fn opencode_export(text: &str, from: Millis) -> Imported {
                     append(&mut turn.answer, &text);
                     let done = epoch_millis(&info["time"]["completed"]).unwrap_or(at);
                     turn.ended_at = turn.ended_at.max(done);
+                    for part in message["parts"].as_array().into_iter().flatten() {
+                        let state = &part["state"];
+                        if part["type"] != "tool" || state["status"] != "completed" {
+                            continue;
+                        }
+                        let lines = tool_edit(part["tool"].as_str().unwrap_or(""), &state["input"]);
+                        if lines > 0 {
+                            let when = epoch_millis(&state["time"]["end"]).unwrap_or(done);
+                            turn.edits.push((when, lines));
+                        }
+                    }
                 }
             }
             _ => {}
@@ -1101,11 +1221,21 @@ pub(crate) fn parse_cursor(text: &str) -> Imported {
                     answer: String::new(),
                     started_at: 0,
                     ended_at: 0,
+                    edits: Vec::new(),
                 });
             }
             Some("assistant") => {
                 if let Some(turn) = open.as_mut() {
                     append(&mut turn.answer, &content);
+                    for part in value["message"]["content"].as_array().into_iter().flatten() {
+                        if part["type"] != "tool_use" {
+                            continue;
+                        }
+                        let lines = tool_edit(part["name"].as_str().unwrap_or(""), &part["input"]);
+                        if lines > 0 {
+                            turn.edits.push((0, lines));
+                        }
+                    }
                 }
             }
             _ => {}
@@ -1182,6 +1312,7 @@ mod tests {
                 answer: "Added.".into(),
                 started_at: rfc3339_millis("2026-11-06T07:00:01Z").unwrap(),
                 ended_at: rfc3339_millis("2026-11-06T07:00:05Z").unwrap(),
+                edits: Vec::new(),
             }]
         );
     }
@@ -1542,5 +1673,111 @@ mod tests {
             newest_cursor_chat(home.path(), Path::new("/work/app"), 1_794_180_500_000),
             None
         );
+    }
+
+    #[test]
+    fn claude_terminal_edits_count_once_their_result_came_back_without_an_error() {
+        let lines = [
+            r#"{"type":"user","message":{"content":"Fix the header"},"timestamp":"2026-11-06T07:00:00.000Z"}"#,
+            r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"e1","name":"Edit","input":{"file_path":"a.rs","old_string":"a","new_string":"b\nc"}}]},"timestamp":"2026-11-06T07:00:02.000Z"}"#,
+            r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"e2","name":"Write","input":{"file_path":"b.rs","content":"1\n2\n3\n"}}]},"timestamp":"2026-11-06T07:00:03.000Z"}"#,
+            r#"{"type":"assistant","message":{"content":[{"type":"tool_use","id":"r1","name":"Read","input":{"file_path":"c.rs"}}]},"timestamp":"2026-11-06T07:00:04.000Z"}"#,
+            r#"{"type":"user","message":{"content":[{"type":"tool_result","tool_use_id":"e1","content":"ok"},{"type":"tool_result","tool_use_id":"e2","is_error":true,"content":"denied"},{"type":"tool_result","tool_use_id":"r1","content":"file"}]},"timestamp":"2026-11-06T07:00:05.000Z"}"#,
+            r#"{"type":"assistant","message":{"content":[{"type":"text","text":"Fixed it."}]},"timestamp":"2026-11-06T07:00:09.000Z"}"#,
+        ]
+        .join("\n");
+        let imported = parse_claude(&lines);
+        assert_eq!(imported.turns.len(), 1);
+        assert_eq!(imported.turns[0].answer, "Fixed it.");
+        assert_eq!(
+            imported.turns[0].edits,
+            vec![(rfc3339_millis("2026-11-06T07:00:02.000Z").unwrap(), 2)]
+        );
+    }
+
+    #[test]
+    fn codex_terminal_edits_are_its_completed_file_changes() {
+        let lines = [
+            r#"{"type":"response_item","timestamp":"2026-11-06T07:00:01Z","payload":{"type":"message","role":"user","content":[{"type":"input_text","text":"Add a test"}]}}"#,
+            r#"{"type":"event_msg","timestamp":"2026-11-06T07:00:03Z","payload":{"type":"item_completed","completed_at_ms":1793951000000,"item":{"type":"FileChange","status":"completed","changes":{"/w/a.rs":{"type":"update","unified_diff":"@@ -1 +1,2 @@\n-a\n+b\n+c\n","move_path":null},"/w/new.rs":{"type":"add","content":"x\ny\nz\n"}}}}}"#,
+            r#"{"type":"event_msg","timestamp":"2026-11-06T07:00:04Z","payload":{"type":"item_completed","item":{"type":"FileChange","status":"failed","changes":{"/w/b.rs":{"type":"add","content":"no\n"}}}}}"#,
+            r#"{"type":"event_msg","timestamp":"2026-11-06T07:00:04Z","payload":{"type":"item_completed","item":{"type":"CommandExecution","status":"completed"}}}"#,
+            r#"{"type":"response_item","timestamp":"2026-11-06T07:00:05Z","payload":{"type":"message","role":"assistant","content":[{"type":"output_text","text":"Added."}]}}"#,
+        ]
+        .join("\n");
+        let imported = parse_codex(&lines);
+        assert_eq!(imported.turns.len(), 1);
+        assert_eq!(imported.turns[0].answer, "Added.");
+        assert_eq!(imported.turns[0].edits, vec![(1_793_951_000_000, 5)]);
+    }
+
+    #[test]
+    fn pi_terminal_edits_count_once_their_result_is_not_an_error() {
+        let lines = [
+            r#"{"type":"message","timestamp":"2026-11-06T07:00:00.000Z","message":{"role":"user","content":[{"type":"text","text":"Tidy it"}]}}"#,
+            r#"{"type":"message","timestamp":"2026-11-06T07:00:01.000Z","message":{"role":"assistant","content":[{"type":"toolCall","id":"c1","name":"edit","arguments":{"path":"a.ts","edits":[{"oldText":"a","newText":"b"},{"oldText":"c\nd","newText":"e"}]}},{"type":"toolCall","id":"c2","name":"write","arguments":{"path":"b.ts","content":"1\n2\n"}}]}}"#,
+            r#"{"type":"message","timestamp":"2026-11-06T07:00:02.000Z","message":{"role":"toolResult","toolCallId":"c1","toolName":"edit","isError":false,"content":[]}}"#,
+            r#"{"type":"message","timestamp":"2026-11-06T07:00:02.000Z","message":{"role":"toolResult","toolCallId":"c2","toolName":"write","isError":true,"content":[]}}"#,
+            r#"{"type":"message","timestamp":"2026-11-06T07:00:03.000Z","message":{"role":"assistant","content":[{"type":"text","text":"Done."}]}}"#,
+        ]
+        .join("\n");
+        let imported = parse_pi(&lines);
+        assert_eq!(imported.turns.len(), 1);
+        assert_eq!(imported.turns[0].answer, "Done.");
+        assert_eq!(
+            imported.turns[0].edits,
+            vec![(rfc3339_millis("2026-11-06T07:00:01.000Z").unwrap(), 3)]
+        );
+    }
+
+    #[test]
+    fn cursor_terminal_edits_are_its_edit_tools() {
+        let lines = [
+            r#"{"role":"user","message":{"content":[{"type":"text","text":"<user_query>Rename it</user_query>"}]}}"#,
+            r#"{"role":"assistant","message":{"content":[{"type":"text","text":"Renaming."},{"type":"tool_use","name":"StrReplace","input":{"path":"a.rs","old_string":"old","new_string":"new"}},{"type":"tool_use","name":"Read","input":{"path":"a.rs"}}]}}"#,
+        ]
+        .join("\n");
+        let imported = parse_cursor(&lines);
+        assert_eq!(imported.turns.len(), 1);
+        assert_eq!(imported.turns[0].edits, vec![(0, 1)]);
+    }
+
+    #[test]
+    fn opencode_and_hermes_terminal_edits_are_their_edit_tools() {
+        let export = r#"{"messages":[
+            {"info":{"role":"user","time":{"created":1793951000000}},"parts":[{"type":"text","text":"Fix it"}]},
+            {"info":{"role":"assistant","time":{"created":1793951001000,"completed":1793951009000}},"parts":[
+                {"type":"text","text":"Fixed."},
+                {"type":"tool","tool":"edit","state":{"status":"completed","input":{"filePath":"a.ts","oldString":"a","newString":"b\nc"},"time":{"start":1793951002000,"end":1793951003000}}},
+                {"type":"tool","tool":"write","state":{"status":"error","input":{"filePath":"b.ts","content":"x\n"}}},
+                {"type":"tool","tool":"read","state":{"status":"completed","input":{"filePath":"a.ts"}}}
+            ]}
+        ]}"#;
+        let imported = opencode_export(export, 0);
+        assert_eq!(imported.turns.len(), 1);
+        assert_eq!(imported.turns[0].edits, vec![(1_793_951_003_000, 2)]);
+
+        let session = serde_json::json!({
+            "id": "20261106_070000_abcdef",
+            "cwd": "/w",
+            "started_at": 1_793_951_000,
+            "messages": [
+                {"role": "user", "content": "Fix it", "timestamp": 1_793_951_000},
+                {"role": "assistant", "content": "Fixed.", "timestamp": 1_793_951_002, "tool_calls": [
+                    {"id": "t1", "type": "function", "function": {"name": "patch", "arguments": "{\"path\":\"a.py\",\"old_string\":\"a\",\"new_string\":\"b\"}"}},
+                    {"id": "t2", "type": "function", "function": {"name": "write_file", "arguments": {"path": "b.py", "content": "1\n2\n"}}},
+                    {"id": "t3", "type": "function", "function": {"name": "terminal", "arguments": "{\"command\":\"ls\"}"}}
+                ]}
+            ]
+        });
+        let (imported, _) = hermes_export(
+            &session.to_string(),
+            Path::new("/w"),
+            Some("20261106_070000_abcdef"),
+            0,
+        );
+        assert_eq!(imported.turns.len(), 1);
+        let lines: u64 = imported.turns[0].edits.iter().map(|(_, lines)| lines).sum();
+        assert_eq!(lines, 3);
     }
 }

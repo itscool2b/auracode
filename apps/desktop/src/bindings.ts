@@ -288,6 +288,8 @@ export const commands = {
 	 */
 	pickFolder: () => typedError<string | null, AppError>(__TAURI_INVOKE("pick_folder")),
 	workspaceSearch: (query: string, includeArchived: boolean) => typedError<SearchResults, AppError>(__TAURI_INVOKE("workspace_search", { query, includeArchived })),
+	/**  The Dashboard's line edits since `since` (Unix milliseconds), by agent and quarter hour. */
+	dashboardLineEdits: (since: number) => typedError<LineEdits, AppError>(__TAURI_INVOKE("dashboard_line_edits", { since })),
 	conversationTurns: (chatId: string, beforeOrdinal: number | null) => typedError<ConversationTurns, AppError>(__TAURI_INVOKE("conversation_turns", { chatId, beforeOrdinal })),
 	conversationPending: (chatId: string) => typedError<PendingHandoff | null, AppError>(__TAURI_INVOKE("conversation_pending", { chatId })),
 	conversationEditable: (chatId: string, turnId: string) => typedError<EditablePrompt, AppError>(__TAURI_INVOKE("conversation_editable", { chatId, turnId })),
@@ -2542,6 +2544,25 @@ export type LimitWindow = {
 	label: string,
 	used_percent: number | null,
 	resets_at: number | null,
+};
+
+/**  Lines one agent's edits changed in one quarter hour. */
+export type LineEditBucket = {
+	/**  The agent's id (`claude`, `codex`), or empty when the turn does not say. */
+	agent: string,
+	/**
+	 *  When the quarter hour began, in Unix milliseconds. Every time zone's days start on a
+	 *  quarter hour, so the window can place it in its own day.
+	 */
+	at: number,
+	lines: number,
+};
+
+/**  The line edits since a moment, oldest first. */
+export type LineEdits = {
+	buckets: LineEditBucket[],
+	/**  False while ended turns are still waiting to be counted: the figures are not final yet. */
+	complete: boolean,
 };
 
 /**

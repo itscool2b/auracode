@@ -64,6 +64,7 @@ export async function checkDashboard(browser, url, out, engine) {
           "Needs you 2",
           "Working 3",
           "Finished 2",
+          "AI line edits",
         ]);
         assert.equal(
           await page.getByTestId("dashboard-summary").textContent(),
@@ -107,6 +108,46 @@ export async function checkDashboard(browser, url, out, engine) {
         // The agent stops from its chat; every program under it has its own Stop.
         assert.equal(await rows.nth(0).getByRole("button").count(), 0);
         assert.equal(await rows.getByRole("button", { name: /^Stop / }).count(), 3);
+
+        // AI line edits, under the board: a year of days, All or one agent at a time.
+        const activity = page.getByTestId("dashboard-activity");
+        const total = activity.getByTestId("dashboard-activity-total");
+        await page.waitForFunction(
+          () =>
+            document.querySelector('[data-testid="dashboard-activity-total"]')?.textContent !== "–",
+        );
+        const squares = activity.locator(".dashboard-activity-grid > span");
+        const days = await squares.count();
+        assert.ok(days >= 365 && days <= 371, `a year of days: ${days}`);
+        const fits = await activity.evaluate((card) => {
+          const grid = card.querySelector(".dashboard-activity-grid").getBoundingClientRect();
+          return grid.right <= card.getBoundingClientRect().right;
+        });
+        assert.ok(fits, "the squares fit the card");
+        const agents = activity.getByTestId("dashboard-activity-agent");
+        assert.deepEqual(await agents.allTextContents(), ["All", "Claude Code", "Codex"]);
+        const figure = async () => Number((await total.textContent()).replaceAll(",", ""));
+        const everyAgent = await figure();
+        assert.ok(everyAgent > 0, "the invented year has edits");
+        await agents.nth(2).click();
+        assert.equal(await agents.nth(2).getAttribute("aria-pressed"), "true");
+        assert.ok((await figure()) < everyAgent, "Codex's share is less than all of them");
+        await agents.nth(0).click();
+        assert.equal(await figure(), everyAgent);
+        assert.deepEqual(await activity.locator(".dashboard-activity-stats dt").allTextContents(), [
+          "Most active month",
+          "Most active day",
+          "Longest streak",
+          "Current streak",
+        ]);
+        // A square says its day under the pointer.
+        await activity.locator('.dashboard-activity-grid > [data-level="4"]').first().hover();
+        assert.match(
+          await activity.locator(".dashboard-activity-tip").textContent(),
+          /^[\d,]+ line edits? on \w+day, \w+ \d+, \d{4}$/,
+        );
+        await page.mouse.move(0, 0);
+        await activity.locator(".dashboard-activity-tip").waitFor({ state: "detached" });
 
         // Processor use appears from the second reading.
         await page.waitForFunction(() => document.body.textContent.includes("% CPU"), null, {
@@ -160,6 +201,10 @@ export async function checkDashboard(browser, url, out, engine) {
         await page.goto(`${url}/?preview=dashboard&theme=${theme}&case=empty`);
         await page.getByText("Nothing is running.", { exact: false }).waitFor();
         assert.equal(await page.getByText("Nothing needs you.").count(), 1);
+        // No edits yet: the empty year, no agents to choose between.
+        await page.getByTestId("dashboard-activity-total").filter({ hasText: /^0$/ }).waitFor();
+        assert.equal(await page.getByTestId("dashboard-activity-agent").count(), 0);
+        assert.equal(await page.getByText("None yet").count(), 2);
         await audit("empty");
 
         // A busy day: Finished shows its newest eight, and the rest on request.
@@ -247,7 +292,7 @@ if (process.argv[1] && import.meta.url === pathToFileURL(resolve(process.argv[1]
     try {
       await checkDashboard(browser, process.env.CHECK_URL ?? "http://localhost:1448", out, engine);
       console.log(
-        `${engine}: dashboard lanes, cards, tasks, programs, stop and empty board passed in both appearances and sizes`,
+        `${engine}: dashboard lanes, cards, tasks, programs, stop, AI line edits and empty board passed in both appearances and sizes`,
       );
     } finally {
       await browser.close();

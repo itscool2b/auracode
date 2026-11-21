@@ -33,6 +33,7 @@ pub(crate) mod files;
 pub(crate) mod folder_resolution;
 pub(crate) mod history;
 pub(crate) mod image_refs;
+pub(crate) mod line_edits;
 pub(crate) mod memory;
 pub(crate) mod organization;
 pub(crate) mod recover;
@@ -71,6 +72,10 @@ pub(crate) use writer::{WaitError, WriterConfig, await_reply, op_bytes};
 
 /// A call that gets no answer within this fails.
 const REQUEST_TIMEOUT: Duration = Duration::from_secs(5);
+
+/// How long one call for line edits goes on counting turns that have not been counted yet before it
+/// answers with what it has.
+const LINE_EDITS_COUNTING: Duration = Duration::from_secs(3);
 
 /// A shutdown reports success only if the writer also closed the connection within this much more.
 const CLOSE_MARGIN: Duration = Duration::from_secs(2);
@@ -298,6 +303,47 @@ impl ChatStore {
             Some(permits),
         );
         answer.await.map_err(|_| StoreError::Closed)?
+    }
+    /// Every agent's line edits since `since` ([`line_edits`]), after counting the turns that ended
+    /// since the last call, newest first. Each pass reads on a connection of its own on a blocking
+    /// thread, never holding the writer, and saves what it counted through the FIFO; passes go on
+    /// for at most [`LINE_EDITS_COUNTING`], and turns still waiting make the answer incomplete, so
+    /// the Dashboard shows what is counted and asks again.
+    pub(crate) async fn line_edits(
+        &self,
+        since: Millis,
+    ) -> Result<o7_protocol::activity::LineEdits, StoreError> {
+        if self.is_paused() {
+            return Err(self.timed_out());
+        }
+        let started = Instant::now();
+        let mut complete = false;
+        while started.elapsed() < LINE_EDITS_COUNTING {
+            let db = self.db_path.clone();
+            let attachments = files::Attachments::new(self.attachment_dir.clone());
+            let (counted, more) = self
+                .rt
+                .spawn_blocking(move || line_edits::count_pass(&db, &attachments))
+                .await
+                .map_err(|_| StoreError::Other("Counting line edits stopped.".into()))?
+                .map_err(|error| {
+                    StoreError::Other(format!("Couldn't count line edits: {error}"))
+                })?;
+            if !counted.is_empty() {
+                let (reply, answer) = oneshot::channel();
+                self.request(Request::SaveLineEdits { counted, reply }, answer)
+                    .await??;
+            }
+            if !more {
+                complete = true;
+                break;
+            }
+        }
+        let (reply, answer) = oneshot::channel();
+        let buckets = self
+            .request(Request::ReadLineEdits { since, reply }, answer)
+            .await??;
+        Ok(o7_protocol::activity::LineEdits { buckets, complete })
     }
     pub(crate) async fn search(
         &self,
@@ -869,6 +915,13 @@ pub enum Op {
         title: String,
         source: TitleSource,
     },
+    /// The line edits a terminal's turn made, from the agent's own session record, as
+    /// `(when, lines)` ([`line_edits::record`]): its stored events hold no tool calls.
+    RecordLineEdits {
+        chat_id: String,
+        turn_id: String,
+        edits: Vec<(Millis, u64)>,
+    },
     TouchChat {
         chat_id: String,
         at: Millis,
@@ -1316,6 +1369,101 @@ mod tests {
             store.flush(Duration::from_secs(1)).await,
             Err(StoreError::Closed)
         ));
+    }
+
+    /// Line edits are counted on a connection of their own and saved through the writer, once.
+    #[tokio::test]
+    async fn line_edits_count_ended_turns_off_the_writer_and_save_them_once() {
+        let fixture = start_in(
+            tempfile::tempdir().expect("tempdir"),
+            WriterConfig::STANDARD,
+            |store| {
+                let chat = rows::create_chat(
+                    store.conn(),
+                    &NewChat {
+                        agent_host: Default::default(),
+                        agent_id: "mock".into(),
+                        folder: PathBuf::from("/work/repo"),
+                        device_id: "dev".into(),
+                        now: 1,
+                    },
+                )
+                .expect("chat");
+                store
+                    .conn()
+                    .execute(
+                        "INSERT INTO turns (id, chat_id, seq, status, started_at, device_id, \
+                         first_event_seq) VALUES ('t1', ?1, 1, 'completed', 1, 'dev', 0)",
+                        [&chat.id],
+                    )
+                    .expect("turn");
+                let edit = O7Event::ToolCall(o7_protocol::ToolCall {
+                    tool_call_id: "t1.e".into(),
+                    kind: o7_protocol::ToolKind::Edit,
+                    title: "Write a.rs".into(),
+                    status: o7_protocol::ToolStatus::Completed,
+                    locations: Vec::new(),
+                    raw_input: Some(
+                        serde_json::json!({"file_path": "a.rs", "content": "a\nb\nc\n"}),
+                    ),
+                    tool_name: Some("Write".into()),
+                    content: Vec::new(),
+                    truncated: None,
+                });
+                rows::append_events(
+                    store.conn(),
+                    "dev",
+                    &chat.id,
+                    &[EventRow {
+                        created_at: 1_800_000_000_000,
+                        ..event_row(0, Some("t1"), &edit)
+                    }],
+                )
+                .expect("event");
+            },
+        );
+        let store = &fixture.store;
+        let edits = store.line_edits(0).await.expect("line edits");
+        assert!(edits.complete);
+        assert_eq!(
+            edits.buckets,
+            vec![o7_protocol::activity::LineEditBucket {
+                agent: "mock".into(),
+                at: 1_800_000_000_000 - 1_800_000_000_000 % line_edits::BUCKET_MS,
+                lines: 3,
+            }]
+        );
+        // Counted once: asking again counts nothing more.
+        assert_eq!(store.line_edits(0).await.expect("again"), edits);
+        // A terminal's edits, from the agent's own record, land through the FIFO.
+        let chat_id = store.chats().await.expect("chats")[0].id.clone();
+        send(
+            store,
+            Op::RecordLineEdits {
+                chat_id,
+                turn_id: "t1".into(),
+                edits: vec![(1_800_000_000_000 + line_edits::BUCKET_MS, 4)],
+            },
+        )
+        .await;
+        let recorded = store.line_edits(0).await.expect("recorded");
+        assert_eq!(
+            recorded
+                .buckets
+                .iter()
+                .map(|bucket| bucket.lines)
+                .collect::<Vec<_>>(),
+            vec![3, 4]
+        );
+        assert!(
+            store
+                .line_edits(1_800_000_000_000 + 2 * line_edits::BUCKET_MS)
+                .await
+                .expect("later")
+                .buckets
+                .is_empty()
+        );
+        assert!(store.shutdown(Duration::from_secs(5)).await);
     }
 
     #[tokio::test]

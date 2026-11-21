@@ -3,14 +3,22 @@
  * mounted in the same inset pane as the app's. Never reads the process table or stops anything:
  * the snapshot is invented, and Stop removes the row and what it started. `live` moves a chat from
  * Working to Needs you and back every few seconds, so the cards' moves between lanes can be
- * watched; `busy` adds a day's worth of finished chats.
+ * watched; `busy` adds a day's worth of finished chats. AI line edits shows an invented summer of
+ * Claude Code and Codex edits (none with `empty`), and `counting` keeps it counting for a moment.
  */
 import { StrictMode } from "react";
 import { createRoot } from "react-dom/client";
-import type { BackgroundTask, ChatSummary, ProcessesSnapshot, ProcessRow } from "../bindings";
+import type {
+  BackgroundTask,
+  ChatSummary,
+  LineEditBucket,
+  ProcessesSnapshot,
+  ProcessRow,
+} from "../bindings";
 import { DashboardScreen } from "../components/dashboard/DashboardScreen";
 import type { AppStore } from "../lib/chat/appStore";
 import { DashboardCleared } from "../lib/dashboardCleared";
+import type { LineEditsApi } from "../lib/lineEdits";
 import type { ProcessesApi } from "../lib/processes";
 import type { WorkspaceStore } from "../lib/workspace";
 
@@ -225,8 +233,48 @@ function fixture(kind: string | null) {
   return { api, app, workspace };
 }
 
+/**
+ * A year of invented line edits: a busy stretch from about five months ago to two months ago, a
+ * few days since, and the odd day before, the same on every load.
+ */
+function lineEditsFixture(kind: string | null): LineEditsApi {
+  let seed = 7;
+  const random = () => {
+    seed = (seed * 16807) % 2147483647;
+    return seed / 2147483647;
+  };
+  const buckets: LineEditBucket[] = [];
+  if (kind !== "empty") {
+    const today = new Date();
+    for (let back = 370; back >= 0; back -= 1) {
+      const day = new Date(today.getFullYear(), today.getMonth(), today.getDate() - back);
+      const busy = back >= 60 && back <= 140;
+      const recent = back <= 14 && back % 4 === 1;
+      const odd = back === 365 || back === 300;
+      if (!(busy ? random() < 0.72 : recent || odd)) continue;
+      const lines = Math.round((busy ? 400 + random() * 9000 : 120 + random() * 900) / 10) * 10;
+      const at = day.getTime() + 10 * 60 * MINUTE;
+      const codex = busy && random() < 0.35 ? Math.round(lines * random() * 0.6) : 0;
+      buckets.push({ agent: "claude", at, lines: lines - codex });
+      if (codex > 0) buckets.push({ agent: "codex", at: at + 2 * 60 * MINUTE, lines: codex });
+    }
+  }
+  let reads = 0;
+  return {
+    read: async (since) => {
+      reads += 1;
+      return {
+        buckets: buckets.filter((bucket) => bucket.at >= since),
+        complete: kind !== "counting" || reads > 3,
+      };
+    },
+  };
+}
+
 export function mountDashboardPreview(container: HTMLElement) {
-  const { api, app, workspace } = fixture(new URLSearchParams(location.search).get("case"));
+  const kind = new URLSearchParams(location.search).get("case");
+  const { api, app, workspace } = fixture(kind);
+  const lineEdits = lineEditsFixture(kind);
   // The app's own frame (App.tsx): the inset pane fills the window and the page fills the pane.
   container.style.height = "100vh";
   createRoot(container).render(
@@ -236,6 +284,7 @@ export function mountDashboardPreview(container: HTMLElement) {
           app={app}
           workspace={workspace}
           api={api}
+          lineEdits={lineEdits}
           // Clearing lasts for the page only, so each check starts from the full board.
           cleared={new DashboardCleared(null)}
           stopChat={async (id) => {

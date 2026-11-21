@@ -11,6 +11,7 @@
 //! removed (the next call recreates it, and loading the chat recovers its running turn), and the
 //! chat reads `Stopped`.
 
+mod activity;
 mod actor;
 pub use actor::TerminalOpened;
 mod agent_accounts;

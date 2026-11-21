@@ -3991,6 +3991,7 @@ The person continues this conversation here, in your terminal. Reply only that y
         }
         for turn in imported.turns {
             let turn_id = new_id();
+            let edited_turn = turn_id.clone();
             let prompt_id = new_id();
             let tag: Arc<str> = Arc::from(turn_id.as_str());
             let tagged = Some(Arc::clone(&tag));
@@ -4075,6 +4076,14 @@ The person continues this conversation here, in your terminal. Reply only that y
                 tagged,
             );
             self.flush();
+            // Its edits, from the agent's own record: after the turn's row, which the flush queued.
+            if !turn.edits.is_empty() {
+                self.queue_op(Op::RecordLineEdits {
+                    chat_id: self.chat_id.clone(),
+                    turn_id: edited_turn,
+                    edits: turn.edits,
+                });
+            }
         }
         if imported.skipped > 0 || imported.truncated {
             let mut parts = Vec::new();
