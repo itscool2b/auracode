@@ -1,3 +1,4 @@
+import { BOTS, type BotId, BotMark, botNamed } from "@o7/ui/graphite";
 import { Bot, Monitor, MonitorSmartphone, Smartphone } from "lucide-react";
 import { useCallback, useEffect, useId, useMemo, useRef, useState } from "react";
 import { encode } from "uqr";
@@ -21,7 +22,8 @@ export function RemotePanel({ api = remoteApi }: { readonly api?: RemoteApi }) {
   const [pairing, setPairing] = useState<RemotePairing | null>(null);
   /** The devices that were paired when the pairing dialog opened: a new one ends it. */
   const [before, setBefore] = useState<readonly string[]>([]);
-  const [linking, setLinking] = useState(false);
+  /** The link dialog, opened for one assistant or with none chosen yet. */
+  const [linking, setLinking] = useState<{ readonly bot: BotChoice } | null>(null);
   const [now, setNow] = useState(() => Date.now());
 
   useEffect(() => {
@@ -78,9 +80,9 @@ export function RemotePanel({ api = remoteApi }: { readonly api?: RemoteApi }) {
     }
   };
 
-  const link = () => {
+  const link = (bot: BotChoice) => {
     setError(null);
-    setLinking(true);
+    setLinking({ bot });
   };
 
   const enabled = status?.enabled ?? false;
@@ -177,14 +179,14 @@ export function RemotePanel({ api = remoteApi }: { readonly api?: RemoteApi }) {
             type="button"
             data-testid="remote-link-bot"
             disabled={status === null}
-            onClick={link}
+            onClick={() => link("grok")}
           >
             Link a bot
           </button>
         </div>
         <p className="settings-lead">
-          Grok Bot, or any assistant that connects to MCP servers, gets tools for your chats through
-          an address you paste into it.
+          Hand your assistant a goal from wherever you are. It starts your coding agents here,
+          answers what they ask and tells you when the work is done.
         </p>
         {bots.length ? (
           <div className="settings-group">
@@ -193,7 +195,7 @@ export function RemotePanel({ api = remoteApi }: { readonly api?: RemoteApi }) {
                 key={bot.id}
                 title={bot.name}
                 setting="Bots"
-                mark={<Bot size={18} />}
+                mark={<LinkMark name={bot.name} />}
                 badge={<span className="g-chip">{bot.full ? "Full control" : "Chats"}</span>}
                 detail={
                   bot.last_used_at === null ? (
@@ -215,10 +217,31 @@ export function RemotePanel({ api = remoteApi }: { readonly api?: RemoteApi }) {
             ))}
           </div>
         ) : (
-          <p className="settings-empty" data-setting="Bots">
-            <strong>No bots linked</strong>A link lets a bot read your chats and message your
-            agents, or do everything you do in this window. You choose which when you make it.
-          </p>
+          <div className="settings-empty remote-bots" data-setting="Bots">
+            <p>
+              <strong>No bots linked</strong>
+              Pick yours to link it. Any other assistant that takes an MCP server works too.
+            </p>
+            <ul className="remote-bot-picks">
+              {BOTS.map((bot) => (
+                <li key={bot.id}>
+                  <button
+                    className="remote-bot-pick"
+                    type="button"
+                    data-testid={`remote-link-${bot.id}`}
+                    disabled={status === null}
+                    onClick={() => link(bot.id)}
+                  >
+                    <BotMark bot={bot.id} size={36} />
+                    <span>
+                      <strong>{bot.name}</strong>
+                      <span>{bot.maker}</span>
+                    </span>
+                  </button>
+                </li>
+              ))}
+            </ul>
+          </div>
         )}
       </section>
       <details className="settings-more">
@@ -243,12 +266,13 @@ export function RemotePanel({ api = remoteApi }: { readonly api?: RemoteApi }) {
       ) : null}
       {linking ? (
         <BotDialog
+          initial={linking.bot}
           create={async (name, full) => {
             await ensureOn();
             return api.createBot(name, full);
           }}
           onClose={() => {
-            setLinking(false);
+            setLinking(null);
             void run(() => api.status());
           }}
         />
@@ -288,6 +312,76 @@ export function QrCode({ text, label }: { readonly text: string; readonly label:
   );
 }
 
+/** A named assistant, or any other that takes an MCP server. */
+type BotChoice = BotId | "other";
+
+/** A bot link's mark: its assistant's, when its name names one of the four. */
+function LinkMark({ name }: { readonly name: string }) {
+  const bot = botNamed(name);
+  return bot ? <BotMark bot={bot} size={36} /> : <Bot size={18} />;
+}
+
+/**
+ * How each assistant takes the address, in its own words. `paste` is what goes on the
+ * clipboard: the address alone, or the lines or command that carry it. Hermes and OpenClaw give
+ * a tool twenty or thirty seconds unless told otherwise, so theirs set that to five minutes: a
+ * bot that may wait longer for a turn asks less often, and each time it asks costs it.
+ */
+const SETUP: Readonly<
+  Record<
+    BotChoice,
+    {
+      readonly label: string;
+      readonly paste: (url: string) => string;
+      readonly steps: readonly string[];
+    }
+  >
+> = {
+  grok: {
+    label: "Bot address",
+    paste: (url) => url,
+    steps: [
+      "In Grok, open Connectors (grok.com/connectors), choose New Connector, then Custom.",
+      "Paste this address as the MCP server URL.",
+      "Ask your bot to list your o7 chats.",
+    ],
+  },
+  muse: {
+    label: "Bot address",
+    paste: (url) => url,
+    steps: [
+      "In Muse, ask it to add a custom connector.",
+      "Paste this address when it asks for the server's URL.",
+      "Ask it to list your o7 chats.",
+    ],
+  },
+  hermes: {
+    label: "Lines for Hermes' config",
+    paste: (url) => `mcp_servers:\n  o7:\n    url: "${url}"\n    timeout: 300`,
+    steps: [
+      "Add these lines to ~/.hermes/config.yaml (under mcp_servers, if you have one already).",
+      "Run /reload-mcp in Hermes.",
+      "Ask it to list your o7 chats.",
+    ],
+  },
+  openclaw: {
+    label: "Command for OpenClaw",
+    paste: (url) => `openclaw mcp add o7 --url ${url} --transport streamable-http --timeout 300`,
+    steps: [
+      "Run this command on the computer OpenClaw runs on.",
+      "Ask it to list your o7 chats.",
+    ],
+  },
+  other: {
+    label: "Bot address",
+    paste: (url) => url,
+    steps: [
+      "Add this address wherever your assistant takes a remote MCP server (streamable HTTP).",
+      "Ask it to list your o7 chats.",
+    ],
+  },
+};
+
 function CopyField({ value, label }: { readonly value: string; readonly label: string }) {
   const [state, setState] = useState<"ready" | "copied" | "failed">("ready");
   const reset = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -308,19 +402,34 @@ function CopyField({ value, label }: { readonly value: string; readonly label: s
     if (reset.current !== null) clearTimeout(reset.current);
     reset.current = setTimeout(() => setState("ready"), 1600);
   };
+  // Lines to paste (a config entry) are shown whole, with Copy under them.
+  const lines = value.includes("\n");
   return (
-    <div className="remote-copy">
+    <div className="remote-copy" data-lines={lines ? "" : undefined}>
       <label className="sr-only" htmlFor={field}>
         {label}
       </label>
-      <input
-        id={field}
-        className="g-input remote-secret"
-        readOnly
-        value={value}
-        spellCheck={false}
-        onFocus={(event) => event.currentTarget.select()}
-      />
+      {lines ? (
+        <textarea
+          id={field}
+          className="g-input remote-secret"
+          readOnly
+          rows={value.split("\n").length}
+          wrap="off"
+          value={value}
+          spellCheck={false}
+          onFocus={(event) => event.currentTarget.select()}
+        />
+      ) : (
+        <input
+          id={field}
+          className="g-input remote-secret"
+          readOnly
+          value={value}
+          spellCheck={false}
+          onFocus={(event) => event.currentTarget.select()}
+        />
+      )}
       <button className="g-button g-button-outline" type="button" onClick={() => void copy()}>
         <span aria-live="polite">
           {state === "copied" ? "Copied" : state === "failed" ? "Could not copy" : "Copy"}
@@ -393,19 +502,29 @@ function PairingDialog({
 }
 
 function BotDialog({
+  initial,
   create,
   onClose,
 }: {
+  readonly initial: BotChoice;
   readonly create: (name: string, full: boolean) => Promise<RemoteBotLink>;
   readonly onClose: () => void;
 }) {
-  const [name, setName] = useState("Grok Bot");
+  const [bot, setBot] = useState<BotChoice>(initial);
+  const named = (choice: BotChoice) =>
+    BOTS.find((kind) => kind.id === choice)?.name ?? "My assistant";
+  const [name, setName] = useState(() => named(initial));
   // What the link may do is chosen here and is the link's for good: a wider one is a new link.
   const [full, setFull] = useState(false);
   const [link, setLink] = useState<RemoteBotLink | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [busy, setBusy] = useState(false);
   const field = useId();
+  const choose = (choice: BotChoice) => {
+    // The name follows the assistant until its owner writes one of their own.
+    if (name === named(bot)) setName(named(choice));
+    setBot(choice);
+  };
   const submit = async () => {
     setBusy(true);
     setError(null);
@@ -417,6 +536,7 @@ function BotDialog({
       setBusy(false);
     }
   };
+  const setup = SETUP[bot];
   return (
     <Modal title="Link a bot" onClose={onClose}>
       {link ? (
@@ -425,17 +545,12 @@ function BotDialog({
             This is {link.name}'s address. It is shown once and works like a password: anyone who
             has it can read your chats and direct your agents. Removing the link here stops it.
           </p>
-          <CopyField value={link.url} label="Bot address" />
+          <CopyField value={setup.paste(link.url)} label={setup.label} />
           <ol className="remote-steps">
-            <li>
-              In Grok, open Connectors (grok.com/connectors), choose New Connector, then Custom.
-            </li>
-            <li>Paste this address as the MCP server URL.</li>
-            <li>Ask your bot to list your o7 chats.</li>
+            {setup.steps.map((step) => (
+              <li key={step}>{step}</li>
+            ))}
           </ol>
-          <p className="remote-note">
-            Other assistants work the same way: add it wherever they take a remote MCP server.
-          </p>
           <div className="g-dialog-actions">
             <button className="g-button g-button-primary" type="button" onClick={onClose}>
               Done
@@ -449,11 +564,27 @@ function BotDialog({
             void submit();
           }}
         >
-          <p className="remote-note">
-            A linked bot gets tools to direct your agents, and agents can edit files and run
-            commands. So either level below is as much trust as handing someone this computer: the
-            level limits the bot's own tools, not what an agent it directs can do.
-          </p>
+          <fieldset className="remote-kinds">
+            <legend>Your assistant</legend>
+            {[...BOTS.map((kind) => kind.id), "other" as const].map((choice) => (
+              <label key={choice} className="remote-kind">
+                <input
+                  type="radio"
+                  name="remote-bot-kind"
+                  checked={bot === choice}
+                  onChange={() => choose(choice)}
+                />
+                {choice === "other" ? (
+                  <span className="remote-kind-glyph" aria-hidden="true">
+                    <Bot size={18} />
+                  </span>
+                ) : (
+                  <BotMark bot={choice} size={28} />
+                )}
+                <span>{choice === "other" ? "Another" : named(choice)}</span>
+              </label>
+            ))}
+          </fieldset>
           <fieldset className="remote-levels">
             <legend>What it can do</legend>
             <label className="remote-level">
@@ -466,8 +597,8 @@ function BotDialog({
               <span>
                 <strong>Chats</strong>
                 <span>
-                  List and read your chats, send messages, start chats, stop turns and answer
-                  permission requests.
+                  List and read your chats, send messages, start chats, stop turns and answer what
+                  an agent asks.
                 </span>
               </span>
             </label>
@@ -501,6 +632,11 @@ function BotDialog({
               onChange={(event) => setName(event.currentTarget.value)}
             />
           </label>
+          <p className="remote-note remote-fine">
+            A linked bot directs your agents, and agents can edit files and run commands. So either
+            level is as much trust as handing someone this computer: the level limits the bot's own
+            tools, not what an agent it directs can do.
+          </p>
           {error ? (
             <p className="settings-error" role="alert">
               {error}

@@ -8,6 +8,8 @@ export { createFrameClock, type FrameClock, type FrameHost, frameClock } from ".
 export { AgentLogo, type AgentLogoProps, LogoSymbol, logoViewBox } from "./AgentLogo";
 export { AgentMark, type AgentMarkProps, agentCode, logoSide } from "./AgentMark";
 export { AGENT_LOGOS, type AgentLogo as AgentLogoData, agentLogo } from "./agentLogos";
+export { BotMark, type BotMarkProps } from "./BotMark";
+export { BOTS, type BotId, type BotKind, botNamed } from "./bots";
 export { CopyButton, type CopyButtonProps } from "./CopyButton";
 export { Keycap, type KeycapProps } from "./Keycap";
 export { Logo, type LogoProps, Wordmark, type WordmarkProps } from "./Logo";
