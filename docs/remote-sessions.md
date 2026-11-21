@@ -25,21 +25,68 @@ including in the tray.
 4. **Remove a device** in Settings, or "Forget this computer" on the page. Either ends every
    session of that device at once.
 
-For a bot: **Settings > Remote access > Link a bot** names the bot, asks what it can do, and
-shows one MCP address, once. In Grok that address goes in grok.com/connectors > New Connector >
-Custom. A link has one of two levels, chosen when it is made and never changed after (a wider
-link is a new link):
+For a bot: **Settings > Remote access** names four assistants (Grok Bot, Muse, Hermes and
+OpenClaw) where its list of bots is empty, and **Link a bot** asks which one, what it can do and
+its name, then shows one MCP address, once, the way that assistant takes it:
 
-- **Chats** (eight tools): `list_chats`, `list_projects`, `read_chat`, `send_message`,
-  `wait_for_chat`, `respond_to_request`, `stop_chat`, `start_chat`.
-- **Full control** (those, and thirteen more): `create_project`, `chat_options`, `set_model`,
-  `set_thinking`, `set_access`, `switch_agent`, `rename_chat`, `archive_chat`, `start_agent`,
-  `list_changes`, `read_change`, `read_memory`, `write_memory`. This is what a person does with
+| Assistant | What is copied | Where it goes |
+|---|---|---|
+| Grok Bot | the address | grok.com/connectors > New Connector > Custom, as the MCP server URL |
+| Muse | the address | Muse is asked to add a custom connector, and takes it as the server's URL |
+| Hermes | four lines of YAML (`mcp_servers: o7: url, timeout: 300`) | `~/.hermes/config.yaml`, then `/reload-mcp` |
+| OpenClaw | `openclaw mcp add o7 --url ... --transport streamable-http --timeout 300` | a terminal on the computer OpenClaw runs on |
+| Another | the address | wherever it takes a remote MCP server (streamable HTTP) |
+
+Setup offers the same four on a page of its own (docs/onboarding.md). Hermes' and OpenClaw's
+entries carry a five minute timeout because they give a tool twenty or thirty seconds by default
+and a call may wait for an agent's turn (below). The Hermes and OpenClaw steps come from their
+published documentation and Grok's from xAI's; Muse's come from secondary sources, and none of
+the four has been tried with the real assistant.
+
+A link has one of two levels, chosen when it is made and never changed after (a wider link is a
+new link):
+
+- **Chats** (seven tools): `chats`, `projects`, `read`, `send`, `wait`, `answer`, `stop`.
+- **Full control** (those, and four more): `set`, `changes`, `memory`, `new_project`, and in
+  `send` the model, thinking level and access a chat runs with. This is what a person does with
   chats and projects in the app's window.
 
 No link has a tool for Settings, accounts or sign-in, installing or updating software, remote
 access itself, deleting data, a raw terminal, or reading a file by its path. The tools are
-described to bots in `apps/relay/src/tools.json` and run in `crates/o7-remote/src/bot.rs`.
+described to bots in `apps/relay/src/tools.json` and run in `crates/o7-remote/src/bot/lean.rs`.
+
+### What linking costs a bot
+
+A bot pays for a link in tokens three ways, and the tools are shaped by all three:
+
+1. **The tools' descriptions**, read again on every step of the bot's own turn. The first set
+   was 21 tools and 11.4 KB as listed (about 3,200 tokens) for a full-control link, 4.7 KB for a
+   chats link. The current set is 11 tools and 5.1 KB (about 1,400 tokens), 3.2 KB for a chats
+   link: one `set` where there were seven tools that changed a chat, `changes` and `memory` that
+   read or write by whether an argument is given, and no titles.
+2. **Round trips.** Every call is another step of the bot's turn, which reads everything it
+   holds again. `send` starts a chat or sends to one and waits for the turn, so "start it and
+   tell me what happened" is one call where it was three; `answer` answers and waits. A wait
+   lasts up to 240 seconds when the bot asks (30 by default, under the shortest tool timeout
+   among the assistants named), where the first tools stopped at 45: a ten minute turn is three
+   calls, not fourteen. A full-control link gives the model and access in `send` itself, so a
+   new chat's first turn runs with them, which the first tools could not do.
+3. **What comes back**, which stays in the bot's context for the rest of its turn. A wait that
+   runs out answers in one line (the chat's status, how many steps so far and the last three),
+   where the first tools sent the whole turn again each time. A reading is the last 3,000
+   characters of the answer and the last five steps unless `full` is asked for (12,000 and 20).
+   A changed file is its differing lines with two around them, not the whole file twice. A
+   chat's options are a line each.
+
+What was missing is there too: `projects` prints the project ids `memory` takes (the first
+`list_projects` did not, so project memory could not be reached), `chats` filters and pages,
+and `answer` answers an agent's question in words, a choice word for word or free text where
+the question takes it. A form or a sign-in an MCP server asks for is left for the owner.
+
+The relay serves both sets, because the app and the relay are updated apart: a copy of the app
+says which set it answers in its bot links (`v`), a relay lists that one, and an older copy,
+which says nothing, is listed the first (`apps/relay/src/tools-first.json`, `bot.rs`). A copy
+of the app answers both, so it also works with a relay from before.
 
 The level limits the bot's own tools. It is not a wall around the computer: at either level a
 bot sends messages to agents and answers their permission requests, and agents run commands.
@@ -155,7 +202,8 @@ thirty days forgets all of it; the computer sends its bot links again whenever i
   address, so treat those as private. See "Not done".
 - A browser sends at most 96 KiB per message and 240 messages per ten seconds.
 - A wrong or removed bot address is a plain 404. At most eight bot calls wait at once, each for
-  at most 55 seconds.
+  at most 250 seconds: a call may wait up to 240 for an agent's turn, so that a long turn costs
+  a bot few calls. Only a link's own bot can hold those eight places, and only on its computer.
 
 The computer also ends any connection that has not proved a key within twenty seconds, holds at
 most 32 connections, 16 running calls per browser and 8 running bot calls, and stops sending live
@@ -284,8 +332,16 @@ Security, from the review of 10 November 2026 (each is a known limit, not a surp
   seconds from one address are refused for ten seconds (infra/README.md). It blunts a flood from
   one place; it does not tell rooms apart, and a flood from many addresses passes it.
 
+- **A bot's address in a config file or a shell's history.** Hermes takes the address in
+  `~/.hermes/config.yaml` and OpenClaw in a command, so the token is written where those keep
+  things, in the clear. It is the same secret a Grok or Muse connector stores on its service;
+  removing the link in Settings ends it wherever it is written.
+
 Features:
 
+- **Telling a bot when a chat needs it.** A bot still asks (`wait`). MCP has no way to call a
+  client back over the stateless transport the relay speaks, and each of the four assistants
+  has its own way to be woken.
 - Notifications on the phone when a chat needs an answer.
 - A read-only level for a device or a bot.
 - New chats in a worktree, attachments, images, the queue's controls and the model picker from
