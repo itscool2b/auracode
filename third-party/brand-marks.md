@@ -186,6 +186,23 @@ working (`ModelMark`, `packages/ui/src/graphite/modelMakers.ts`). Used at the ow
 
 Before a public release, check each against the company's current mark and brand guidelines.
 
+## Assistants linked as bots
+
+Settings' Remote access page, setup and the website name four assistants that can be linked to
+o7 as bots (`BotMark`, `packages/ui/src/graphite/bots.ts`). Used at the owner's direction
+(2026-11-21), only to say which assistant a link is for; no endorsement or partnership is implied.
+
+- **Grok Bot** wears the Grok mark and **Hermes** the Nous Research wing, both recorded above.
+- **Muse** wears Meta's mark, recorded under Model makers: it is the mark of the company that
+  makes it. Check it against Muse's own mark before a public release.
+- **OpenClaw** is `packages/ui/src/graphite/bot-logos/openclaw.svg`: the mark its own app draws,
+  `dist/control-ui/favicon.svg` in the `openclaw` package 2026.9.2
+  (https://unpkg.com/openclaw@2026.9.2/dist/control-ui/favicon.svg, retrieved 2026-11-21, SHA-256
+  74e1fb7542675f68aafe502576f7c857c3f3620d07095e910515e3c05d62ab2e as downloaded). Its shapes and
+  colours are unchanged, its gradient included, so it is drawn as an image and not through the
+  flat-shape loader; only the published file's animation and comments were removed, and the role,
+  aria-label and title added.
+
 ## Agents without a mark
 
 Any other ACP or custom agent shows the first two letters of its id (`agentCode()`), and an
