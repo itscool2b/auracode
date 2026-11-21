@@ -1415,8 +1415,19 @@ impl Session {
     /// as that level would allow it, except:
     /// - leaving Plan, which is the person's approval of the plan;
     /// - a file edit, which a planning turn has no business making;
-    /// - a request Claude says needs a person, or raises for a reason other than the mode (an
-    ///   ask rule, a hook, a safety check): those ask under Full access too.
+    /// - a request Claude says needs a person, or raises because of an ask rule, a hook or a
+    ///   safety check: those ask under Full access too.
+    ///
+    /// Claude says why it asks (`decision_reason_type`). The reasons that are Plan standing in
+    /// for the access mode are the ones answered, as recorded from real planning turns (21
+    /// November 2026): none or `mode`; `other` ("A variable in this command can't be checked
+    /// before it runs") and `subcommandResults`, which is how a command made of several, or one
+    /// it cannot prove read-only, is asked about; and `workingDir`, a path outside the chat's
+    /// folder. Any other reason, one this build does not know included, is shown.
+    ///
+    /// One case is not told apart: an ask rule that matches one part of a compound command is
+    /// reported as `subcommandResults`, so while planning on Full access it is answered here,
+    /// where outside Plan Claude would ask.
     fn plans_unasked(&self, request: &Value) -> bool {
         if self.mode != "plan"
             || self.execution_mode != "bypassPermissions"
@@ -1429,7 +1440,7 @@ impl Session {
         }
         if !matches!(
             request["decision_reason_type"].as_str(),
-            None | Some("mode")
+            None | Some("mode" | "other" | "subcommandResults" | "workingDir")
         ) {
             return false;
         }

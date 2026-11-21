@@ -804,6 +804,24 @@ async fn planning_under_full_access_asks_only_what_a_person_must_decide() {
         ("run", "Bash", json!({})),
         ("mcp", "mcp__docs__search", json!({})),
         ("agent", "Agent", json!({"decision_reason_type":"mode"})),
+        // As Claude asked in real planning turns: a subagent's command it could not prove
+        // read-only, and one made of several.
+        (
+            "variable",
+            "Bash",
+            json!({"agent_id":"a1","decision_reason_type":"other",
+                "decision_reason":"A variable in this command can't be checked before it runs"}),
+        ),
+        (
+            "several",
+            "Bash",
+            json!({"agent_id":"a1","decision_reason_type":"subcommandResults"}),
+        ),
+        (
+            "outside",
+            "Read",
+            json!({"decision_reason_type":"workingDir"}),
+        ),
     ] {
         h.send(ask(id, tool, extra)).await;
         let answer = h.wire().await;
@@ -820,6 +838,18 @@ async fn planning_under_full_access_asks_only_what_a_person_must_decide() {
         ("person", "Bash", json!({"requires_user_interaction":true})),
         ("no", "Bash", json!({"default_to_no":true})),
         ("rule", "Bash", json!({"decision_reason_type":"rule"})),
+        ("hook", "Bash", json!({"decision_reason_type":"hook"})),
+        (
+            "safety",
+            "Bash",
+            json!({"decision_reason_type":"safetyCheck"}),
+        ),
+        // A reason this build does not know is never answered for the person.
+        (
+            "unknown",
+            "Bash",
+            json!({"decision_reason_type":"a_reason_from_later"}),
+        ),
     ] {
         h.send(ask(id, tool, extra)).await;
         loop {
